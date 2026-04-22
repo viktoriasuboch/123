@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sales Bonus Analysis 2025–2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0d0d0d; --surface:#141414; --border:#232323; --accent:#e8ff47;
+    --text:#f0f0f0; --muted:#505050; --muted2:#888;
+    --closed:#e8ff47; --calls:#47c8ff; --special:#ff6b35;
+    --mentoring:#c084fc; --other:#6ee7b7;
+    --sep:#f97316; --oct:#fb923c; --nov:#fbbf24;
+    --dec:#f43f5e; --jan:#38bdf8; --feb:#a78bfa; --mar:#4ade80;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;padding:32px 20px;}
+
+  header{border-bottom:2px solid var(--accent);padding-bottom:16px;margin-bottom:28px;}
+  header h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(28px,5vw,60px);letter-spacing:4px;color:var(--accent);line-height:1;}
+  header p{font-family:'IBM Plex Mono',monospace;color:var(--muted2);font-size:11px;margin-top:5px;letter-spacing:2px;text-transform:uppercase;}
+
+  .tabs{display:flex;gap:4px;margin-bottom:24px;flex-wrap:wrap;}
+  .tab{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+    padding:7px 14px;border-radius:3px;background:var(--surface);border:1px solid var(--border);
+    color:var(--muted2);cursor:pointer;transition:all .15s;}
+  .tab:hover{border-color:#444;color:var(--text);}
+  .tab.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:600;}
+
+  .view{display:none;} .view.active{display:block;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:22px;}
+  .legend-item{display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted2);}
+  .dot{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
+
+  /* PEOPLE GRID */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:hidden;}
+  .card-header{padding:14px 16px 10px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+  .name{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;}
+  .total{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600;color:var(--accent);white-space:nowrap;}
+  .month-pills{display:flex;gap:5px;padding:8px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+  .pill{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;padding:2px 7px;border-radius:2px;border:1px solid transparent;}
+  .pill-sep{color:var(--sep);border-color:rgba(249,115,22,.3);background:rgba(249,115,22,.07);}
+  .pill-oct{color:var(--oct);border-color:rgba(251,146,60,.3);background:rgba(251,146,60,.07);}
+  .pill-nov{color:var(--nov);border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.07);}
+  .pill-dec{color:var(--dec);border-color:rgba(244,63,94,.3);background:rgba(244,63,94,.07);}
+  .pill-jan{color:var(--jan);border-color:rgba(56,189,248,.3);background:rgba(56,189,248,.07);}
+  .pill-feb{color:var(--feb);border-color:rgba(167,139,250,.3);background:rgba(167,139,250,.07);}
+  .pill-mar{color:var(--mar);border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.07);}
+  .bar-container{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px;}
+  .bar-row{display:flex;align-items:center;gap:8px;}
+  .bar-label{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);width:72px;flex-shrink:0;text-transform:uppercase;letter-spacing:.8px;}
+  .bar-track{flex:1;background:#1c1c1c;height:6px;border-radius:2px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:2px;}
+  .bar-val{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted2);width:38px;text-align:right;flex-shrink:0;}
+  .entries{padding:10px 16px;display:flex;flex-direction:column;gap:4px;max-height:190px;overflow-y:auto;}
+  .entries::-webkit-scrollbar{width:2px;}
+  .entries::-webkit-scrollbar-thumb{background:#2a2a2a;}
+  .entry{display:flex;align-items:flex-start;gap:8px;padding:4px 6px;border-radius:2px;background:#0f0f0f;}
+  .entry-cat{width:4px;height:4px;border-radius:1px;flex-shrink:0;margin-top:5px;}
+  .entry-meta{flex:1;min-width:0;}
+  .entry-name{font-size:11px;color:#ccc;line-height:1.3;}
+  .entry-sub{font-size:9px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:1px;display:flex;gap:5px;flex-wrap:wrap;}
+  .entry-bonus{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;flex-shrink:0;}
+
+  /* MONTHS VIEW */
+  .month-view-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;}
+  .month-block{background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:hidden;}
+  .month-block-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+  .month-title{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:3px;}
+  .month-total{font-family:'IBM Plex Mono',monospace;font-size:15px;color:var(--accent);}
+  .month-rows{display:flex;flex-direction:column;}
+  .month-row{display:grid;grid-template-columns:1fr 60px;gap:8px;padding:8px 16px;border-bottom:1px solid #111;align-items:center;}
+  .month-row:last-child{border-bottom:none;}
+  .month-row-name{font-size:12px;}
+  .month-row-val{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);text-align:right;}
+  .month-row-bar{grid-column:1/3;background:#1a1a1a;height:2px;border-radius:1px;}
+  .month-row-bar-fill{height:2px;border-radius:1px;opacity:.5;}
+
+  /* SUMMARY VIEW */
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:32px;}
+  .kpi{background:var(--surface);border:1px solid var(--border);padding:14px 16px;border-radius:4px;}
+  .kpi-label{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;}
+  .kpi-val{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1px;}
+  .section-title{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:3px;color:var(--muted);margin-bottom:16px;}
+  .rank-table{background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:hidden;overflow-x:auto;}
+  .rank-head,.rank-row{display:grid;grid-template-columns:28px 150px 52px 52px 52px 52px 52px 52px 52px 80px;gap:6px;padding:9px 16px;border-bottom:1px solid #111;align-items:center;min-width:680px;}
+  .rank-head{border-bottom:1px solid var(--border);}
+  .rank-head span{font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;text-align:right;}
+  .rank-head span:nth-child(2){text-align:left;}
+  .rank-row:hover{background:#111;}
+  .rank-row:last-child{border-bottom:none;}
+  .rank-num{font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--muted);}
+  .rank-name{font-size:12px;font-weight:600;}
+  .rank-cell{font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:right;}
+
+  /* DEALS VIEW */
+  .deals-toolbar{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;align-items:center;}
+  .deals-filters{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;align-items:center;}
+  .filter-btn{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;
+    padding:5px 12px;border-radius:2px;background:var(--surface);border:1px solid var(--border);
+    color:var(--muted2);cursor:pointer;transition:all .15s;}
+  .filter-btn:hover{border-color:#444;color:var(--text);}
+  .filter-btn.active{background:#1f1f1f;border-color:var(--accent);color:var(--accent);}
+
+  .deals-table{background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:hidden;overflow-x:auto;}
+  .deals-head,.deal-row{display:grid;grid-template-columns:28px 1fr 120px 90px 90px 80px 120px 80px;
+    gap:10px;padding:10px 16px;border-bottom:1px solid #111;align-items:center;min-width:780px;}
+  .deals-head{border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:1;}
+  .deals-head span{font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;}
+  .deal-row:hover{background:#111;}
+  .deal-row:last-child{border-bottom:none;}
+  .deal-num{font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--muted);}
+  .deal-project{font-size:12px;font-weight:600;color:var(--text);}
+  .deal-type{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 7px;border-radius:2px;
+    border:1px solid rgba(232,255,71,.2);background:rgba(232,255,71,.05);color:var(--closed);display:inline-block;}
+  .revenue-input{background:transparent;border:none;border-bottom:1px dashed var(--border);
+    font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);width:110px;
+    padding:2px 4px;outline:none;transition:border-color .15s;}
+  .revenue-input:focus{border-bottom-color:var(--accent);}
+  .revenue-input::placeholder{color:var(--muted);}
+  .revenue-input.filled{color:var(--accent);border-bottom-color:rgba(232,255,71,.3);}
+  .deals-kpi{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:20px;}
+
+  /* action buttons */
+  .btn{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;
+    border:none;border-radius:3px;padding:8px 18px;cursor:pointer;font-weight:600;transition:opacity .15s;}
+  .btn:hover{opacity:.85;}
+  .btn-accent{background:var(--accent);color:#000;}
+  .btn-ghost{background:var(--surface);color:var(--muted2);border:1px solid var(--border);}
+  .btn-ghost:hover{border-color:#555;color:var(--text);opacity:1;}
+
+  /* save indicator */
+  .save-indicator{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);
+    display:flex;align-items:center;gap:6px;margin-left:auto;}
+  .save-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);transition:background .3s;}
+  .save-dot.saved{background:#4ade80;}
+  .save-dot.saving{background:#fbbf24;}
+
+  /* cat colors */
+  .cat-closed{background:var(--closed);} .cat-calls{background:var(--calls);}
+  .cat-special{background:var(--special);} .cat-mentoring{background:var(--mentoring);}
+  .cat-other{background:var(--other);}
+  .tc-closed{color:var(--closed);} .tc-calls{color:var(--calls);}
+  .tc-special{color:var(--special);} .tc-mentoring{color:var(--mentoring);}
+  .tc-other{color:var(--other);}
+  .mc-sep{color:var(--sep);} .mc-oct{color:var(--oct);} .mc-nov{color:var(--nov);}
+  .mc-dec{color:var(--dec);} .mc-jan{color:var(--jan);} .mc-feb{color:var(--feb);} .mc-mar{color:var(--mar);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Sales Bonus Report 2025–2026</h1>
+  <p>Leadgen Team · Сентябрь 2025 — Март 2026 · 7 месяцев · USD</p>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="showView('people',this)">По людям</div>
+  <div class="tab" onclick="showView('months',this)">По месяцам</div>
+  <div class="tab" onclick="showView('summary',this)">Сводка</div>
+  <div class="tab" onclick="showView('deals',this)">🏆 Закрытые проекты</div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="dot cat-closed"></div>Закрытые / SQL</div>
+  <div class="legend-item"><div class="dot cat-calls"></div>Звонки MQL</div>
+  <div class="legend-item"><div class="dot cat-special"></div>Special bonus</div>
+  <div class="legend-item"><div class="dot cat-mentoring"></div>Менторство</div>
+  <div class="legend-item"><div class="dot cat-other"></div>Прочее</div>
+  <span style="width:1px;background:var(--border);margin:0 4px;display:inline-block;height:16px;vertical-align:middle;"></span>
+  <div class="legend-item"><div class="dot" style="background:var(--sep)"></div>Сент</div>
+  <div class="legend-item"><div class="dot" style="background:var(--oct)"></div>Окт</div>
+  <div class="legend-item"><div class="dot" style="background:var(--nov)"></div>Нояб</div>
+  <div class="legend-item"><div class="dot" style="background:var(--dec)"></div>Дек</div>
+  <div class="legend-item"><div class="dot" style="background:var(--jan)"></div>Янв</div>
+  <div class="legend-item"><div class="dot" style="background:var(--feb)"></div>Февр</div>
+  <div class="legend-item"><div class="dot" style="background:var(--mar)"></div>Март</div>
+</div>
+
+<div class="view active" id="view-people"><div class="grid" id="cards"></div></div>
+<div class="view" id="view-months"><div class="month-view-grid" id="month-blocks"></div></div>
+<div class="view" id="view-summary">
+  <div class="kpi-grid" id="kpi-grid"></div>
+  <div class="section-title">Рейтинг за все 7 месяцев</div>
+  <div class="rank-table" id="rank-table"></div>
+</div>
+
+<div class="view" id="view-deals">
+  <div class="deals-kpi" id="deals-kpi"></div>
+
+  <!-- toolbar: filter + actions -->
+  <div class="deals-toolbar">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;">Фильтр:</span>
+    <div id="deals-filters" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      <div class="filter-btn active" onclick="filterDeals('all',this)">Все</div>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div class="save-indicator">
+        <div class="save-dot saved" id="save-dot"></div>
+        <span id="save-label">Сохранено</span>
+      </div>
+      <!-- hidden file input for load -->
+      <input type="file" id="load-file-input" accept=".json" style="display:none" onchange="loadFromFile(event)">
+      <button class="btn btn-ghost" onclick="document.getElementById('load-file-input').click()">📂 Загрузить JSON</button>
+      <button class="btn btn-accent" onclick="exportJSON()">⬇ Сохранить JSON</button>
+    </div>
+  </div>
+
+  <div class="deals-table">
+    <div class="deals-head">
+      <span>#</span><span>Проект / клиент</span><span>Лидген</span>
+      <span>Месяц</span><span>Бонус</span><span>Тип</span><span>Revenue</span><span></span>
+    </div>
+    <div id="deals-rows"></div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  DEFAULT DATA
+// ══════════════════════════════════════════════════════════
+const DEFAULT_PEOPLE = [
+  { name:'Natallia R', entries:[
+    {month:'Сентябрь',cat:'calls',    name:'Peter Sesink',                         comment:'',                       bonus:10},
+    {month:'Сентябрь',cat:'closed',   name:'Anthony Pugliese, Roz Gatewood',       comment:'SQL',                    bonus:200},
+    {month:'Сентябрь',cat:'closed',   name:'NXP',                                  comment:'SQL + closed project',   bonus:400},
+    {month:'Сентябрь',cat:'closed',   name:'EON',                                  comment:'SQL + closed project',   bonus:400},
+    {month:'Сентябрь',cat:'other',    name:'Проданный бэнч (Ilia S)',              comment:'',                       bonus:100},
+    {month:'Октябрь', cat:'calls',    name:'Orest Yatskuliak (Selecto)',            comment:'Dubai meet-up',          bonus:10},
+    {month:'Октябрь', cat:'closed',   name:'Ruslan M (C# & WPF Developer)',        comment:'',                       bonus:500},
+    {month:'Октябрь', cat:'closed',   name:'Vlad K (Senior AWS Developer)',         comment:'',                       bonus:500},
+    {month:'Ноябрь',  cat:'closed',   name:'Ali S (Backend, langchain/langgraph)', comment:'Closed project',         bonus:200},
+    {month:'Ноябрь',  cat:'special',  name:'5 mid/high calls',                     comment:'Special bonus',          bonus:100},
+    {month:'Ноябрь',  cat:'other',    name:'Идея → SQL (SAP)',                     comment:'Ты предложил идею',      bonus:150},
+    {month:'Январь',  cat:'calls',    name:'Konstantinos Dimitriou',               comment:'Отличный партнёр',       bonus:50},
+    {month:'Январь',  cat:'calls',    name:'Ilyjah and Ishah Holland',             comment:'После интро — отказ',    bonus:15},
+    {month:'Январь',  cat:'closed',   name:'Anton Nesterov (Playwright)',           comment:'Ждём фидбека',           bonus:20},
+    {month:'Январь',  cat:'closed',   name:'Anya Lukyantseva (PM)',                comment:'Ждём фидбека',           bonus:20},
+    {month:'Январь',  cat:'closed',   name:'Navruzbek Rahimov (.NET)',             comment:'Signed. Start 15.02',    bonus:200},
+    {month:'Январь',  cat:'closed',   name:'Matthew Sgherzi',                      comment:'Signed',                 bonus:200},
+    {month:'Январь',  cat:'mentoring',name:'Работа с командой #3',                 comment:'Special bonus',          bonus:150},
+    {month:'Февраль', cat:'mentoring',name:'Работа с командой #3',                 comment:'Special bonus',          bonus:150},
+    {month:'Март',    cat:'calls',    name:'Dieter Hotz (Delta Consulting)',        comment:'AI агент — ждём фидбека',bonus:15},
+    {month:'Март',    cat:'calls',    name:'Vincent Cabral',                        comment:'Автоматизация процессов',bonus:15},
+    {month:'Март',    cat:'calls',    name:'Simon Morris (2UP)',                    comment:'iGaming расширение',     bonus:15},
+    {month:'Март',    cat:'closed',   name:'Project Manager (Hitachi)',             comment:'Hired',                  bonus:350},
+    {month:'Март',    cat:'closed',   name:'Senior Tableau Consultant',             comment:'Hired — Hays Austria',   bonus:350},
+    {month:'Март',    cat:'special',  name:'5 звонков MID/HIGH MQL',              comment:'Special bonus',          bonus:150},
+    {month:'Март',    cat:'mentoring',name:'Работа с командой #3',                 comment:'Special bonus',          bonus:150},
+  ]},
+  { name:'Anna B', entries:[
+    {month:'Сентябрь',cat:'calls',   name:'Qualified call',                         comment:'',                       bonus:40},
+    {month:'Сентябрь',cat:'closed',  name:'Interview with Ilia',                    comment:'Qualified Interview',    bonus:40},
+    {month:'Октябрь', cat:'closed',  name:'Cyber Crucible - Dennis Underwood',      comment:'SQL',                    bonus:150},
+    {month:'Октябрь', cat:'closed',  name:'Mermaidchart - Claes Ångström',          comment:'CLOSED PROJECT',         bonus:600},
+    {month:'Октябрь', cat:'calls',   name:'Cyber Crucible',                         comment:'Interview',              bonus:40},
+    {month:'Ноябрь',  cat:'special', name:'5 звонков Mid/High MQL',                comment:'Special bonus',          bonus:100},
+    {month:'Ноябрь',  cat:'special', name:'Hard-working Bee',                       comment:'',                       bonus:100},
+    {month:'Декабрь', cat:'closed',  name:'Matthew Sgherzi',                        comment:'Signed',                 bonus:404},
+    {month:'Декабрь', cat:'calls',   name:'Lyvia Group - Marc Pilotti',             comment:'High MQL — recap call',  bonus:15},
+    {month:'Декабрь', cat:'calls',   name:'WeGotLites - Lasha Maisuradze',          comment:'Mid MQL',                bonus:50},
+    {month:'Декабрь', cat:'closed',  name:'Aleksandre Kokhreidze',                  comment:'SQL',                    bonus:50},
+    {month:'Декабрь', cat:'calls',   name:'Vero Platform - Renato Lerner',          comment:'High MQL — recap call',  bonus:50},
+    {month:'Декабрь', cat:'calls',   name:'Simplex Group (Miami)',                  comment:'High MQL — recap call',  bonus:50},
+    {month:'Декабрь', cat:'closed',  name:'Gemini Sports - Jake Schuster',          comment:'SQL — QA',               bonus:250},
+    {month:'Декабрь', cat:'special', name:'5 звонков по нашему ICP',               comment:'Special bonus',          bonus:150},
+    {month:'Декабрь', cat:'special', name:'Hard working bee',                       comment:'',                       bonus:100},
+    {month:'Февраль', cat:'special', name:'Hard working bee',                       comment:'',                       bonus:100},
+    {month:'Февраль', cat:'closed',  name:'1NCE - Jan Daniel Sulaiman',             comment:'SQL + closed contract',  bonus:1000},
+    {month:'Февраль', cat:'closed',  name:'IMC Technologies — Interview Slava',     comment:'SQL',                    bonus:200},
+    {month:'Февраль', cat:'other',   name:'Fox-nft-yield (Crypto)',                 comment:'%',                      bonus:140},
+    {month:'Март',    cat:'other',   name:'FOX nft',                                comment:'%',                      bonus:140},
+    {month:'Март',    cat:'special', name:'Выполнение метрик Q1 + больше всех SQL команда #2',comment:'',            bonus:200},
+  ]},
+  { name:'Maria K', entries:[
+    {month:'Сентябрь',cat:'calls',    name:'Markus Fedder',                         comment:'',                       bonus:10},
+    {month:'Сентябрь',cat:'special',  name:'Hard working bee',                      comment:'',                       bonus:100},
+    {month:'Сентябрь',cat:'mentoring',name:'Artem mentoring',                       comment:'',                       bonus:100},
+    {month:'Октябрь', cat:'special',  name:'4 звонка mid/high забукано',           comment:'не хватило 1 до бонуса', bonus:40},
+    {month:'Октябрь', cat:'closed',   name:'Itsthezone - Erik Poldroo',             comment:'SQL',                    bonus:150},
+    {month:'Октябрь', cat:'special',  name:'Hard-working Bee',                      comment:'',                       bonus:100},
+    {month:'Октябрь', cat:'mentoring',name:'Бонус за Артема',                       comment:'',                       bonus:100},
+    {month:'Ноябрь',  cat:'calls',    name:'Victor Byberg — HAYS (Denmark)',        comment:'',                       bonus:10},
+    {month:'Ноябрь',  cat:'calls',    name:'Pieter De Bruyn',                       comment:'',                       bonus:10},
+    {month:'Ноябрь',  cat:'closed',   name:'Upsell Swentess DevOps',               comment:'Part time',              bonus:100},
+    {month:'Ноябрь',  cat:'mentoring',name:'Менторство Artem Morozov',             comment:'',                       bonus:100},
+    {month:'Декабрь', cat:'calls',    name:'CordenPharma - Niek Bosch',             comment:'Второй звонок в марте',  bonus:15},
+    {month:'Декабрь', cat:'closed',   name:'Pronto Advisors - Michael Coronado',   comment:'SQL. Закрыт проект 2-3 мес',bonus:450},
+    {month:'Декабрь', cat:'calls',    name:'SHS Partners - Morgan Reidy',           comment:'MID MQL',                bonus:15},
+    {month:'Декабрь', cat:'calls',    name:'American Sleep Dentistry',              comment:'Наш ICP',                bonus:15},
+    {month:'Декабрь', cat:'calls',    name:'Hofseth BioCare - Tom James',           comment:'High MQL',               bonus:15},
+    {month:'Декабрь', cat:'special',  name:'5 звонков по нашему ICP',             comment:'Special bonus',           bonus:150},
+    {month:'Декабрь', cat:'closed',   name:'The Zone',                              comment:'50h support. Signed',    bonus:100},
+    {month:'Декабрь', cat:'mentoring',name:'Работа с командой #2',                 comment:'Special bonus',          bonus:150},
+    {month:'Февраль', cat:'mentoring',name:'Работа с командой #2',                 comment:'Special bonus',          bonus:150},
+    {month:'Февраль', cat:'calls',    name:'GCRI - Bent von Eitzen',               comment:'Хотел узнать сервисы',   bonus:15},
+    {month:'Март',    cat:'mentoring',name:'Работа с командой #2',                 comment:'Special bonus',          bonus:150},
+    {month:'Март',    cat:'calls',    name:'Cross Border Talents - Marco Janssen', comment:'Запрос на проект',       bonus:15},
+    {month:'Март',    cat:'calls',    name:'Rittal GmbH - Micha Stoidner',         comment:'Ограничения по ИИ',      bonus:15},
+    {month:'Март',    cat:'calls',    name:'Nate Johnson (Canopy Fintech)',         comment:'AML reporting',          bonus:15},
+    {month:'Март',    cat:'calls',    name:'Spencer Shaw (Fractional CTO)',         comment:'Signed partnership',     bonus:15},
+    {month:'Март',    cat:'calls',    name:'Mark Hinton - Gigalime',               comment:'Поиск тех. партнёра',    bonus:15},
+    {month:'Март',    cat:'special',  name:'5 звонков MID/HIGH MQL',              comment:'Special bonus',          bonus:150},
+    {month:'Март',    cat:'special',  name:'Выполнение метрик Q1 + больше всех SQL команда #2',comment:'',          bonus:200},
+  ]},
+  { name:'Ksenia B', entries:[
+    {month:'Сентябрь',cat:'other',    name:'Идея → SQL (EON)',                     comment:'Ты предложил идею',      bonus:150},
+    {month:'Сентябрь',cat:'other',    name:'Идея → SQL (NXP)',                     comment:'Ты предложил идею',      bonus:150},
+    {month:'Сентябрь',cat:'special',  name:'Hard-working Bee',                      comment:'',                       bonus:100},
+    {month:'Сентябрь',cat:'special',  name:'Выигрыш команды в эффективности',       comment:'',                       bonus:150},
+    {month:'Сентябрь',cat:'calls',    name:'Marc-Daniel Ortega',                    comment:'',                       bonus:10},
+    {month:'Октябрь', cat:'calls',    name:'Hans Bogad',                            comment:'',                       bonus:10},
+    {month:'Октябрь', cat:'calls',    name:'Michael Bratanov',                      comment:'',                       bonus:10},
+    {month:'Октябрь', cat:'calls',    name:'Luke Harrison',                         comment:'',                       bonus:10},
+    {month:'Октябрь', cat:'mentoring',name:'Менторство Даши + джуника',            comment:'',                       bonus:200},
+    {month:'Октябрь', cat:'other',    name:'Идея → SQL (Hays projects)',            comment:'Ты предложил идею',      bonus:150},
+    {month:'Ноябрь',  cat:'calls',    name:'George Costard',                        comment:'',                       bonus:10},
+    {month:'Ноябрь',  cat:'calls',    name:'Juan Pablo Montenegro',                 comment:'',                       bonus:10},
+    {month:'Ноябрь',  cat:'other',    name:'Идея → SQL (FRESSNAPF/Hays)',           comment:'Ты предложил идею',      bonus:150},
+    {month:'Ноябрь',  cat:'mentoring',name:'Менторство Daria Shatenok',             comment:'',                       bonus:100},
+    {month:'Декабрь', cat:'calls',    name:'Brian Pearse',                          comment:'Next call — 2 March',    bonus:15},
+    {month:'Декабрь', cat:'calls',    name:'Denis Guezelocak',                      comment:'High MQL',               bonus:15},
+    {month:'Декабрь', cat:'mentoring',name:'Работа с командой #1',                 comment:'',                       bonus:150},
+    {month:'Декабрь', cat:'closed',   name:'Navruzbek Rahimov (.NET)',             comment:'Hays',                   bonus:50},
+    {month:'Февраль', cat:'mentoring',name:'Работа с командой #1',                 comment:'',                       bonus:150},
+    {month:'Март',    cat:'mentoring',name:'Работа с командой #1',                 comment:'',                       bonus:150},
+    {month:'Март',    cat:'calls',    name:'Viridian Ecosystems - Matthew Aghai',  comment:'',                       bonus:15},
+    {month:'Март',    cat:'calls',    name:'Pacific Gas & Electric - Jay Leyno',   comment:'Вендор принимает решение',bonus:15},
+    {month:'Март',    cat:'calls',    name:'Speedoc - Chan Way',                   comment:'AI agents & ML for healthcare',bonus:15},
+    {month:'Март',    cat:'closed',   name:'CTO Fraction - Lazar Gintchin',        comment:'Interview — Ruby',        bonus:55},
+    {month:'Март',    cat:'special',  name:'5 звонков MID/HIGH MQL',              comment:'Special bonus',           bonus:100},
+  ]},
+  { name:'Artem Morozov', entries:[
+    {month:'Сентябрь',cat:'other',  name:'2 прототипа → SQL (parking app)',         comment:'',                       bonus:150},
+    {month:'Ноябрь',  cat:'calls',  name:'Balázs Erdős',                            comment:'',                       bonus:10},
+    {month:'Ноябрь',  cat:'calls',  name:'Camilo Cortes - Tampa General Hospital',  comment:'',                       bonus:10},
+    {month:'Ноябрь',  cat:'other',  name:'Metrikus case study',                     comment:'',                       bonus:100},
+    {month:'Январь',  cat:'calls',  name:'Keith Hayman - digiCare',                 comment:'MQL',                    bonus:50},
+    {month:'Январь',  cat:'closed', name:'PreCheck Health - Frank Gillen',          comment:'SQL',                    bonus:250},
+    {month:'Январь',  cat:'other',  name:'EON Case Study',                          comment:'',                       bonus:100},
+    {month:'Февраль', cat:'calls',  name:'Robert Bryniak (AI Strategy)',            comment:'MQL',                    bonus:55},
+    {month:'Февраль', cat:'calls',  name:'Craig Taylor Fractional',                 comment:'MQL',                    bonus:15},
+    {month:'Февраль', cat:'calls',  name:'Maincardgame - Valerii M.',               comment:'MQL',                    bonus:15},
+    {month:'Февраль', cat:'other',  name:'Svetness Case Study',                     comment:'',                       bonus:100},
+    {month:'Февраль', cat:'other',  name:'Prediction Market гипотеза',             comment:'С Юрием и Андреем',      bonus:150},
+    {month:'Февраль', cat:'special',name:'Hard working bee',                        comment:'',                       bonus:100},
+    {month:'Март',    cat:'special',name:'Выполнение метрик Q1 + больше всех SQL команда #2',comment:'',             bonus:200},
+    {month:'Март',    cat:'calls',  name:'Velimir Pajic',                           comment:'Крупный проект с другими вендорами',bonus:15},
+    {month:'Март',    cat:'other',  name:'LABA',                                    comment:'',                       bonus:100},
+  ]},
+  { name:'Daria Shatenok', entries:[
+    {month:'Октябрь', cat:'calls',    name:'Rishi Narayanan',                       comment:'',                       bonus:10},
+    {month:'Октябрь', cat:'closed',   name:'Michael Malek',                         comment:'SQL',                    bonus:150},
+    {month:'Октябрь', cat:'special',  name:'Hard-working Bee',                      comment:'',                       bonus:100},
+    {month:'Октябрь', cat:'mentoring',name:'Помощь за менторство джуна',            comment:'',                       bonus:100},
+    {month:'Ноябрь',  cat:'mentoring',name:'Менторство Anastasiya Kalinnikava',     comment:'',                       bonus:100},
+    {month:'Январь',  cat:'closed',   name:'WeGotLites - Lasha Maisuradze',         comment:'SQL — гипотеза сгенерила SQL',bonus:150},
+    {month:'Февраль', cat:'calls',    name:'Mid MQL лид',                           comment:'',                       bonus:15},
+    {month:'Март',    cat:'calls',    name:'Biosignals Dx - Richard Rendell',       comment:'Хотел узнать больше',    bonus:15},
+  ]},
+  { name:'Nikita S', entries:[
+    {month:'Сентябрь',cat:'closed',  name:'Kirill Sultanshin (Kate/Upwork)',         comment:'SQL + closed project',   bonus:275},
+    {month:'Сентябрь',cat:'special', name:'Эффективность команды',                  comment:'пришел в середине',      bonus:100},
+    {month:'Декабрь', cat:'calls',   name:'Denis Guezelocak',                       comment:'High MQL',               bonus:15},
+    {month:'Декабрь', cat:'calls',   name:'Richard Quevedo (SMX)',                  comment:'High партнёры',          bonus:50},
+    {month:'Декабрь', cat:'closed',  name:'Aleksandre Kokhreidze',                  comment:'SQL — работаем над оценкой',bonus:250},
+    {month:'Декабрь', cat:'special', name:'High working bee',                       comment:'Special bonus',          bonus:100},
+    {month:'Январь',  cat:'calls',   name:'KELECHI AMAJO (Blinqpay)',               comment:'New Deal — ждём апдейт', bonus:55},
+    {month:'Январь',  cat:'calls',   name:'Shane Rodgers (PDX Coin)',               comment:'New Deal — пингуем',     bonus:15},
+    {month:'Март',    cat:'closed',  name:'Vivek Palan',                            comment:'SQL',                    bonus:150},
+  ]},
+  { name:'Katerina Baranova', entries:[
+    {month:'Январь', cat:'closed', name:'Felix Blum', comment:'Closed + SQL', bonus:200},
+  ]},
+  { name:'Polina K', entries:[
+    {month:'Ноябрь',  cat:'special', name:'Hard-working Bee',                       comment:'',                       bonus:100},
+    {month:'Ноябрь',  cat:'other',   name:'Идея → SQL',                            comment:'Ты предложил идею',      bonus:150},
+    {month:'Январь',  cat:'closed',  name:'Michael Fainshtein',                     comment:'SQL — ждём фидбек',      bonus:250},
+    {month:'Январь',  cat:'calls',   name:'Ana Nery',                               comment:'Partnership',            bonus:50},
+    {month:'Февраль', cat:'other',   name:'Онбординг Ксении (идея)',               comment:'Имплементировали — принесла результат',bonus:150},
+    {month:'Март',    cat:'special', name:'Hard working bee',                       comment:'',                       bonus:100},
+    {month:'Март',    cat:'calls',   name:'Greg Castonguay (AI Content)',           comment:'AI agent для SEO',       bonus:15},
+    {month:'Март',    cat:'calls',   name:'Intelligent Systems - Ninoslav D.',      comment:'Заинтересованы',         bonus:15},
+    {month:'Март',    cat:'calls',   name:'Jia Huang - Diaminate',                  comment:'Нетворкинг',             bonus:15},
+    {month:'Март',    cat:'special', name:'5 звонков MID/HIGH MQL',               comment:'Special bonus',           bonus:150},
+  ]},
+  { name:'Anastasia K', entries:[
+    {month:'Январь', cat:'calls',   name:'Call leads',                              comment:'Leads calls',            bonus:70},
+    {month:'Март',   cat:'calls',   name:'Valufin - Sharon Constançon',             comment:'Хочет переписать платформу',bonus:15},
+    {month:'Март',   cat:'special', name:'Hard working bee',                        comment:'',                       bonus:150},
+  ]},
+  { name:'Aleksandra Baslyk', entries:[
+    {month:'Январь',  cat:'closed', name:'Lasha Maisuradze (WeGotLites)',           comment:'SQL',                    bonus:250},
+    {month:'Февраль', cat:'calls',  name:'Dan Passarelli',                          comment:'Mid MQL',                bonus:55},
+  ]},
+  { name:'Maryia Antonovich', entries:[
+    {month:'Февраль', cat:'calls', name:'Звонки немецким лидам',                    comment:'',                       bonus:50},
+    {month:'Март',    cat:'calls', name:'David McLain',                             comment:'',                       bonus:15},
+    {month:'Март',    cat:'calls', name:'Freddy Juka — AI agents',                 comment:'',                       bonus:15},
+  ]},
+  { name:'Kseniya Barzdova', entries:[
+    {month:'Март', cat:'calls', name:'Skyltmax.se - Peter Bladh',                   comment:'PIM система — Ruby on Rails',bonus:40},
+    {month:'Март', cat:'calls', name:'TDM Callcenter - Markus Näser',              comment:'Базовый интро',          bonus:15},
+  ]},
+];
+
+// ══════════════════════════════════════════════════════════
+//  CONSTANTS
+// ══════════════════════════════════════════════════════════
+const MONTHS = ['Сентябрь','Октябрь','Ноябрь','Декабрь','Январь','Февраль','Март'];
+const M_CLS  = {'Сентябрь':'sep','Октябрь':'oct','Ноябрь':'nov','Декабрь':'dec','Январь':'jan','Февраль':'feb','Март':'mar'};
+const CAT = {
+  closed:   {label:'Закрытые/SQL', cls:'cat-closed',   tc:'tc-closed'},
+  calls:    {label:'Звонки MQL',   cls:'cat-calls',    tc:'tc-calls'},
+  special:  {label:'Special',      cls:'cat-special',  tc:'tc-special'},
+  mentoring:{label:'Менторство',   cls:'cat-mentoring',tc:'tc-mentoring'},
+  other:    {label:'Прочее',       cls:'cat-other',    tc:'tc-other'},
+};
+const LS_KEY = 'bonus_dashboard_v1';
+
+// ══════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════
+let people = [];
+let closedDeals = [];
+let dealsFilter = 'all';
+
+// ══════════════════════════════════════════════════════════
+//  LOCALSTORAGE
+// ══════════════════════════════════════════════════════════
+let saveTimer = null;
+
+function markSaving() {
+  const dot = document.getElementById('save-dot');
+  const lbl = document.getElementById('save-label');
+  dot.className = 'save-dot saving';
+  lbl.textContent = 'Сохранение...';
+}
+function markSaved() {
+  const dot = document.getElementById('save-dot');
+  const lbl = document.getElementById('save-label');
+  dot.className = 'save-dot saved';
+  lbl.textContent = 'Сохранено';
+}
+
+function persistState() {
+  markSaving();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({ people, closedDeals }));
+    } catch(e) { console.warn('localStorage save failed', e); }
+    markSaved();
+  }, 400);
+}
+
+function loadFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.people && parsed.closedDeals) {
+        people = parsed.people;
+        closedDeals = parsed.closedDeals;
+        return true;
+      }
+    }
+  } catch(e) { console.warn('localStorage load failed', e); }
+  return false;
+}
+
+// ══════════════════════════════════════════════════════════
+//  INIT STATE
+// ══════════════════════════════════════════════════════════
+function buildClosedDealsFromPeople(ppl) {
+  const deals = [];
+  ppl.forEach(p => {
+    p.entries.filter(e => e.cat === 'closed' && e.bonus > 0).forEach(e => {
+      deals.push({
+        id: Math.random().toString(36).slice(2),
+        project: e.name, leadgen: p.name,
+        month: e.month, bonus: e.bonus,
+        comment: e.comment, revenue: ''
+      });
+    });
+  });
+  return deals.sort((a,b) => {
+    const mo = MONTHS.indexOf(a.month) - MONTHS.indexOf(b.month);
+    return mo !== 0 ? mo : b.bonus - a.bonus;
+  });
+}
+
+function initState() {
+  const restored = loadFromLocalStorage();
+  if (!restored) {
+    people = JSON.parse(JSON.stringify(DEFAULT_PEOPLE));
+    closedDeals = buildClosedDealsFromPeople(people);
+    persistState();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════════════════
+const pillCls = m => 'pill-'+M_CLS[m];
+const tcCls   = m => 'mc-'+M_CLS[m];
+const mColor  = m => 'var(--'+(M_CLS[m]||'muted')+')';
+function sumBy(arr,k,v){return arr.filter(e=>e[k]===v).reduce((s,e)=>s+e.bonus,0);}
+
+// ══════════════════════════════════════════════════════════
+//  RENDER: PEOPLE
+// ══════════════════════════════════════════════════════════
+function renderPeople() {
+  const cardsEl = document.getElementById('cards');
+  cardsEl.innerHTML = '';
+  people.forEach(p => {
+    const total = p.entries.reduce((s,e)=>s+e.bonus,0);
+    const byCat = {}; Object.keys(CAT).forEach(k=>byCat[k]=0);
+    p.entries.forEach(e=>byCat[e.cat]=(byCat[e.cat]||0)+e.bonus);
+    const monthTotals = {};
+    MONTHS.forEach(m=>{const v=sumBy(p.entries,'month',m);if(v>0)monthTotals[m]=v;});
+
+    const pills = Object.entries(monthTotals).map(([m,v])=>
+      `<span class="pill ${pillCls(m)}">${m.slice(0,3)} $${v}</span>`).join('');
+    const bars = Object.entries(byCat).filter(([,v])=>v>0).map(([k,v])=>`
+      <div class="bar-row">
+        <span class="bar-label">${CAT[k].label}</span>
+        <div class="bar-track"><div class="bar-fill ${CAT[k].cls}" style="width:${Math.round(v/total*100)}%"></div></div>
+        <span class="bar-val">$${v}</span>
+      </div>`).join('');
+    const entries = p.entries.filter(e=>e.bonus>0).map(e=>`
+      <div class="entry">
+        <div class="entry-cat ${CAT[e.cat].cls}"></div>
+        <div class="entry-meta">
+          <div class="entry-name">${e.name}</div>
+          <div class="entry-sub"><span class="${tcCls(e.month)}">${e.month}</span>${e.comment?`<span>${e.comment}</span>`:''}</div>
+        </div>
+        <div class="entry-bonus ${CAT[e.cat].tc}">$${e.bonus}</div>
+      </div>`).join('');
+
+    const card = document.createElement('div');
+    card.className='card';
+    card.innerHTML=`
+      <div class="card-header"><div class="name">${p.name}</div><div class="total">$${total.toLocaleString()}</div></div>
+      <div class="month-pills">${pills}</div>
+      <div class="bar-container">${bars}</div>
+      <div class="entries">${entries}</div>`;
+    cardsEl.appendChild(card);
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+//  RENDER: MONTHS
+// ══════════════════════════════════════════════════════════
+function renderMonths() {
+  const el = document.getElementById('month-blocks');
+  el.innerHTML = '';
+  MONTHS.forEach(month=>{
+    const rows = people.map(p=>({name:p.name,val:sumBy(p.entries,'month',month)}))
+      .filter(r=>r.val>0).sort((a,b)=>b.val-a.val);
+    if(!rows.length) return;
+    const mTotal = rows.reduce((s,r)=>s+r.val,0);
+    const maxVal = rows[0].val;
+    const col = mColor(month);
+    const block = document.createElement('div');
+    block.className='month-block';
+    block.innerHTML=`
+      <div class="month-block-header">
+        <div class="month-title" style="color:${col}">${month}</div>
+        <div class="month-total">$${mTotal.toLocaleString()}</div>
+      </div>
+      <div class="month-rows">
+        ${rows.map(r=>`
+          <div class="month-row">
+            <div class="month-row-name">${r.name}</div>
+            <div class="month-row-val">$${r.val}</div>
+            <div class="month-row-bar"><div class="month-row-bar-fill" style="width:${Math.round(r.val/maxVal*100)}%;background:${col}"></div></div>
+          </div>`).join('')}
+      </div>`;
+    el.appendChild(block);
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+//  RENDER: SUMMARY
+// ══════════════════════════════════════════════════════════
+function renderSummary() {
+  const allE = people.flatMap(p=>p.entries);
+  const grandTotal   = allE.reduce((s,e)=>s+e.bonus,0);
+  const closedTotal  = allE.filter(e=>e.cat==='closed').reduce((s,e)=>s+e.bonus,0);
+  const callsTotal   = allE.filter(e=>e.cat==='calls').reduce((s,e)=>s+e.bonus,0);
+  const specialTotal = allE.filter(e=>e.cat==='special').reduce((s,e)=>s+e.bonus,0);
+  const mentorTotal  = allE.filter(e=>e.cat==='mentoring').reduce((s,e)=>s+e.bonus,0);
+  const otherTotal   = allE.filter(e=>e.cat==='other').reduce((s,e)=>s+e.bonus,0);
+
+  document.getElementById('kpi-grid').innerHTML = [
+    {l:'Всего выплачено',v:'$'+grandTotal.toLocaleString(),  c:'var(--accent)'},
+    {l:'Участников',     v:people.length,                     c:'var(--text)'},
+    {l:'Закрытые/SQL',  v:'$'+closedTotal.toLocaleString(),  c:'var(--closed)'},
+    {l:'Звонки MQL',    v:'$'+callsTotal.toLocaleString(),   c:'var(--calls)'},
+    {l:'Special bonus', v:'$'+specialTotal.toLocaleString(), c:'var(--special)'},
+    {l:'Менторство',    v:'$'+mentorTotal.toLocaleString(),  c:'var(--mentoring)'},
+    {l:'Прочее',        v:'$'+otherTotal.toLocaleString(),   c:'var(--other)'},
+    ...MONTHS.map(m=>({l:m,v:'$'+allE.filter(e=>e.month===m).reduce((s,e)=>s+e.bonus,0).toLocaleString(),c:mColor(m)}))
+  ].map(k=>`<div class="kpi"><div class="kpi-label">${k.l}</div><div class="kpi-val" style="color:${k.c}">${k.v}</div></div>`).join('');
+
+  const ranked = people.map(p=>({
+    name:p.name, total:p.entries.reduce((s,e)=>s+e.bonus,0),
+    ...Object.fromEntries(MONTHS.map(m=>[m,sumBy(p.entries,'month',m)]))
+  })).sort((a,b)=>b.total-a.total);
+
+  document.getElementById('rank-table').innerHTML = `
+    <div class="rank-head">
+      <span>#</span><span>Имя</span>
+      ${MONTHS.map(m=>`<span style="color:${mColor(m)}">${m.slice(0,3)}</span>`).join('')}
+      <span>Итого</span>
+    </div>
+    ${ranked.map((r,i)=>`
+      <div class="rank-row">
+        <div class="rank-num">${i+1}</div>
+        <div class="rank-name">${r.name}</div>
+        ${MONTHS.map(m=>`<div class="rank-cell" style="color:${r[m]?mColor(m):'var(--muted)'}">${r[m]?'$'+r[m]:'—'}</div>`).join('')}
+        <div class="rank-cell" style="color:var(--accent);font-weight:600">$${r.total.toLocaleString()}</div>
+      </div>`).join('')}`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  RENDER: DEALS
+// ══════════════════════════════════════════════════════════
+function buildFilterButtons() {
+  const filtersEl = document.getElementById('deals-filters');
+  filtersEl.innerHTML = `<div class="filter-btn ${dealsFilter==='all'?'active':''}" onclick="filterDeals('all',this)">Все</div>`;
+  const lgs = [...new Set(closedDeals.map(d=>d.leadgen))];
+  lgs.forEach(lg=>{
+    const btn = document.createElement('div');
+    btn.className='filter-btn'+(dealsFilter===lg?' active':'');
+    btn.textContent=lg;
+    btn.onclick=function(){filterDeals(lg,this);};
+    filtersEl.appendChild(btn);
+  });
+}
+
+function updateDealsKPI() {
+  const visible = dealsFilter==='all' ? closedDeals : closedDeals.filter(d=>d.leadgen===dealsFilter);
+  const totalBonus   = visible.reduce((s,d)=>s+d.bonus,0);
+  const totalRevenue = visible.reduce((s,d)=>s+(parseFloat(d.revenue)||0),0);
+  const uLg = [...new Set(visible.map(d=>d.leadgen))].length;
+  document.getElementById('deals-kpi').innerHTML = [
+    {l:'Закрытых сделок',    v:visible.length,                                              c:'var(--text)'},
+    {l:'Бонусов выплачено',  v:'$'+totalBonus.toLocaleString(),                             c:'var(--closed)'},
+    {l:'Уникальных лидгенов',v:uLg,                                                         c:'var(--muted2)'},
+    {l:'Ср. бонус / сделка', v:visible.length?'$'+Math.round(totalBonus/visible.length):'—',c:'var(--calls)'},
+    {l:'Revenue внесено',    v:totalRevenue?'$'+totalRevenue.toLocaleString():'—',          c:'var(--accent)'},
+  ].map(k=>`<div class="kpi"><div class="kpi-label">${k.l}</div><div class="kpi-val" style="color:${k.c}">${k.v}</div></div>`).join('');
+}
+
+function renderDealsRows() {
+  const filtered = dealsFilter==='all' ? closedDeals : closedDeals.filter(d=>d.leadgen===dealsFilter);
+  document.getElementById('deals-rows').innerHTML = filtered.map((d,i)=>`
+    <div class="deal-row" data-id="${d.id}" style="transition:opacity .2s">
+      <div class="deal-num">${i+1}</div>
+      <div>
+        <div contenteditable="true" spellcheck="false"
+          class="deal-project"
+          data-id="${d.id}" data-field="project"
+          onblur="editDeal(this)"
+          style="outline:none;border-bottom:1px dashed transparent;padding-bottom:1px"
+          onfocus="this.style.borderBottomColor='var(--accent)'"
+        >${d.project}</div>
+        ${d.comment?`<div style="font-size:10px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:2px">${d.comment}</div>`:''}
+      </div>
+      <div>
+        <select data-id="${d.id}" data-field="leadgen" onchange="editDealSelect(this)"
+          style="background:#0f0f0f;border:1px solid var(--border);border-radius:2px;color:var(--muted2);
+          font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:3px 6px;cursor:pointer;width:100%">
+          ${[...new Set(people.map(p=>p.name))].map(n=>`<option value="${n}" ${n===d.leadgen?'selected':''}>${n}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <select data-id="${d.id}" data-field="month" onchange="editDealSelect(this)"
+          style="background:#0f0f0f;border:1px solid var(--border);border-radius:2px;
+          color:${mColor(d.month)};font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 6px;cursor:pointer;width:100%">
+          ${MONTHS.map(m=>`<option value="${m}" style="color:${mColor(m)}" ${m===d.month?'selected':''}>${m}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <span style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px">$</span>
+        <input type="number" class="revenue-input"
+          style="width:64px;color:var(--closed);font-weight:600"
+          value="${d.bonus}"
+          data-id="${d.id}" data-field="bonus"
+          onchange="editDealInput(this)"
+        />
+      </div>
+      <div><span class="deal-type">${d.bonus>=300?'Closed':'SQL'}</span></div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px">$</span>
+        <input type="number"
+          class="revenue-input${d.revenue?' filled':''}"
+          placeholder="+ Revenue"
+          value="${d.revenue||''}"
+          data-id="${d.id}" data-field="revenue"
+          oninput="this.classList.toggle('filled',!!this.value)"
+          onchange="editDealInput(this)"
+          style="width:90px"
+        />
+      </div>
+      <div>
+        <button onclick="deleteDeal('${d.id}')"
+          style="background:transparent;border:1px solid #2a2a2a;border-radius:2px;color:var(--muted);
+          cursor:pointer;font-size:11px;padding:3px 8px;transition:all .15s;font-family:'IBM Plex Mono',monospace"
+          onmouseover="this.style.borderColor='#e55';this.style.color='#e55'"
+          onmouseout="this.style.borderColor='#2a2a2a';this.style.color='var(--muted)'"
+        >✕ удалить</button>
+      </div>
+    </div>`).join('');
+  updateDealsKPI();
+}
+
+// ══════════════════════════════════════════════════════════
+//  DEAL EDIT HANDLERS
+// ══════════════════════════════════════════════════════════
+function editDeal(el) {
+  el.style.borderBottomColor='transparent';
+  const deal = closedDeals.find(d=>d.id===el.dataset.id);
+  if(deal) { deal[el.dataset.field]=el.textContent.trim(); persistState(); }
+  updateDealsKPI();
+}
+function editDealSelect(sel) {
+  const deal = closedDeals.find(d=>d.id===sel.dataset.id);
+  if(deal) { deal[sel.dataset.field]=sel.value; persistState(); renderDealsRows(); buildFilterButtons(); }
+}
+function editDealInput(inp) {
+  const deal = closedDeals.find(d=>d.id===inp.dataset.id);
+  if(deal) {
+    deal[inp.dataset.field] = inp.dataset.field==='revenue' ? inp.value : (parseFloat(inp.value)||0);
+    persistState();
+  }
+  updateDealsKPI();
+}
+function deleteDeal(id) {
+  const row = document.querySelector(`.deal-row[data-id="${id}"]`);
+  if(row) {
+    row.style.opacity='0';
+    setTimeout(()=>{
+      closedDeals = closedDeals.filter(d=>d.id!==id);
+      persistState();
+      renderDealsRows();
+      buildFilterButtons();
+    }, 180);
+  }
+}
+function filterDeals(filter, el) {
+  dealsFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  if(el) el.classList.add('active');
+  renderDealsRows();
+}
+
+// ══════════════════════════════════════════════════════════
+//  EXPORT JSON
+// ══════════════════════════════════════════════════════════
+function exportJSON() {
+  const snapshot = {
+    meta: {
+      title: 'Sales Bonus Data — Leadgen Team',
+      period: 'Сентябрь 2025 — Март 2026',
+      currency: 'USD',
+      exported_at: new Date().toISOString(),
+      months_order: MONTHS
+    },
+    people,
+    closedDeals
+  };
+  const blob = new Blob([JSON.stringify(snapshot, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'bonus_data_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ══════════════════════════════════════════════════════════
+//  IMPORT JSON
+// ══════════════════════════════════════════════════════════
+function loadFromFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      if (!parsed.people || !parsed.closedDeals) {
+        alert('Неверный формат файла. Ожидается JSON с полями people и closedDeals.');
+        return;
+      }
+      people = parsed.people;
+      closedDeals = parsed.closedDeals;
+      persistState();
+      renderAll();
+      // show feedback
+      const lbl = document.getElementById('save-label');
+      lbl.textContent = '✓ Загружено из файла';
+      setTimeout(()=>{ lbl.textContent = 'Сохранено'; }, 3000);
+    } catch(err) {
+      alert('Ошибка чтения файла: ' + err.message);
+    }
+    // reset input so same file can be loaded again
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+// ══════════════════════════════════════════════════════════
+//  RENDER ALL
+// ══════════════════════════════════════════════════════════
+function renderAll() {
+  renderPeople();
+  renderMonths();
+  renderSummary();
+  buildFilterButtons();
+  renderDealsRows();
+}
+
+// ── TABS ──
+function showView(id,el){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('view-'+id).classList.add('active');
+  el.classList.add('active');
+}
+
+// ══════════════════════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════════════════════
+initState();
+renderAll();
+</script>
+</body>
+</html>
