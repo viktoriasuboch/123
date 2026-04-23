@@ -1,0 +1,24 @@
+{
+  "name": "leadge-bonus",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "pagecrypt index.html dist/index.html $PASSWORD"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/viktoriasuboch/123.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/viktoriasuboch/123/issues"
+  },
+  "homepage": "https://github.com/viktoriasuboch/123#readme",
+  "dependencies": {
+    "pagecrypt": "^7.1.0"
+  }
+}
