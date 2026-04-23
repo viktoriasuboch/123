@@ -219,6 +219,12 @@
     </div>
   </div>
   <div class="deals-toolbar" style="margin-top:-10px">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;flex-shrink:0">Год:</span>
+    <div id="deals-year-filters" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      <div class="filter-btn active" onclick="filterDealsYear('all',this)">Все</div>
+    </div>
+  </div>
+  <div class="deals-toolbar" style="margin-top:-10px">
     <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;flex-shrink:0">Месяц:</span>
     <div id="deals-month-filters" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
       <div class="filter-btn active" onclick="filterDealsMonth('all',this)">Все</div>
@@ -269,6 +275,7 @@ let closedDeals = [];
 let salaries = [];
 let dealsFilter = 'all';
 let dealsMonthFilter = 'all';
+let dealsYearFilter = 'all';
 let dealTypeFilter = 'sql';
 
 // ══════════════════════════════════════════════════════════
@@ -444,6 +451,7 @@ async function deleteDealFromDB(id) {
 // ══════════════════════════════════════════════════════════
 //  HELPERS
 // ══════════════════════════════════════════════════════════
+const monthYear = m => ['Сентябрь','Октябрь','Ноябрь','Декабрь'].includes(m) ? 2025 : 2026;
 const pillCls = m => 'pill-'+M_CLS[m];
 const tcCls   = m => 'mc-'+M_CLS[m];
 const mColor  = m => 'var(--'+(M_CLS[m]||'muted')+')';
@@ -583,9 +591,22 @@ function buildFilterButtons() {
     filtersEl.appendChild(btn);
   });
 
-  // month filters — only show months that exist in this tab
+  // year filters
+  const yearEl = document.getElementById('deals-year-filters');
+  const presentYears = [...new Set(byType.map(d => monthYear(d.month)))].sort();
+  yearEl.innerHTML = `<div class="filter-btn ${dealsYearFilter==='all'?'active':''}" onclick="filterDealsYear('all',this)">Все</div>`;
+  presentYears.forEach(y => {
+    const btn = document.createElement('div');
+    btn.className = 'filter-btn' + (dealsYearFilter === y ? ' active' : '');
+    btn.textContent = y;
+    btn.onclick = function(){ filterDealsYear(y, this); };
+    yearEl.appendChild(btn);
+  });
+
+  // month filters — scope to selected year
   const monthsEl = document.getElementById('deals-month-filters');
-  const presentMonths = MONTHS.filter(m => byType.some(d => d.month === m));
+  const afterYear = dealsYearFilter === 'all' ? byType : byType.filter(d => monthYear(d.month) === dealsYearFilter);
+  const presentMonths = MONTHS.filter(m => afterYear.some(d => d.month === m));
   monthsEl.innerHTML = `<div class="filter-btn ${dealsMonthFilter==='all'?'active':''}" onclick="filterDealsMonth('all',this)">Все</div>`;
   presentMonths.forEach(m=>{
     const btn = document.createElement('div');
@@ -601,6 +622,7 @@ function buildFilterButtons() {
 function updateDealsKPI() {
   const byType = closedDeals.filter(d => d.deal_type === dealTypeFilter);
   const visible = byType
+    .filter(d => dealsYearFilter === 'all' || monthYear(d.month) === dealsYearFilter)
     .filter(d => dealsFilter === 'all' || d.leadgen === dealsFilter)
     .filter(d => dealsMonthFilter === 'all' || d.month === dealsMonthFilter);
   const totalBonus   = visible.reduce((s,d)=>s+d.bonus,0);
@@ -619,6 +641,7 @@ function updateDealsKPI() {
 function renderDealsRows() {
   const byType = closedDeals.filter(d => d.deal_type === dealTypeFilter);
   const filtered = byType
+    .filter(d => dealsYearFilter === 'all' || monthYear(d.month) === dealsYearFilter)
     .filter(d => dealsFilter === 'all' || d.leadgen === dealsFilter)
     .filter(d => dealsMonthFilter === 'all' || d.month === dealsMonthFilter);
 
@@ -794,6 +817,18 @@ function filterDeals(filter, el) {
   renderDealsRows();
 }
 
+function filterDealsYear(year, el) {
+  dealsYearFilter = year;
+  // reset month filter if it no longer belongs to the selected year
+  if (year !== 'all' && dealsMonthFilter !== 'all' && monthYear(dealsMonthFilter) !== year) {
+    dealsMonthFilter = 'all';
+  }
+  document.querySelectorAll('#deals-year-filters .filter-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  buildFilterButtons();
+  renderDealsRows();
+}
+
 function filterDealsMonth(month, el) {
   dealsMonthFilter = month;
   document.querySelectorAll('#deals-month-filters .filter-btn').forEach(b=>{
@@ -824,6 +859,7 @@ function showDealsView(type, el) {
   dealTypeFilter = type;
   dealsFilter = 'all';
   dealsMonthFilter = 'all';
+  dealsYearFilter = 'all';
   showView('deals', el);
   buildFilterButtons();
   renderDealsRows();
