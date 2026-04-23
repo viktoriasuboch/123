@@ -184,6 +184,7 @@
   <div class="tab" onclick="showDealsView('sql',this)">📋 SQL</div>
   <div class="tab" onclick="showDealsView('closed',this)">🏆 Закрытые</div>
   <div class="tab" onclick="showView('salaries',this)">💰 Зарплаты</div>
+  <div class="tab" onclick="showView('revenue',this)">📊 Revenue</div>
 </div>
 
 <div class="legend">
@@ -250,8 +251,57 @@
 
 <div class="view" id="view-salaries">
   <div class="kpi-grid" id="sal-kpi"></div>
-  <div class="section-title" style="margin-bottom:16px">Зарплаты лидгенов · Сен 2025 — Мар 2026</div>
+  <div class="section-title" style="margin-bottom:16px">Зарплаты лидгенов</div>
   <div class="rank-table" style="overflow-x:auto" id="sal-table"></div>
+</div>
+
+<div class="view" id="view-revenue">
+  <div class="kpi-grid" id="rev-kpi"></div>
+  <div class="section-title" style="margin-bottom:16px">Projects Revenue</div>
+  <!-- add form -->
+  <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:flex-end;">
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">Проект</span>
+      <input id="rev-project" type="text" placeholder="Project name"
+        style="background:#0f0f0f;border:1px solid var(--border);border-radius:2px;color:var(--text);
+        font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:6px 10px;outline:none;width:200px;
+        transition:border-color .15s" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"/>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">Месяц</span>
+      <select id="rev-month"
+        style="background:#0f0f0f;border:1px solid var(--border);border-radius:2px;color:var(--text);
+        font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 10px;cursor:pointer;outline:none">
+        <option value="">— месяц —</option>
+      </select>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">Год</span>
+      <select id="rev-year"
+        style="background:#0f0f0f;border:1px solid var(--border);border-radius:2px;color:var(--text);
+        font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 10px;cursor:pointer;outline:none">
+        <option value="2025">2025</option>
+        <option value="2026" selected>2026</option>
+        <option value="2027">2027</option>
+      </select>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">Сумма $</span>
+      <input id="rev-amount" type="number" placeholder="0"
+        style="background:#0f0f0f;border:1px solid var(--border);border-radius:2px;color:var(--text);
+        font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 10px;outline:none;width:110px;
+        transition:border-color .15s" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"/>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">Заметка</span>
+      <input id="rev-note" type="text" placeholder="опционально"
+        style="background:#0f0f0f;border:1px solid var(--border);border-radius:2px;color:var(--text);
+        font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:6px 10px;outline:none;width:160px;
+        transition:border-color .15s" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"/>
+    </div>
+    <button class="btn btn-accent" onclick="addRevenueEntry()" style="align-self:flex-end">+ Добавить</button>
+  </div>
+  <div class="rank-table" style="overflow-x:auto" id="rev-table"></div>
 </div>
 
 <script>
@@ -302,6 +352,7 @@ const CAT = {
 let people = [];
 let closedDeals = [];
 let salaries = [];
+let projectRevenues = [];
 let dealsFilter = 'all';
 let dealsMonthFilter = 'all';
 let dealsYearFilter = 'all';
@@ -339,15 +390,16 @@ function markError(msg) {
 //  LOAD FROM SUPABASE
 // ══════════════════════════════════════════════════════════
 async function loadState() {
-  const [pplRes, entRes, dlRes, salRes] = await Promise.all([
+  const [pplRes, entRes, dlRes, salRes, revRes] = await Promise.all([
     sb.from('people').select('*').order('sort_order'),
     sb.from('entries').select('*').order('sort_order'),
     sb.from('deals').select('*').order('created_at'),
     sb.from('salaries').select('*').order('year').order('month'),
+    sb.from('project_revenues').select('*').order('year').order('created_at'),
   ]);
-  if (pplRes.error || entRes.error || dlRes.error || salRes.error) {
+  if (pplRes.error || entRes.error || dlRes.error || salRes.error || revRes.error) {
     markError('загрузка');
-    console.error(pplRes.error, entRes.error, dlRes.error, salRes.error);
+    console.error(pplRes.error, entRes.error, dlRes.error, salRes.error, revRes.error);
     return;
   }
   const byId = {};
@@ -372,6 +424,10 @@ async function loadState() {
   salaries = salRes.data.map(s => ({
     id: s.id, name: s.leadgen_name, month: s.month,
     year: s.year, gross: Number(s.gross), total: Number(s.total),
+  }));
+  projectRevenues = revRes.data.map(r => ({
+    id: r.id, project: r.project_name, month: r.month,
+    year: r.year || 2026, amount: Number(r.amount), note: r.note || '',
   }));
 }
 
@@ -440,11 +496,26 @@ function handlePerson(payload) {
 
 function startRealtime() {
   sb.channel('dashboard')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'deals'   }, handleDeal)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'entries' }, handleEntry)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'people'   }, handlePerson)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'salaries' }, handleSalary)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'deals'            }, handleDeal)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'entries'          }, handleEntry)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'people'           }, handlePerson)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'salaries'         }, handleSalary)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'project_revenues' }, handleRevenue)
     .subscribe();
+}
+
+function handleRevenue(payload) {
+  const t = payload.eventType;
+  if (t === 'INSERT' || t === 'UPDATE') {
+    const r = payload.new;
+    const m = { id:r.id, project:r.project_name, month:r.month, year:r.year||2026, amount:Number(r.amount), note:r.note||'' };
+    const i = projectRevenues.findIndex(x => x.id === m.id);
+    if (i >= 0) projectRevenues[i] = m; else projectRevenues.push(m);
+  } else if (t === 'DELETE') {
+    projectRevenues = projectRevenues.filter(x => x.id !== payload.old.id);
+  }
+  renderRevenue();
+  renderDealsRows(); // refresh auto-revenue in closed tab
 }
 
 function handleSalary(payload) {
@@ -762,16 +833,21 @@ function renderDealsRows() {
             </select>
           </div>
           <div style="display:flex;align-items:center;gap:6px">
-            <span style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px">$</span>
-            <input type="number"
-              class="revenue-input${d.revenue ? ' filled' : ''}"
-              placeholder="+ Revenue"
-              value="${d.revenue || ''}"
-              data-id="${d.id}" data-field="revenue"
-              oninput="this.classList.toggle('filled',!!this.value)"
-              onchange="editDealInput(this)"
-              style="width:96px"
-            />
+            ${(()=>{
+              const key = d.project.trim().toLowerCase();
+              const autoRev = projectRevenues.filter(r=>r.project.trim().toLowerCase()===key).reduce((s,r)=>s+r.amount,0);
+              if (autoRev > 0) return `<div style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:var(--accent)" title="Из Revenue tab">$${autoRev.toLocaleString()} <span style="font-size:9px;color:var(--muted);font-weight:400">auto</span></div>`;
+              return `<span style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px">$</span>
+                <input type="number"
+                  class="revenue-input${d.revenue ? ' filled' : ''}"
+                  placeholder="+ Revenue"
+                  value="${d.revenue || ''}"
+                  data-id="${d.id}" data-field="revenue"
+                  oninput="this.classList.toggle('filled',!!this.value)"
+                  onchange="editDealInput(this)"
+                  style="width:90px"
+                />`;
+            })()}
           </div>
           <div>
             <button onclick="deleteDeal('${d.id}')"
@@ -1016,6 +1092,135 @@ function renderSalaries() {
 }
 
 // ══════════════════════════════════════════════════════════
+//  RENDER: REVENUE
+// ══════════════════════════════════════════════════════════
+function renderRevenue() {
+  // populate month select
+  const mSel = document.getElementById('rev-month');
+  if (mSel && !mSel.dataset.built) {
+    mSel.dataset.built = '1';
+    MONTHS.forEach(m => { const o = document.createElement('option'); o.value=m; o.textContent=m; mSel.appendChild(o); });
+  }
+
+  if (!projectRevenues.length) {
+    document.getElementById('rev-kpi').innerHTML = '';
+    document.getElementById('rev-table').innerHTML =
+      `<div style="padding:32px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted)">Нет данных — добавьте записи или загрузите файл</div>`;
+    return;
+  }
+
+  const totalAll = projectRevenues.reduce((s,r)=>s+r.amount,0);
+  const fmt = v => '$' + Math.round(v).toLocaleString();
+
+  // active periods
+  const seenP = new Set();
+  const periods = [];
+  projectRevenues.forEach(r => {
+    const k = `${r.year}-${r.month}`;
+    if (!seenP.has(k)) { seenP.add(k); periods.push({month:r.month, year:r.year}); }
+  });
+  periods.sort((a,b)=>monthSortKey(a.month,a.year)-monthSortKey(b.month,b.year));
+
+  // group by project
+  const byProject = {};
+  projectRevenues.forEach(r => {
+    const k = r.project.trim();
+    if (!byProject[k]) byProject[k] = { byPeriod:{}, total:0, entries:[] };
+    const pk = `${r.year}-${r.month}`;
+    byProject[k].byPeriod[pk] = (byProject[k].byPeriod[pk]||0) + r.amount;
+    byProject[k].total += r.amount;
+    byProject[k].entries.push(r);
+  });
+
+  // column totals
+  const colTotals = {};
+  periods.forEach(({month,year}) => {
+    const k=`${year}-${month}`;
+    colTotals[k] = projectRevenues.filter(r=>r.month===month&&r.year===year).reduce((s,r)=>s+r.amount,0);
+  });
+
+  const ranked = Object.entries(byProject).sort((a,b)=>b[1].total-a[1].total);
+  const topProject = ranked[0];
+
+  document.getElementById('rev-kpi').innerHTML = [
+    { l:'Всего Revenue',      v:fmt(totalAll),                              c:'var(--accent)' },
+    { l:'Проектов',           v:ranked.length,                              c:'var(--text)'   },
+    { l:'Топ проект',         v:topProject?topProject[0].slice(0,18):'—',  c:'var(--calls)'  },
+    { l:'Revenue топ проекта',v:topProject?fmt(topProject[1].total):'—',   c:'var(--closed)' },
+  ].map(k=>`<div class="kpi"><div class="kpi-label">${k.l}</div><div class="kpi-val" style="color:${k.c};font-size:${typeof k.v==='string'&&k.v.length>8?'16px':'26px'}">${k.v}</div></div>`).join('');
+
+  const mono = `font-family:'IBM Plex Mono',monospace`;
+  const COL_W = `1fr repeat(${periods.length},72px) 90px 40px`;
+  const headS = (c='var(--muted)')=>`${mono};font-size:8px;color:${c};text-transform:uppercase;letter-spacing:.8px;text-align:right`;
+  const cellS = (c)=>`${mono};font-size:12px;text-align:right;color:${c}`;
+
+  document.getElementById('rev-table').innerHTML = `
+    <div style="display:grid;grid-template-columns:${COL_W};gap:8px;padding:9px 16px;border-bottom:1px solid var(--border);min-width:600px">
+      <span style="${headS()};text-align:left">Проект</span>
+      ${periods.map(({month,year})=>`<span style="${headS(mColor(month))}">${monthLabel(month,year)}</span>`).join('')}
+      <span style="${headS('var(--accent)')}">Итого</span>
+      <span></span>
+    </div>
+    <!-- column totals -->
+    <div style="display:grid;grid-template-columns:${COL_W};gap:8px;padding:10px 16px;border-bottom:2px solid var(--border);background:#111;min-width:600px;align-items:center">
+      <div style="${mono};font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">Итого</div>
+      ${periods.map(({month,year})=>{
+        const v=colTotals[`${year}-${month}`];
+        return `<div style="${cellS('var(--accent)')};font-size:13px;font-weight:600">${v?fmt(v):'—'}</div>`;
+      }).join('')}
+      <div style="${cellS('var(--accent)')};font-size:14px;font-weight:600">${fmt(totalAll)}</div>
+      <div></div>
+    </div>
+    <!-- per-project rows -->
+    ${ranked.map(([name,d])=>`
+      <div style="display:grid;grid-template-columns:${COL_W};gap:8px;padding:9px 16px;border-bottom:1px solid #111;align-items:center;min-width:600px" onmouseover="this.style.background='#111'" onmouseout="this.style.background=''">
+        <div style="font-size:12px;font-weight:600;color:var(--text)">${name}</div>
+        ${periods.map(({month,year})=>{
+          const v=d.byPeriod[`${year}-${month}`];
+          const entries = d.entries.filter(r=>r.month===month&&r.year===year);
+          const tip = entries.map(r=>r.note?`${r.note}: $${r.amount}`:`$${r.amount}`).join(', ');
+          return v
+            ? `<div style="${cellS(mColor(month))}" title="${tip}">${fmt(v)}</div>`
+            : `<div style="${cellS('var(--muted)')}">—</div>`;
+        }).join('')}
+        <div style="${cellS('var(--accent)')};font-weight:600">${fmt(d.total)}</div>
+        <div style="display:flex;gap:4px;justify-content:flex-end">
+          ${d.entries.map(r=>`<button onclick="deleteRevEntry('${r.id}')"
+            style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:10px;padding:2px 4px;transition:color .15s"
+            onmouseover="this.style.color='#e55'" onmouseout="this.style.color='var(--muted)'"
+            title="${r.month} ${r.year} $${r.amount}">✕</button>`).join('')}
+        </div>
+      </div>`).join('')}`;
+}
+
+async function addRevenueEntry() {
+  const project = document.getElementById('rev-project').value.trim();
+  const month   = document.getElementById('rev-month').value;
+  const year    = parseInt(document.getElementById('rev-year').value);
+  const amount  = parseFloat(document.getElementById('rev-amount').value);
+  const note    = document.getElementById('rev-note').value.trim();
+  if (!project || !month || !amount) return alert('Заполните проект, месяц и сумму');
+  markSaving();
+  const { error } = await sb.from('project_revenues').insert([{ project_name:project, month, year, amount, note:note||null }]);
+  if (error) { markError('revenue'); return; }
+  markSaved();
+  document.getElementById('rev-project').value = '';
+  document.getElementById('rev-amount').value = '';
+  document.getElementById('rev-note').value = '';
+}
+
+async function deleteRevEntry(id) {
+  const row = projectRevenues.find(r=>r.id===id);
+  if (!row) return;
+  projectRevenues = projectRevenues.filter(r=>r.id!==id);
+  renderRevenue(); renderDealsRows();
+  markSaving();
+  const { error } = await sb.from('project_revenues').delete().eq('id', id);
+  if (error) { markError('удаление'); return; }
+  markSaved();
+}
+
+// ══════════════════════════════════════════════════════════
 //  RENDER ALL
 // ══════════════════════════════════════════════════════════
 function renderAll() {
@@ -1025,6 +1230,7 @@ function renderAll() {
   buildFilterButtons();
   renderDealsRows();
   renderSalaries();
+  renderRevenue();
 }
 
 // ── TABS ──
