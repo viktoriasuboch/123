@@ -12,8 +12,9 @@
     --text:#f0f0f0; --muted:#505050; --muted2:#888;
     --closed:#e8ff47; --calls:#47c8ff; --special:#ff6b35;
     --mentoring:#c084fc; --other:#6ee7b7;
-    --sep:#f97316; --oct:#fb923c; --nov:#fbbf24;
-    --dec:#f43f5e; --jan:#38bdf8; --feb:#a78bfa; --mar:#4ade80;
+    --jan:#38bdf8; --feb:#a78bfa; --mar:#4ade80; --apr:#f472b6;
+    --may:#10b981; --jun:#f59e0b; --jul:#60a5fa; --aug:#a3e635;
+    --sep:#f97316; --oct:#fb923c; --nov:#fbbf24; --dec:#f43f5e;
   }
   *{margin:0;padding:0;box-sizing:border-box;}
   body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;padding:32px 20px;}
@@ -43,13 +44,18 @@
   .total{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600;color:var(--accent);white-space:nowrap;}
   .month-pills{display:flex;gap:5px;padding:8px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
   .pill{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;padding:2px 7px;border-radius:2px;border:1px solid transparent;}
+  .pill-jan{color:var(--jan);border-color:rgba(56,189,248,.3);background:rgba(56,189,248,.07);}
+  .pill-feb{color:var(--feb);border-color:rgba(167,139,250,.3);background:rgba(167,139,250,.07);}
+  .pill-mar{color:var(--mar);border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.07);}
+  .pill-apr{color:var(--apr);border-color:rgba(244,114,182,.3);background:rgba(244,114,182,.07);}
+  .pill-may{color:var(--may);border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.07);}
+  .pill-jun{color:var(--jun);border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.07);}
+  .pill-jul{color:var(--jul);border-color:rgba(96,165,250,.3);background:rgba(96,165,250,.07);}
+  .pill-aug{color:var(--aug);border-color:rgba(163,230,53,.3);background:rgba(163,230,53,.07);}
   .pill-sep{color:var(--sep);border-color:rgba(249,115,22,.3);background:rgba(249,115,22,.07);}
   .pill-oct{color:var(--oct);border-color:rgba(251,146,60,.3);background:rgba(251,146,60,.07);}
   .pill-nov{color:var(--nov);border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.07);}
   .pill-dec{color:var(--dec);border-color:rgba(244,63,94,.3);background:rgba(244,63,94,.07);}
-  .pill-jan{color:var(--jan);border-color:rgba(56,189,248,.3);background:rgba(56,189,248,.07);}
-  .pill-feb{color:var(--feb);border-color:rgba(167,139,250,.3);background:rgba(167,139,250,.07);}
-  .pill-mar{color:var(--mar);border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.07);}
   .bar-container{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px;}
   .bar-row{display:flex;align-items:center;gap:8px;}
   .bar-label{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);width:72px;flex-shrink:0;text-transform:uppercase;letter-spacing:.8px;}
@@ -158,8 +164,10 @@
   .tc-closed{color:var(--closed);} .tc-calls{color:var(--calls);}
   .tc-special{color:var(--special);} .tc-mentoring{color:var(--mentoring);}
   .tc-other{color:var(--other);}
-  .mc-sep{color:var(--sep);} .mc-oct{color:var(--oct);} .mc-nov{color:var(--nov);}
-  .mc-dec{color:var(--dec);} .mc-jan{color:var(--jan);} .mc-feb{color:var(--feb);} .mc-mar{color:var(--mar);}
+  .mc-jan{color:var(--jan);} .mc-feb{color:var(--feb);} .mc-mar{color:var(--mar);}
+  .mc-apr{color:var(--apr);} .mc-may{color:var(--may);} .mc-jun{color:var(--jun);}
+  .mc-jul{color:var(--jul);} .mc-aug{color:var(--aug);}
+  .mc-sep{color:var(--sep);} .mc-oct{color:var(--oct);} .mc-nov{color:var(--nov);} .mc-dec{color:var(--dec);}
 </style>
 </head>
 <body>
@@ -258,8 +266,29 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // ══════════════════════════════════════════════════════════
 //  CONSTANTS
 // ══════════════════════════════════════════════════════════
-const MONTHS = ['Сентябрь','Октябрь','Ноябрь','Декабрь','Январь','Февраль','Март'];
-const M_CLS  = {'Сентябрь':'sep','Октябрь':'oct','Ноябрь':'nov','Декабрь':'dec','Январь':'jan','Февраль':'feb','Март':'mar'};
+// All 12 months in calendar order — add new months here as data arrives
+const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const M_CLS  = {
+  'Январь':'jan','Февраль':'feb','Март':'mar','Апрель':'apr',
+  'Май':'may','Июнь':'jun','Июль':'jul','Август':'aug',
+  'Сентябрь':'sep','Октябрь':'oct','Ноябрь':'nov','Декабрь':'dec',
+};
+// Index for chronological sort: year*12 + monthIndex
+const MONTH_IDX = {};
+MONTHS.forEach((m,i) => MONTH_IDX[m] = i);
+const monthSortKey = (m, y) => (y || 2026) * 12 + (MONTH_IDX[m] ?? 0);
+// Active (month,year) pairs from an entries array, sorted chronologically
+function activeMonthYears(entries) {
+  const seen = new Set();
+  const pairs = [];
+  entries.forEach(e => {
+    const k = `${e.year}-${e.month}`;
+    if (!seen.has(k)) { seen.add(k); pairs.push({month:e.month, year:e.year}); }
+  });
+  return pairs.sort((a,b) => monthSortKey(a.month,a.year) - monthSortKey(b.month,b.year));
+}
+// Short label: "Мар '26"
+const monthLabel = (m, y) => m.slice(0,3) + ' \'' + String(y).slice(2);
 const CAT = {
   closed:   {label:'Закрытые/SQL', cls:'cat-closed',   tc:'tc-closed'},
   calls:    {label:'Звонки MQL',   cls:'cat-calls',    tc:'tc-calls'},
@@ -330,13 +359,13 @@ async function loadState() {
   entRes.data.forEach(e => {
     const p = byId[e.person_id];
     if (p) p.entries.push({
-      id: e.id, month: e.month, cat: e.cat,
+      id: e.id, month: e.month, year: e.year || 2026, cat: e.cat,
       name: e.name, comment: e.comment, bonus: Number(e.bonus)
     });
   });
   closedDeals = dlRes.data.map(d => ({
     id: d.id, project: d.project, leadgen: d.leadgen,
-    month: d.month, bonus: Number(d.bonus),
+    month: d.month, year: d.year || 2026, bonus: Number(d.bonus),
     revenue: d.revenue != null ? String(d.revenue) : '',
     comment: d.comment, deal_type: d.deal_type || 'sql',
   }));
@@ -352,14 +381,14 @@ async function loadState() {
 function mapDealRow(d) {
   return {
     id: d.id, project: d.project, leadgen: d.leadgen,
-    month: d.month, bonus: Number(d.bonus),
+    month: d.month, year: d.year || 2026, bonus: Number(d.bonus),
     revenue: d.revenue != null ? String(d.revenue) : '',
     comment: d.comment, deal_type: d.deal_type || 'sql',
   };
 }
 function mapEntryRow(e) {
   return {
-    id: e.id, month: e.month, cat: e.cat,
+    id: e.id, month: e.month, year: e.year || 2026, cat: e.cat,
     name: e.name, comment: e.comment, bonus: Number(e.bonus)
   };
 }
@@ -451,7 +480,6 @@ async function deleteDealFromDB(id) {
 // ══════════════════════════════════════════════════════════
 //  HELPERS
 // ══════════════════════════════════════════════════════════
-const monthYear = m => ['Сентябрь','Октябрь','Ноябрь','Декабрь'].includes(m) ? 2025 : 2026;
 const pillCls = m => 'pill-'+M_CLS[m];
 const tcCls   = m => 'mc-'+M_CLS[m];
 const mColor  = m => 'var(--'+(M_CLS[m]||'muted')+')';
@@ -467,11 +495,11 @@ function renderPeople() {
     const total = p.entries.reduce((s,e)=>s+e.bonus,0);
     const byCat = {}; Object.keys(CAT).forEach(k=>byCat[k]=0);
     p.entries.forEach(e=>byCat[e.cat]=(byCat[e.cat]||0)+e.bonus);
-    const monthTotals = {};
-    MONTHS.forEach(m=>{const v=sumBy(p.entries,'month',m);if(v>0)monthTotals[m]=v;});
-
-    const pills = Object.entries(monthTotals).map(([m,v])=>
-      `<span class="pill ${pillCls(m)}">${m.slice(0,3)} $${v}</span>`).join('');
+    const activeMY = activeMonthYears(p.entries.filter(e=>e.bonus>0));
+    const pills = activeMY.map(({month:m, year:y})=>{
+      const v = p.entries.filter(e=>e.month===m&&e.year===y).reduce((s,e)=>s+e.bonus,0);
+      return v>0 ? `<span class="pill ${pillCls(m)}">${monthLabel(m,y)} $${v}</span>` : '';
+    }).join('');
     const bars = Object.entries(byCat).filter(([,v])=>v>0).map(([k,v])=>`
       <div class="bar-row">
         <span class="bar-label">${CAT[k].label}</span>
@@ -505,9 +533,13 @@ function renderPeople() {
 function renderMonths() {
   const el = document.getElementById('month-blocks');
   el.innerHTML = '';
-  MONTHS.forEach(month=>{
-    const rows = people.map(p=>({name:p.name,val:sumBy(p.entries,'month',month)}))
-      .filter(r=>r.val>0).sort((a,b)=>b.val-a.val);
+  const allEntries = people.flatMap(p=>p.entries);
+  const periods = activeMonthYears(allEntries);
+  periods.forEach(({month, year})=>{
+    const rows = people.map(p=>({
+      name:p.name,
+      val:p.entries.filter(e=>e.month===month&&e.year===year).reduce((s,e)=>s+e.bonus,0)
+    })).filter(r=>r.val>0).sort((a,b)=>b.val-a.val);
     if(!rows.length) return;
     const mTotal = rows.reduce((s,r)=>s+r.val,0);
     const maxVal = rows[0].val;
@@ -516,7 +548,7 @@ function renderMonths() {
     block.className='month-block';
     block.innerHTML=`
       <div class="month-block-header">
-        <div class="month-title" style="color:${col}">${month}</div>
+        <div class="month-title" style="color:${col}">${month} <span style="font-size:14px;opacity:.6">'${String(year).slice(2)}</span></div>
         <div class="month-total">$${mTotal.toLocaleString()}</div>
       </div>
       <div class="month-rows">
@@ -554,22 +586,30 @@ function renderSummary() {
     ...MONTHS.map(m=>({l:m,v:'$'+allE.filter(e=>e.month===m).reduce((s,e)=>s+e.bonus,0).toLocaleString(),c:mColor(m)}))
   ].map(k=>`<div class="kpi"><div class="kpi-label">${k.l}</div><div class="kpi-val" style="color:${k.c}">${k.v}</div></div>`).join('');
 
+  const allEntries = people.flatMap(p=>p.entries);
+  const periods = activeMonthYears(allEntries);
+  const colW = `28px 150px ${periods.map(()=>'52px').join(' ')} 80px`;
+
   const ranked = people.map(p=>({
-    name:p.name, total:p.entries.reduce((s,e)=>s+e.bonus,0),
-    ...Object.fromEntries(MONTHS.map(m=>[m,sumBy(p.entries,'month',m)]))
+    name:p.name,
+    total:p.entries.reduce((s,e)=>s+e.bonus,0),
+    byPeriod: Object.fromEntries(periods.map(({month,year})=>[
+      `${year}-${month}`,
+      p.entries.filter(e=>e.month===month&&e.year===year).reduce((s,e)=>s+e.bonus,0)
+    ]))
   })).sort((a,b)=>b.total-a.total);
 
   document.getElementById('rank-table').innerHTML = `
-    <div class="rank-head">
+    <div class="rank-head" style="grid-template-columns:${colW}">
       <span>#</span><span>Имя</span>
-      ${MONTHS.map(m=>`<span style="color:${mColor(m)}">${m.slice(0,3)}</span>`).join('')}
+      ${periods.map(({month,year})=>`<span style="color:${mColor(month)}">${monthLabel(month,year)}</span>`).join('')}
       <span>Итого</span>
     </div>
     ${ranked.map((r,i)=>`
-      <div class="rank-row">
+      <div class="rank-row" style="grid-template-columns:${colW}">
         <div class="rank-num">${i+1}</div>
         <div class="rank-name">${r.name}</div>
-        ${MONTHS.map(m=>`<div class="rank-cell" style="color:${r[m]?mColor(m):'var(--muted)'}">${r[m]?'$'+r[m]:'—'}</div>`).join('')}
+        ${periods.map(({month,year})=>{const v=r.byPeriod[`${year}-${month}`];return`<div class="rank-cell" style="color:${v?mColor(month):'var(--muted)'}">${v?'$'+v:'—'}</div>`;}).join('')}
         <div class="rank-cell" style="color:var(--accent);font-weight:600">$${r.total.toLocaleString()}</div>
       </div>`).join('')}`;
 }
@@ -593,7 +633,7 @@ function buildFilterButtons() {
 
   // year filters
   const yearEl = document.getElementById('deals-year-filters');
-  const presentYears = [...new Set(byType.map(d => monthYear(d.month)))].sort();
+  const presentYears = [...new Set(byType.map(d => d.year))].sort();
   yearEl.innerHTML = `<div class="filter-btn ${dealsYearFilter==='all'?'active':''}" onclick="filterDealsYear('all',this)">Все</div>`;
   presentYears.forEach(y => {
     const btn = document.createElement('div');
@@ -605,7 +645,7 @@ function buildFilterButtons() {
 
   // month filters — scope to selected year
   const monthsEl = document.getElementById('deals-month-filters');
-  const afterYear = dealsYearFilter === 'all' ? byType : byType.filter(d => monthYear(d.month) === dealsYearFilter);
+  const afterYear = dealsYearFilter === 'all' ? byType : byType.filter(d => d.year === dealsYearFilter);
   const presentMonths = MONTHS.filter(m => afterYear.some(d => d.month === m));
   monthsEl.innerHTML = `<div class="filter-btn ${dealsMonthFilter==='all'?'active':''}" onclick="filterDealsMonth('all',this)">Все</div>`;
   presentMonths.forEach(m=>{
@@ -622,7 +662,7 @@ function buildFilterButtons() {
 function updateDealsKPI() {
   const byType = closedDeals.filter(d => d.deal_type === dealTypeFilter);
   const visible = byType
-    .filter(d => dealsYearFilter === 'all' || monthYear(d.month) === dealsYearFilter)
+    .filter(d => dealsYearFilter === 'all' || d.year === dealsYearFilter)
     .filter(d => dealsFilter === 'all' || d.leadgen === dealsFilter)
     .filter(d => dealsMonthFilter === 'all' || d.month === dealsMonthFilter);
   const totalBonus   = visible.reduce((s,d)=>s+d.bonus,0);
@@ -641,7 +681,7 @@ function updateDealsKPI() {
 function renderDealsRows() {
   const byType = closedDeals.filter(d => d.deal_type === dealTypeFilter);
   const filtered = byType
-    .filter(d => dealsYearFilter === 'all' || monthYear(d.month) === dealsYearFilter)
+    .filter(d => dealsYearFilter === 'all' || d.year === dealsYearFilter)
     .filter(d => dealsFilter === 'all' || d.leadgen === dealsFilter)
     .filter(d => dealsMonthFilter === 'all' || d.month === dealsMonthFilter);
 
@@ -691,11 +731,16 @@ function renderDealsRows() {
               ${names.map(n => `<option value="${n}" ${n === d.leadgen ? 'selected' : ''}>${n}</option>`).join('')}
             </select>
           </div>
-          <div>
+          <div style="display:flex;flex-direction:column;gap:3px">
             <select data-id="${d.id}" data-field="month" onchange="editDealSelect(this)"
               style="background:#0f0f0f;border:1px solid var(--border);border-radius:2px;
-              color:${mColor(d.month)};font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 6px;cursor:pointer;width:100%">
+              color:${mColor(d.month)};font-family:'IBM Plex Mono',monospace;font-size:11px;padding:2px 4px;cursor:pointer;width:100%">
               ${MONTHS.map(m => `<option value="${m}" style="color:${mColor(m)}" ${m === d.month ? 'selected' : ''}>${m}</option>`).join('')}
+            </select>
+            <select data-id="${d.id}" data-field="year" onchange="editDealSelectNum(this)"
+              style="background:#0f0f0f;border:1px solid var(--border);border-radius:2px;
+              color:var(--muted2);font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 4px;cursor:pointer;width:100%">
+              ${[2025,2026,2027].map(y => `<option value="${y}" ${y === d.year ? 'selected' : ''}>${y}</option>`).join('')}
             </select>
           </div>
           <div style="display:flex;align-items:center;gap:4px">
@@ -768,6 +813,17 @@ function editDealSelect(sel) {
   renderDealsRows();
   buildFilterButtons();
 }
+function editDealSelectNum(sel) {
+  const deal = closedDeals.find(d=>d.id===sel.dataset.id);
+  if (!deal) return;
+  const field = sel.dataset.field;
+  const value = parseInt(sel.value, 10);
+  if (deal[field] === value) return;
+  deal[field] = value;
+  updateDealField(deal.id, field, value);
+  buildFilterButtons();
+  renderDealsRows();
+}
 function editDealInput(inp) {
   const deal = closedDeals.find(d=>d.id===inp.dataset.id);
   if (!deal) return;
@@ -819,9 +875,10 @@ function filterDeals(filter, el) {
 
 function filterDealsYear(year, el) {
   dealsYearFilter = year;
-  // reset month filter if it no longer belongs to the selected year
-  if (year !== 'all' && dealsMonthFilter !== 'all' && monthYear(dealsMonthFilter) !== year) {
-    dealsMonthFilter = 'all';
+  // reset month filter if it belongs to the other year
+  if (year !== 'all' && dealsMonthFilter !== 'all') {
+    const byType = closedDeals.filter(d => d.deal_type === dealTypeFilter && d.year === year);
+    if (!byType.some(d => d.month === dealsMonthFilter)) dealsMonthFilter = 'all';
   }
   document.querySelectorAll('#deals-year-filters .filter-btn').forEach(b => b.classList.remove('active'));
   if (el) el.classList.add('active');
