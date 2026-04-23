@@ -163,6 +163,7 @@
   <div class="tab" onclick="showView('months',this)">По месяцам</div>
   <div class="tab" onclick="showView('summary',this)">Сводка</div>
   <div class="tab" onclick="showView('deals',this)">🏆 Закрытые проекты</div>
+  <div class="tab" onclick="showView('salaries',this)">💰 Зарплаты</div>
 </div>
 
 <div class="legend">
@@ -215,6 +216,12 @@
   </div>
 </div>
 
+<div class="view" id="view-salaries">
+  <div class="kpi-grid" id="sal-kpi"></div>
+  <div class="section-title" style="margin-bottom:16px">Зарплаты лидгенов · Сен 2025 — Мар 2026</div>
+  <div class="rank-table" style="overflow-x:auto" id="sal-table"></div>
+</div>
+
 <script>
 // ══════════════════════════════════════════════════════════
 //  SUPABASE
@@ -241,6 +248,7 @@ const CAT = {
 // ══════════════════════════════════════════════════════════
 let people = [];
 let closedDeals = [];
+let salaries = [];
 let dealsFilter = 'all';
 
 // ══════════════════════════════════════════════════════════
@@ -275,14 +283,15 @@ function markError(msg) {
 //  LOAD FROM SUPABASE
 // ══════════════════════════════════════════════════════════
 async function loadState() {
-  const [pplRes, entRes, dlRes] = await Promise.all([
+  const [pplRes, entRes, dlRes, salRes] = await Promise.all([
     sb.from('people').select('*').order('sort_order'),
     sb.from('entries').select('*').order('sort_order'),
     sb.from('deals').select('*').order('created_at'),
+    sb.from('salaries').select('*').order('year').order('month'),
   ]);
-  if (pplRes.error || entRes.error || dlRes.error) {
+  if (pplRes.error || entRes.error || dlRes.error || salRes.error) {
     markError('загрузка');
-    console.error(pplRes.error, entRes.error, dlRes.error);
+    console.error(pplRes.error, entRes.error, dlRes.error, salRes.error);
     return;
   }
   const byId = {};
@@ -303,6 +312,10 @@ async function loadState() {
     month: d.month, bonus: Number(d.bonus),
     revenue: d.revenue != null ? String(d.revenue) : '',
     comment: d.comment,
+  }));
+  salaries = salRes.data.map(s => ({
+    id: s.id, name: s.leadgen_name, month: s.month,
+    year: s.year, gross: Number(s.gross), total: Number(s.total),
   }));
 }
 
@@ -373,8 +386,22 @@ function startRealtime() {
   sb.channel('dashboard')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'deals'   }, handleDeal)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'entries' }, handleEntry)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'people'  }, handlePerson)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'people'   }, handlePerson)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'salaries' }, handleSalary)
     .subscribe();
+}
+
+function handleSalary(payload) {
+  const t = payload.eventType;
+  if (t === 'INSERT' || t === 'UPDATE') {
+    const n = payload.new;
+    const m = { id:n.id, name:n.leadgen_name, month:n.month, year:n.year, gross:Number(n.gross), total:Number(n.total) };
+    const i = salaries.findIndex(s => s.id === m.id);
+    if (i >= 0) salaries[i] = m; else salaries.push(m);
+  } else if (t === 'DELETE') {
+    salaries = salaries.filter(s => s.id !== payload.old.id);
+  }
+  renderSalaries();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -669,6 +696,68 @@ function filterDeals(filter, el) {
 }
 
 // ══════════════════════════════════════════════════════════
+//  RENDER: SALARIES
+// ══════════════════════════════════════════════════════════
+function renderSalaries() {
+  if (!salaries.length) return;
+
+  // group by person
+  const byName = {};
+  salaries.forEach(s => {
+    if (!byName[s.name]) byName[s.name] = { gross: [], total: [], byMonth: {} };
+    byName[s.name].gross.push(s.gross);
+    byName[s.name].byMonth[s.month] = { gross: s.gross, total: s.total };
+    byName[s.name].total.push(s.total);
+  });
+
+  const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+  const fmt = v => v ? '$' + Math.round(v).toLocaleString() : '—';
+
+  // overall KPIs
+  const allGross = salaries.map(s => s.gross);
+  const allTotal = salaries.map(s => s.total);
+  const avgGrossPerPerson = Object.values(byName).map(p => avg(p.gross));
+  const avgTotalPerPerson = Object.values(byName).map(p => avg(p.total));
+
+  document.getElementById('sal-kpi').innerHTML = [
+    { l: 'Ср. FIX GROSS лидгена',    v: fmt(avg(avgGrossPerPerson)),  c: 'var(--accent)' },
+    { l: 'Ср. к выплате лидгена',    v: fmt(avg(avgTotalPerPerson)),  c: 'var(--calls)'  },
+    { l: 'Макс. FIX GROSS',           v: fmt(Math.max(...allGross)),   c: 'var(--closed)' },
+    { l: 'Макс. к выплате (месяц)',   v: fmt(Math.max(...allTotal)),   c: 'var(--special)'},
+    { l: 'Лидгенов в базе',           v: Object.keys(byName).length,   c: 'var(--text)'   },
+    { l: 'Месяцев данных',            v: salaries.length,              c: 'var(--muted2)' },
+  ].map(k => `<div class="kpi"><div class="kpi-label">${k.l}</div><div class="kpi-val" style="color:${k.c}">${k.v}</div></div>`).join('');
+
+  // ranked table
+  const ranked = Object.entries(byName)
+    .map(([name, d]) => ({ name, avgGross: avg(d.gross), avgTotal: avg(d.total), byMonth: d.byMonth }))
+    .sort((a, b) => b.avgTotal - a.avgTotal);
+
+  const COL_W = '28px 160px repeat(7,62px) 80px 86px';
+  document.getElementById('sal-table').innerHTML = `
+    <div style="display:grid;grid-template-columns:${COL_W};gap:6px;padding:9px 16px;border-bottom:1px solid var(--border);min-width:820px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">#</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">Имя</span>
+      ${MONTHS.map(m=>`<span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:${mColor(m)};text-transform:uppercase;letter-spacing:.8px;text-align:right">${m.slice(0,3)}</span>`).join('')}
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;text-align:right">Avg Gross</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--accent);text-transform:uppercase;letter-spacing:.8px;text-align:right">Avg к выплате</span>
+    </div>
+    ${ranked.map((r, i) => `
+      <div style="display:grid;grid-template-columns:${COL_W};gap:6px;padding:9px 16px;border-bottom:1px solid #111;align-items:center;min-width:820px" onmouseover="this.style.background='#111'" onmouseout="this.style.background=''">
+        <div class="rank-num">${i+1}</div>
+        <div style="font-size:12px;font-weight:600">${r.name}</div>
+        ${MONTHS.map(m => {
+          const cell = r.byMonth[m];
+          return cell
+            ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:right;color:${mColor(m)}" title="Gross: $${Math.round(cell.gross)}">${fmt(cell.total)}</div>`
+            : `<div style="font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:right;color:var(--muted)">—</div>`;
+        }).join('')}
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:right;color:var(--muted2)">${fmt(r.avgGross)}</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:right;color:var(--accent);font-weight:600">${fmt(r.avgTotal)}</div>
+      </div>`).join('')}`;
+}
+
+// ══════════════════════════════════════════════════════════
 //  RENDER ALL
 // ══════════════════════════════════════════════════════════
 function renderAll() {
@@ -677,6 +766,7 @@ function renderAll() {
   renderSummary();
   buildFilterButtons();
   renderDealsRows();
+  renderSalaries();
 }
 
 // ── TABS ──
