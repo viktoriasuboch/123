@@ -107,16 +107,27 @@
   .filter-btn.active{background:#1f1f1f;border-color:var(--accent);color:var(--accent);}
 
   .deals-table{background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:hidden;overflow-x:auto;}
-  .deals-head,.deal-row{display:grid;grid-template-columns:28px 1fr 120px 90px 90px 80px 120px 80px;
-    gap:10px;padding:10px 16px;border-bottom:1px solid #111;align-items:center;min-width:780px;}
-  .deals-head{border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:1;}
+  .deals-head{display:grid;grid-template-columns:28px 20px 1fr 90px 80px 80px 130px 60px;
+    gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);align-items:center;min-width:680px;
+    position:sticky;top:0;background:var(--surface);z-index:1;}
   .deals-head span{font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;}
-  .deal-row:hover{background:#111;}
-  .deal-row:last-child{border-bottom:none;}
-  .deal-num{font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--muted);}
-  .deal-project{font-size:12px;font-weight:600;color:var(--text);}
-  .deal-type{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 7px;border-radius:2px;
-    border:1px solid rgba(232,255,71,.2);background:rgba(232,255,71,.05);color:var(--closed);display:inline-block;}
+  /* group header */
+  .deal-group-header{display:flex;align-items:center;gap:10px;padding:9px 16px;
+    border-bottom:1px solid var(--border);background:#111;min-width:680px;}
+  .deal-group-header:first-child{border-top:none;}
+  .deal-group-num{font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--muted);width:28px;flex-shrink:0;}
+  .deal-group-name{font-size:13px;font-weight:600;color:var(--text);flex:1;display:flex;align-items:center;gap:8px;}
+  .deal-group-name-editable{border-radius:2px;padding:0 3px;cursor:text;outline:none;transition:outline .12s;}
+  .deal-group-name-editable:focus{outline:1px solid rgba(232,255,71,.35);}
+  .deal-group-badge{font-family:'IBM Plex Mono',monospace;font-size:9px;padding:1px 6px;border-radius:10px;
+    background:rgba(232,255,71,.08);border:1px solid rgba(232,255,71,.2);color:var(--accent);}
+  .deal-group-bonus{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--accent);}
+  /* sub-rows */
+  .deal-sub-row{display:grid;grid-template-columns:28px 20px 1fr 90px 80px 80px 130px 60px;
+    gap:10px;padding:7px 16px;border-bottom:1px solid #111;align-items:center;min-width:680px;}
+  .deal-sub-row:hover{background:#0d0d0d;}
+  .deal-tree{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--muted);}
+  .deal-letter{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);}
   .revenue-input{background:transparent;border:none;border-bottom:1px dashed var(--border);
     font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);width:110px;
     padding:2px 4px;outline:none;transition:border-color .15s;}
@@ -210,7 +221,7 @@
 
   <div class="deals-table">
     <div class="deals-head">
-      <span>#</span><span>Проект / клиент</span><span>Лидген</span>
+      <span></span><span></span><span>Лидген</span>
       <span>Месяц</span><span>Бонус</span><span>Тип</span><span>Revenue</span><span></span>
     </div>
     <div id="deals-rows"></div>
@@ -582,73 +593,104 @@ function updateDealsKPI() {
 
 function renderDealsRows() {
   const byType = closedDeals.filter(d => d.deal_type === dealTypeFilter);
-  const filtered = dealsFilter==='all' ? byType : byType.filter(d=>d.leadgen===dealsFilter);
-  document.getElementById('deals-rows').innerHTML = filtered.map((d,i)=>`
-    <div class="deal-row" data-id="${d.id}" style="transition:opacity .2s">
-      <div class="deal-num">${i+1}</div>
-      <div>
-        <div contenteditable="true" spellcheck="false"
-          class="deal-project"
-          data-id="${d.id}" data-field="project"
-          onblur="editDeal(this)"
-          style="outline:none;border-bottom:1px dashed transparent;padding-bottom:1px"
-          onfocus="this.style.borderBottomColor='var(--accent)'"
-        >${d.project}</div>
-        ${d.comment?`<div style="font-size:10px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:2px">${d.comment}</div>`:''}
-      </div>
-      <div>
-        <select data-id="${d.id}" data-field="leadgen" onchange="editDealSelect(this)"
-          style="background:#0f0f0f;border:1px solid var(--border);border-radius:2px;color:var(--muted2);
-          font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:3px 6px;cursor:pointer;width:100%">
-          ${[...new Set(people.map(p=>p.name))].map(n=>`<option value="${n}" ${n===d.leadgen?'selected':''}>${n}</option>`).join('')}
-        </select>
-      </div>
-      <div>
-        <select data-id="${d.id}" data-field="month" onchange="editDealSelect(this)"
-          style="background:#0f0f0f;border:1px solid var(--border);border-radius:2px;
-          color:${mColor(d.month)};font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 6px;cursor:pointer;width:100%">
-          ${MONTHS.map(m=>`<option value="${m}" style="color:${mColor(m)}" ${m===d.month?'selected':''}>${m}</option>`).join('')}
-        </select>
-      </div>
-      <div style="display:flex;align-items:center;gap:4px">
-        <span style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px">$</span>
-        <input type="number" class="revenue-input"
-          style="width:64px;color:var(--closed);font-weight:600"
-          value="${d.bonus}"
-          data-id="${d.id}" data-field="bonus"
-          onchange="editDealInput(this)"
-        />
-      </div>
-      <div>
-        <select data-id="${d.id}" data-field="deal_type" onchange="editDealTypeSelect(this)"
-          style="background:#0f0f0f;border:1px solid rgba(232,255,71,.2);border-radius:2px;
-          color:${d.deal_type==='closed'?'var(--closed)':'var(--calls)'};
-          font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 5px;cursor:pointer;width:100%">
-          <option value="sql"    style="color:var(--calls)"  ${d.deal_type==='sql'   ?'selected':''}>SQL</option>
-          <option value="closed" style="color:var(--closed)" ${d.deal_type==='closed'?'selected':''}>Closed</option>
-        </select>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <span style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px">$</span>
-        <input type="number"
-          class="revenue-input${d.revenue?' filled':''}"
-          placeholder="+ Revenue"
-          value="${d.revenue||''}"
-          data-id="${d.id}" data-field="revenue"
-          oninput="this.classList.toggle('filled',!!this.value)"
-          onchange="editDealInput(this)"
-          style="width:90px"
-        />
-      </div>
-      <div>
-        <button onclick="deleteDeal('${d.id}')"
-          style="background:transparent;border:1px solid #2a2a2a;border-radius:2px;color:var(--muted);
-          cursor:pointer;font-size:11px;padding:3px 8px;transition:all .15s;font-family:'IBM Plex Mono',monospace"
-          onmouseover="this.style.borderColor='#e55';this.style.color='#e55'"
-          onmouseout="this.style.borderColor='#2a2a2a';this.style.color='var(--muted)'"
-        >✕ удалить</button>
-      </div>
-    </div>`).join('');
+  const filtered = dealsFilter === 'all' ? byType : byType.filter(d => d.leadgen === dealsFilter);
+
+  // group by project name (case-insensitive), preserve display name from first occurrence
+  const groupMap = {};
+  filtered.forEach(d => {
+    const key = d.project.trim().toLowerCase();
+    if (!groupMap[key]) groupMap[key] = { displayName: d.project.trim(), deals: [], totalBonus: 0 };
+    groupMap[key].deals.push(d);
+    groupMap[key].totalBonus += d.bonus;
+  });
+
+  const groups = Object.entries(groupMap)
+    .map(([key, g]) => ({ key, ...g }))
+    .sort((a, b) => b.totalBonus - a.totalBonus);
+
+  const names = [...new Set(people.map(p => p.name))];
+
+  let html = '';
+  groups.forEach((group, gi) => {
+    const multi = group.deals.length > 1;
+    const badge = multi ? `<span class="deal-group-badge">${group.deals.length}</span>` : '';
+    html += `
+      <div class="deal-group-header">
+        <div class="deal-group-num">${gi + 1}</div>
+        <div class="deal-group-name">
+          <span class="deal-group-name-editable" contenteditable="true" spellcheck="false"
+            data-group-key="${group.key.replace(/"/g,'&quot;')}"
+            onblur="editGroupName(this)"
+          >${group.displayName}</span>${badge}
+        </div>
+        <div class="deal-group-bonus">$${group.totalBonus.toLocaleString()}</div>
+      </div>`;
+
+    group.deals.forEach((d, i) => {
+      const isLast = i === group.deals.length - 1;
+      const tree  = multi ? (isLast ? '└' : '├') : '';
+      const letter = multi ? String.fromCharCode(65 + i) : '';
+      html += `
+        <div class="deal-sub-row" data-id="${d.id}" style="transition:opacity .2s">
+          <div class="deal-tree">${tree}</div>
+          <div class="deal-letter">${letter}</div>
+          <div>
+            <select data-id="${d.id}" data-field="leadgen" onchange="editDealSelect(this)"
+              style="background:#0f0f0f;border:1px solid var(--border);border-radius:2px;color:var(--muted2);
+              font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:3px 6px;cursor:pointer;width:100%">
+              ${names.map(n => `<option value="${n}" ${n === d.leadgen ? 'selected' : ''}>${n}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <select data-id="${d.id}" data-field="month" onchange="editDealSelect(this)"
+              style="background:#0f0f0f;border:1px solid var(--border);border-radius:2px;
+              color:${mColor(d.month)};font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 6px;cursor:pointer;width:100%">
+              ${MONTHS.map(m => `<option value="${m}" style="color:${mColor(m)}" ${m === d.month ? 'selected' : ''}>${m}</option>`).join('')}
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <span style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px">$</span>
+            <input type="number" class="revenue-input"
+              style="width:56px;color:var(--closed);font-weight:600"
+              value="${d.bonus}"
+              data-id="${d.id}" data-field="bonus"
+              onchange="editDealInput(this)"
+            />
+          </div>
+          <div>
+            <select data-id="${d.id}" data-field="deal_type" onchange="editDealTypeSelect(this)"
+              style="background:#0f0f0f;border:1px solid rgba(232,255,71,.2);border-radius:2px;
+              color:${d.deal_type === 'closed' ? 'var(--closed)' : 'var(--calls)'};
+              font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 5px;cursor:pointer;width:100%">
+              <option value="sql"    style="color:var(--calls)"  ${d.deal_type === 'sql'    ? 'selected' : ''}>SQL</option>
+              <option value="closed" style="color:var(--closed)" ${d.deal_type === 'closed' ? 'selected' : ''}>Closed</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px">$</span>
+            <input type="number"
+              class="revenue-input${d.revenue ? ' filled' : ''}"
+              placeholder="+ Revenue"
+              value="${d.revenue || ''}"
+              data-id="${d.id}" data-field="revenue"
+              oninput="this.classList.toggle('filled',!!this.value)"
+              onchange="editDealInput(this)"
+              style="width:96px"
+            />
+          </div>
+          <div>
+            <button onclick="deleteDeal('${d.id}')"
+              style="background:transparent;border:1px solid #2a2a2a;border-radius:2px;color:var(--muted);
+              cursor:pointer;font-size:11px;padding:3px 7px;transition:all .15s;font-family:'IBM Plex Mono',monospace"
+              onmouseover="this.style.borderColor='#e55';this.style.color='#e55'"
+              onmouseout="this.style.borderColor='#2a2a2a';this.style.color='var(--muted)'"
+            >✕</button>
+          </div>
+        </div>`;
+    });
+  });
+
+  document.getElementById('deals-rows').innerHTML = html;
   updateDealsKPI();
 }
 
@@ -692,7 +734,7 @@ function editDealInput(inp) {
   updateDealsKPI();
 }
 function deleteDeal(id) {
-  const row = document.querySelector(`.deal-row[data-id="${id}"]`);
+  const row = document.querySelector(`.deal-sub-row[data-id="${id}"]`);
   if (row) row.style.opacity = '0';
   setTimeout(() => {
     closedDeals = closedDeals.filter(d => d.id !== id);
@@ -700,6 +742,23 @@ function deleteDeal(id) {
     buildFilterButtons();
     deleteDealFromDB(id);
   }, 180);
+}
+
+function editGroupName(el) {
+  const groupKey = el.dataset.groupKey;
+  const newName = el.textContent.trim();
+  if (!newName) { el.textContent = groupKey; return; }
+  const toUpdate = closedDeals.filter(d =>
+    d.project.trim().toLowerCase() === groupKey && d.deal_type === dealTypeFilter
+  );
+  toUpdate.forEach(d => {
+    if (d.project !== newName) {
+      d.project = newName;
+      updateDealField(d.id, 'project', newName);
+    }
+  });
+  // re-render only if name actually changed
+  if (toUpdate.some(d => d.project === newName)) renderDealsRows();
 }
 function filterDeals(filter, el) {
   dealsFilter = filter;
