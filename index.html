@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sales Bonus Analysis 2025–2026</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     --bg:#0d0d0d; --surface:#141414; --border:#232323; --accent:#e8ff47;
@@ -200,12 +201,8 @@
     <div style="margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <div class="save-indicator">
         <div class="save-dot saved" id="save-dot"></div>
-        <span id="save-label">Сохранено</span>
+        <span id="save-label">Синхронизировано</span>
       </div>
-      <!-- hidden file input for load -->
-      <input type="file" id="load-file-input" accept=".json" style="display:none" onchange="loadFromFile(event)">
-      <button class="btn btn-ghost" onclick="document.getElementById('load-file-input').click()">📂 Загрузить JSON</button>
-      <button class="btn btn-accent" onclick="exportJSON()">⬇ Сохранить JSON</button>
     </div>
   </div>
 
@@ -220,192 +217,12 @@
 
 <script>
 // ══════════════════════════════════════════════════════════
-//  DEFAULT DATA
+//  SUPABASE
 // ══════════════════════════════════════════════════════════
-const DEFAULT_PEOPLE = [
-  { name:'Natallia R', entries:[
-    {month:'Сентябрь',cat:'calls',    name:'Peter Sesink',                         comment:'',                       bonus:10},
-    {month:'Сентябрь',cat:'closed',   name:'Anthony Pugliese, Roz Gatewood',       comment:'SQL',                    bonus:200},
-    {month:'Сентябрь',cat:'closed',   name:'NXP',                                  comment:'SQL + closed project',   bonus:400},
-    {month:'Сентябрь',cat:'closed',   name:'EON',                                  comment:'SQL + closed project',   bonus:400},
-    {month:'Сентябрь',cat:'other',    name:'Проданный бэнч (Ilia S)',              comment:'',                       bonus:100},
-    {month:'Октябрь', cat:'calls',    name:'Orest Yatskuliak (Selecto)',            comment:'Dubai meet-up',          bonus:10},
-    {month:'Октябрь', cat:'closed',   name:'Ruslan M (C# & WPF Developer)',        comment:'',                       bonus:500},
-    {month:'Октябрь', cat:'closed',   name:'Vlad K (Senior AWS Developer)',         comment:'',                       bonus:500},
-    {month:'Ноябрь',  cat:'closed',   name:'Ali S (Backend, langchain/langgraph)', comment:'Closed project',         bonus:200},
-    {month:'Ноябрь',  cat:'special',  name:'5 mid/high calls',                     comment:'Special bonus',          bonus:100},
-    {month:'Ноябрь',  cat:'other',    name:'Идея → SQL (SAP)',                     comment:'Ты предложил идею',      bonus:150},
-    {month:'Январь',  cat:'calls',    name:'Konstantinos Dimitriou',               comment:'Отличный партнёр',       bonus:50},
-    {month:'Январь',  cat:'calls',    name:'Ilyjah and Ishah Holland',             comment:'После интро — отказ',    bonus:15},
-    {month:'Январь',  cat:'closed',   name:'Anton Nesterov (Playwright)',           comment:'Ждём фидбека',           bonus:20},
-    {month:'Январь',  cat:'closed',   name:'Anya Lukyantseva (PM)',                comment:'Ждём фидбека',           bonus:20},
-    {month:'Январь',  cat:'closed',   name:'Navruzbek Rahimov (.NET)',             comment:'Signed. Start 15.02',    bonus:200},
-    {month:'Январь',  cat:'closed',   name:'Matthew Sgherzi',                      comment:'Signed',                 bonus:200},
-    {month:'Январь',  cat:'mentoring',name:'Работа с командой #3',                 comment:'Special bonus',          bonus:150},
-    {month:'Февраль', cat:'mentoring',name:'Работа с командой #3',                 comment:'Special bonus',          bonus:150},
-    {month:'Март',    cat:'calls',    name:'Dieter Hotz (Delta Consulting)',        comment:'AI агент — ждём фидбека',bonus:15},
-    {month:'Март',    cat:'calls',    name:'Vincent Cabral',                        comment:'Автоматизация процессов',bonus:15},
-    {month:'Март',    cat:'calls',    name:'Simon Morris (2UP)',                    comment:'iGaming расширение',     bonus:15},
-    {month:'Март',    cat:'closed',   name:'Project Manager (Hitachi)',             comment:'Hired',                  bonus:350},
-    {month:'Март',    cat:'closed',   name:'Senior Tableau Consultant',             comment:'Hired — Hays Austria',   bonus:350},
-    {month:'Март',    cat:'special',  name:'5 звонков MID/HIGH MQL',              comment:'Special bonus',          bonus:150},
-    {month:'Март',    cat:'mentoring',name:'Работа с командой #3',                 comment:'Special bonus',          bonus:150},
-  ]},
-  { name:'Anna B', entries:[
-    {month:'Сентябрь',cat:'calls',   name:'Qualified call',                         comment:'',                       bonus:40},
-    {month:'Сентябрь',cat:'closed',  name:'Interview with Ilia',                    comment:'Qualified Interview',    bonus:40},
-    {month:'Октябрь', cat:'closed',  name:'Cyber Crucible - Dennis Underwood',      comment:'SQL',                    bonus:150},
-    {month:'Октябрь', cat:'closed',  name:'Mermaidchart - Claes Ångström',          comment:'CLOSED PROJECT',         bonus:600},
-    {month:'Октябрь', cat:'calls',   name:'Cyber Crucible',                         comment:'Interview',              bonus:40},
-    {month:'Ноябрь',  cat:'special', name:'5 звонков Mid/High MQL',                comment:'Special bonus',          bonus:100},
-    {month:'Ноябрь',  cat:'special', name:'Hard-working Bee',                       comment:'',                       bonus:100},
-    {month:'Декабрь', cat:'closed',  name:'Matthew Sgherzi',                        comment:'Signed',                 bonus:404},
-    {month:'Декабрь', cat:'calls',   name:'Lyvia Group - Marc Pilotti',             comment:'High MQL — recap call',  bonus:15},
-    {month:'Декабрь', cat:'calls',   name:'WeGotLites - Lasha Maisuradze',          comment:'Mid MQL',                bonus:50},
-    {month:'Декабрь', cat:'closed',  name:'Aleksandre Kokhreidze',                  comment:'SQL',                    bonus:50},
-    {month:'Декабрь', cat:'calls',   name:'Vero Platform - Renato Lerner',          comment:'High MQL — recap call',  bonus:50},
-    {month:'Декабрь', cat:'calls',   name:'Simplex Group (Miami)',                  comment:'High MQL — recap call',  bonus:50},
-    {month:'Декабрь', cat:'closed',  name:'Gemini Sports - Jake Schuster',          comment:'SQL — QA',               bonus:250},
-    {month:'Декабрь', cat:'special', name:'5 звонков по нашему ICP',               comment:'Special bonus',          bonus:150},
-    {month:'Декабрь', cat:'special', name:'Hard working bee',                       comment:'',                       bonus:100},
-    {month:'Февраль', cat:'special', name:'Hard working bee',                       comment:'',                       bonus:100},
-    {month:'Февраль', cat:'closed',  name:'1NCE - Jan Daniel Sulaiman',             comment:'SQL + closed contract',  bonus:1000},
-    {month:'Февраль', cat:'closed',  name:'IMC Technologies — Interview Slava',     comment:'SQL',                    bonus:200},
-    {month:'Февраль', cat:'other',   name:'Fox-nft-yield (Crypto)',                 comment:'%',                      bonus:140},
-    {month:'Март',    cat:'other',   name:'FOX nft',                                comment:'%',                      bonus:140},
-    {month:'Март',    cat:'special', name:'Выполнение метрик Q1 + больше всех SQL команда #2',comment:'',            bonus:200},
-  ]},
-  { name:'Maria K', entries:[
-    {month:'Сентябрь',cat:'calls',    name:'Markus Fedder',                         comment:'',                       bonus:10},
-    {month:'Сентябрь',cat:'special',  name:'Hard working bee',                      comment:'',                       bonus:100},
-    {month:'Сентябрь',cat:'mentoring',name:'Artem mentoring',                       comment:'',                       bonus:100},
-    {month:'Октябрь', cat:'special',  name:'4 звонка mid/high забукано',           comment:'не хватило 1 до бонуса', bonus:40},
-    {month:'Октябрь', cat:'closed',   name:'Itsthezone - Erik Poldroo',             comment:'SQL',                    bonus:150},
-    {month:'Октябрь', cat:'special',  name:'Hard-working Bee',                      comment:'',                       bonus:100},
-    {month:'Октябрь', cat:'mentoring',name:'Бонус за Артема',                       comment:'',                       bonus:100},
-    {month:'Ноябрь',  cat:'calls',    name:'Victor Byberg — HAYS (Denmark)',        comment:'',                       bonus:10},
-    {month:'Ноябрь',  cat:'calls',    name:'Pieter De Bruyn',                       comment:'',                       bonus:10},
-    {month:'Ноябрь',  cat:'closed',   name:'Upsell Swentess DevOps',               comment:'Part time',              bonus:100},
-    {month:'Ноябрь',  cat:'mentoring',name:'Менторство Artem Morozov',             comment:'',                       bonus:100},
-    {month:'Декабрь', cat:'calls',    name:'CordenPharma - Niek Bosch',             comment:'Второй звонок в марте',  bonus:15},
-    {month:'Декабрь', cat:'closed',   name:'Pronto Advisors - Michael Coronado',   comment:'SQL. Закрыт проект 2-3 мес',bonus:450},
-    {month:'Декабрь', cat:'calls',    name:'SHS Partners - Morgan Reidy',           comment:'MID MQL',                bonus:15},
-    {month:'Декабрь', cat:'calls',    name:'American Sleep Dentistry',              comment:'Наш ICP',                bonus:15},
-    {month:'Декабрь', cat:'calls',    name:'Hofseth BioCare - Tom James',           comment:'High MQL',               bonus:15},
-    {month:'Декабрь', cat:'special',  name:'5 звонков по нашему ICP',             comment:'Special bonus',           bonus:150},
-    {month:'Декабрь', cat:'closed',   name:'The Zone',                              comment:'50h support. Signed',    bonus:100},
-    {month:'Декабрь', cat:'mentoring',name:'Работа с командой #2',                 comment:'Special bonus',          bonus:150},
-    {month:'Февраль', cat:'mentoring',name:'Работа с командой #2',                 comment:'Special bonus',          bonus:150},
-    {month:'Февраль', cat:'calls',    name:'GCRI - Bent von Eitzen',               comment:'Хотел узнать сервисы',   bonus:15},
-    {month:'Март',    cat:'mentoring',name:'Работа с командой #2',                 comment:'Special bonus',          bonus:150},
-    {month:'Март',    cat:'calls',    name:'Cross Border Talents - Marco Janssen', comment:'Запрос на проект',       bonus:15},
-    {month:'Март',    cat:'calls',    name:'Rittal GmbH - Micha Stoidner',         comment:'Ограничения по ИИ',      bonus:15},
-    {month:'Март',    cat:'calls',    name:'Nate Johnson (Canopy Fintech)',         comment:'AML reporting',          bonus:15},
-    {month:'Март',    cat:'calls',    name:'Spencer Shaw (Fractional CTO)',         comment:'Signed partnership',     bonus:15},
-    {month:'Март',    cat:'calls',    name:'Mark Hinton - Gigalime',               comment:'Поиск тех. партнёра',    bonus:15},
-    {month:'Март',    cat:'special',  name:'5 звонков MID/HIGH MQL',              comment:'Special bonus',          bonus:150},
-    {month:'Март',    cat:'special',  name:'Выполнение метрик Q1 + больше всех SQL команда #2',comment:'',          bonus:200},
-  ]},
-  { name:'Ksenia B', entries:[
-    {month:'Сентябрь',cat:'other',    name:'Идея → SQL (EON)',                     comment:'Ты предложил идею',      bonus:150},
-    {month:'Сентябрь',cat:'other',    name:'Идея → SQL (NXP)',                     comment:'Ты предложил идею',      bonus:150},
-    {month:'Сентябрь',cat:'special',  name:'Hard-working Bee',                      comment:'',                       bonus:100},
-    {month:'Сентябрь',cat:'special',  name:'Выигрыш команды в эффективности',       comment:'',                       bonus:150},
-    {month:'Сентябрь',cat:'calls',    name:'Marc-Daniel Ortega',                    comment:'',                       bonus:10},
-    {month:'Октябрь', cat:'calls',    name:'Hans Bogad',                            comment:'',                       bonus:10},
-    {month:'Октябрь', cat:'calls',    name:'Michael Bratanov',                      comment:'',                       bonus:10},
-    {month:'Октябрь', cat:'calls',    name:'Luke Harrison',                         comment:'',                       bonus:10},
-    {month:'Октябрь', cat:'mentoring',name:'Менторство Даши + джуника',            comment:'',                       bonus:200},
-    {month:'Октябрь', cat:'other',    name:'Идея → SQL (Hays projects)',            comment:'Ты предложил идею',      bonus:150},
-    {month:'Ноябрь',  cat:'calls',    name:'George Costard',                        comment:'',                       bonus:10},
-    {month:'Ноябрь',  cat:'calls',    name:'Juan Pablo Montenegro',                 comment:'',                       bonus:10},
-    {month:'Ноябрь',  cat:'other',    name:'Идея → SQL (FRESSNAPF/Hays)',           comment:'Ты предложил идею',      bonus:150},
-    {month:'Ноябрь',  cat:'mentoring',name:'Менторство Daria Shatenok',             comment:'',                       bonus:100},
-    {month:'Декабрь', cat:'calls',    name:'Brian Pearse',                          comment:'Next call — 2 March',    bonus:15},
-    {month:'Декабрь', cat:'calls',    name:'Denis Guezelocak',                      comment:'High MQL',               bonus:15},
-    {month:'Декабрь', cat:'mentoring',name:'Работа с командой #1',                 comment:'',                       bonus:150},
-    {month:'Декабрь', cat:'closed',   name:'Navruzbek Rahimov (.NET)',             comment:'Hays',                   bonus:50},
-    {month:'Февраль', cat:'mentoring',name:'Работа с командой #1',                 comment:'',                       bonus:150},
-    {month:'Март',    cat:'mentoring',name:'Работа с командой #1',                 comment:'',                       bonus:150},
-    {month:'Март',    cat:'calls',    name:'Viridian Ecosystems - Matthew Aghai',  comment:'',                       bonus:15},
-    {month:'Март',    cat:'calls',    name:'Pacific Gas & Electric - Jay Leyno',   comment:'Вендор принимает решение',bonus:15},
-    {month:'Март',    cat:'calls',    name:'Speedoc - Chan Way',                   comment:'AI agents & ML for healthcare',bonus:15},
-    {month:'Март',    cat:'closed',   name:'CTO Fraction - Lazar Gintchin',        comment:'Interview — Ruby',        bonus:55},
-    {month:'Март',    cat:'special',  name:'5 звонков MID/HIGH MQL',              comment:'Special bonus',           bonus:100},
-  ]},
-  { name:'Artem Morozov', entries:[
-    {month:'Сентябрь',cat:'other',  name:'2 прототипа → SQL (parking app)',         comment:'',                       bonus:150},
-    {month:'Ноябрь',  cat:'calls',  name:'Balázs Erdős',                            comment:'',                       bonus:10},
-    {month:'Ноябрь',  cat:'calls',  name:'Camilo Cortes - Tampa General Hospital',  comment:'',                       bonus:10},
-    {month:'Ноябрь',  cat:'other',  name:'Metrikus case study',                     comment:'',                       bonus:100},
-    {month:'Январь',  cat:'calls',  name:'Keith Hayman - digiCare',                 comment:'MQL',                    bonus:50},
-    {month:'Январь',  cat:'closed', name:'PreCheck Health - Frank Gillen',          comment:'SQL',                    bonus:250},
-    {month:'Январь',  cat:'other',  name:'EON Case Study',                          comment:'',                       bonus:100},
-    {month:'Февраль', cat:'calls',  name:'Robert Bryniak (AI Strategy)',            comment:'MQL',                    bonus:55},
-    {month:'Февраль', cat:'calls',  name:'Craig Taylor Fractional',                 comment:'MQL',                    bonus:15},
-    {month:'Февраль', cat:'calls',  name:'Maincardgame - Valerii M.',               comment:'MQL',                    bonus:15},
-    {month:'Февраль', cat:'other',  name:'Svetness Case Study',                     comment:'',                       bonus:100},
-    {month:'Февраль', cat:'other',  name:'Prediction Market гипотеза',             comment:'С Юрием и Андреем',      bonus:150},
-    {month:'Февраль', cat:'special',name:'Hard working bee',                        comment:'',                       bonus:100},
-    {month:'Март',    cat:'special',name:'Выполнение метрик Q1 + больше всех SQL команда #2',comment:'',             bonus:200},
-    {month:'Март',    cat:'calls',  name:'Velimir Pajic',                           comment:'Крупный проект с другими вендорами',bonus:15},
-    {month:'Март',    cat:'other',  name:'LABA',                                    comment:'',                       bonus:100},
-  ]},
-  { name:'Daria Shatenok', entries:[
-    {month:'Октябрь', cat:'calls',    name:'Rishi Narayanan',                       comment:'',                       bonus:10},
-    {month:'Октябрь', cat:'closed',   name:'Michael Malek',                         comment:'SQL',                    bonus:150},
-    {month:'Октябрь', cat:'special',  name:'Hard-working Bee',                      comment:'',                       bonus:100},
-    {month:'Октябрь', cat:'mentoring',name:'Помощь за менторство джуна',            comment:'',                       bonus:100},
-    {month:'Ноябрь',  cat:'mentoring',name:'Менторство Anastasiya Kalinnikava',     comment:'',                       bonus:100},
-    {month:'Январь',  cat:'closed',   name:'WeGotLites - Lasha Maisuradze',         comment:'SQL — гипотеза сгенерила SQL',bonus:150},
-    {month:'Февраль', cat:'calls',    name:'Mid MQL лид',                           comment:'',                       bonus:15},
-    {month:'Март',    cat:'calls',    name:'Biosignals Dx - Richard Rendell',       comment:'Хотел узнать больше',    bonus:15},
-  ]},
-  { name:'Nikita S', entries:[
-    {month:'Сентябрь',cat:'closed',  name:'Kirill Sultanshin (Kate/Upwork)',         comment:'SQL + closed project',   bonus:275},
-    {month:'Сентябрь',cat:'special', name:'Эффективность команды',                  comment:'пришел в середине',      bonus:100},
-    {month:'Декабрь', cat:'calls',   name:'Denis Guezelocak',                       comment:'High MQL',               bonus:15},
-    {month:'Декабрь', cat:'calls',   name:'Richard Quevedo (SMX)',                  comment:'High партнёры',          bonus:50},
-    {month:'Декабрь', cat:'closed',  name:'Aleksandre Kokhreidze',                  comment:'SQL — работаем над оценкой',bonus:250},
-    {month:'Декабрь', cat:'special', name:'High working bee',                       comment:'Special bonus',          bonus:100},
-    {month:'Январь',  cat:'calls',   name:'KELECHI AMAJO (Blinqpay)',               comment:'New Deal — ждём апдейт', bonus:55},
-    {month:'Январь',  cat:'calls',   name:'Shane Rodgers (PDX Coin)',               comment:'New Deal — пингуем',     bonus:15},
-    {month:'Март',    cat:'closed',  name:'Vivek Palan',                            comment:'SQL',                    bonus:150},
-  ]},
-  { name:'Katerina Baranova', entries:[
-    {month:'Январь', cat:'closed', name:'Felix Blum', comment:'Closed + SQL', bonus:200},
-  ]},
-  { name:'Polina K', entries:[
-    {month:'Ноябрь',  cat:'special', name:'Hard-working Bee',                       comment:'',                       bonus:100},
-    {month:'Ноябрь',  cat:'other',   name:'Идея → SQL',                            comment:'Ты предложил идею',      bonus:150},
-    {month:'Январь',  cat:'closed',  name:'Michael Fainshtein',                     comment:'SQL — ждём фидбек',      bonus:250},
-    {month:'Январь',  cat:'calls',   name:'Ana Nery',                               comment:'Partnership',            bonus:50},
-    {month:'Февраль', cat:'other',   name:'Онбординг Ксении (идея)',               comment:'Имплементировали — принесла результат',bonus:150},
-    {month:'Март',    cat:'special', name:'Hard working bee',                       comment:'',                       bonus:100},
-    {month:'Март',    cat:'calls',   name:'Greg Castonguay (AI Content)',           comment:'AI agent для SEO',       bonus:15},
-    {month:'Март',    cat:'calls',   name:'Intelligent Systems - Ninoslav D.',      comment:'Заинтересованы',         bonus:15},
-    {month:'Март',    cat:'calls',   name:'Jia Huang - Diaminate',                  comment:'Нетворкинг',             bonus:15},
-    {month:'Март',    cat:'special', name:'5 звонков MID/HIGH MQL',               comment:'Special bonus',           bonus:150},
-  ]},
-  { name:'Anastasia K', entries:[
-    {month:'Январь', cat:'calls',   name:'Call leads',                              comment:'Leads calls',            bonus:70},
-    {month:'Март',   cat:'calls',   name:'Valufin - Sharon Constançon',             comment:'Хочет переписать платформу',bonus:15},
-    {month:'Март',   cat:'special', name:'Hard working bee',                        comment:'',                       bonus:150},
-  ]},
-  { name:'Aleksandra Baslyk', entries:[
-    {month:'Январь',  cat:'closed', name:'Lasha Maisuradze (WeGotLites)',           comment:'SQL',                    bonus:250},
-    {month:'Февраль', cat:'calls',  name:'Dan Passarelli',                          comment:'Mid MQL',                bonus:55},
-  ]},
-  { name:'Maryia Antonovich', entries:[
-    {month:'Февраль', cat:'calls', name:'Звонки немецким лидам',                    comment:'',                       bonus:50},
-    {month:'Март',    cat:'calls', name:'David McLain',                             comment:'',                       bonus:15},
-    {month:'Март',    cat:'calls', name:'Freddy Juka — AI agents',                 comment:'',                       bonus:15},
-  ]},
-  { name:'Kseniya Barzdova', entries:[
-    {month:'Март', cat:'calls', name:'Skyltmax.se - Peter Bladh',                   comment:'PIM система — Ruby on Rails',bonus:40},
-    {month:'Март', cat:'calls', name:'TDM Callcenter - Markus Näser',              comment:'Базовый интро',          bonus:15},
-  ]},
-];
+const SUPABASE_URL = 'https://gjvycaypmlabsgvlpnlf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_CIz_t-Ty1_yvcqCvgI9KMg_ZuNCjKjR';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 
 // ══════════════════════════════════════════════════════════
 //  CONSTANTS
@@ -419,8 +236,6 @@ const CAT = {
   mentoring:{label:'Менторство',   cls:'cat-mentoring',tc:'tc-mentoring'},
   other:    {label:'Прочее',       cls:'cat-other',    tc:'tc-other'},
 };
-const LS_KEY = 'bonus_dashboard_v1';
-
 // ══════════════════════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════════════════════
@@ -429,77 +244,154 @@ let closedDeals = [];
 let dealsFilter = 'all';
 
 // ══════════════════════════════════════════════════════════
-//  LOCALSTORAGE
+//  SAVE INDICATOR
 // ══════════════════════════════════════════════════════════
-let saveTimer = null;
-
+let pendingSaves = 0;
 function markSaving() {
+  pendingSaves++;
   const dot = document.getElementById('save-dot');
   const lbl = document.getElementById('save-label');
   dot.className = 'save-dot saving';
   lbl.textContent = 'Сохранение...';
 }
 function markSaved() {
+  pendingSaves = Math.max(0, pendingSaves - 1);
+  if (pendingSaves > 0) return;
   const dot = document.getElementById('save-dot');
   const lbl = document.getElementById('save-label');
   dot.className = 'save-dot saved';
-  lbl.textContent = 'Сохранено';
+  lbl.textContent = 'Синхронизировано';
 }
-
-function persistState() {
-  markSaving();
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify({ people, closedDeals }));
-    } catch(e) { console.warn('localStorage save failed', e); }
-    markSaved();
-  }, 400);
-}
-
-function loadFromLocalStorage() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed.people && parsed.closedDeals) {
-        people = parsed.people;
-        closedDeals = parsed.closedDeals;
-        return true;
-      }
-    }
-  } catch(e) { console.warn('localStorage load failed', e); }
-  return false;
+function markError(msg) {
+  pendingSaves = Math.max(0, pendingSaves - 1);
+  const dot = document.getElementById('save-dot');
+  const lbl = document.getElementById('save-label');
+  dot.className = 'save-dot';
+  dot.style.background = '#ef4444';
+  lbl.textContent = 'Ошибка: ' + msg;
 }
 
 // ══════════════════════════════════════════════════════════
-//  INIT STATE
+//  LOAD FROM SUPABASE
 // ══════════════════════════════════════════════════════════
-function buildClosedDealsFromPeople(ppl) {
-  const deals = [];
-  ppl.forEach(p => {
-    p.entries.filter(e => e.cat === 'closed' && e.bonus > 0).forEach(e => {
-      deals.push({
-        id: Math.random().toString(36).slice(2),
-        project: e.name, leadgen: p.name,
-        month: e.month, bonus: e.bonus,
-        comment: e.comment, revenue: ''
-      });
+async function loadState() {
+  const [pplRes, entRes, dlRes] = await Promise.all([
+    sb.from('people').select('*').order('sort_order'),
+    sb.from('entries').select('*').order('sort_order'),
+    sb.from('deals').select('*').order('created_at'),
+  ]);
+  if (pplRes.error || entRes.error || dlRes.error) {
+    markError('загрузка');
+    console.error(pplRes.error, entRes.error, dlRes.error);
+    return;
+  }
+  const byId = {};
+  people = pplRes.data.map(p => {
+    const obj = { id: p.id, name: p.name, entries: [] };
+    byId[p.id] = obj;
+    return obj;
+  });
+  entRes.data.forEach(e => {
+    const p = byId[e.person_id];
+    if (p) p.entries.push({
+      id: e.id, month: e.month, cat: e.cat,
+      name: e.name, comment: e.comment, bonus: Number(e.bonus)
     });
   });
-  return deals.sort((a,b) => {
-    const mo = MONTHS.indexOf(a.month) - MONTHS.indexOf(b.month);
-    return mo !== 0 ? mo : b.bonus - a.bonus;
-  });
+  closedDeals = dlRes.data.map(d => ({
+    id: d.id, project: d.project, leadgen: d.leadgen,
+    month: d.month, bonus: Number(d.bonus),
+    revenue: d.revenue != null ? String(d.revenue) : '',
+    comment: d.comment,
+  }));
 }
 
-function initState() {
-  const restored = loadFromLocalStorage();
-  if (!restored) {
-    people = JSON.parse(JSON.stringify(DEFAULT_PEOPLE));
-    closedDeals = buildClosedDealsFromPeople(people);
-    persistState();
+// ══════════════════════════════════════════════════════════
+//  REALTIME
+// ══════════════════════════════════════════════════════════
+function mapDealRow(d) {
+  return {
+    id: d.id, project: d.project, leadgen: d.leadgen,
+    month: d.month, bonus: Number(d.bonus),
+    revenue: d.revenue != null ? String(d.revenue) : '',
+    comment: d.comment,
+  };
+}
+function mapEntryRow(e) {
+  return {
+    id: e.id, month: e.month, cat: e.cat,
+    name: e.name, comment: e.comment, bonus: Number(e.bonus)
+  };
+}
+
+function handleDeal(payload) {
+  const t = payload.eventType;
+  if (t === 'INSERT' || t === 'UPDATE') {
+    const m = mapDealRow(payload.new);
+    const i = closedDeals.findIndex(d => d.id === m.id);
+    if (i >= 0) closedDeals[i] = m; else closedDeals.push(m);
+  } else if (t === 'DELETE') {
+    closedDeals = closedDeals.filter(d => d.id !== payload.old.id);
   }
+  buildFilterButtons();
+  renderDealsRows();
+}
+
+function handleEntry(payload) {
+  const t = payload.eventType;
+  if (t === 'INSERT' || t === 'UPDATE') {
+    const n = payload.new;
+    const p = people.find(pp => pp.id === n.person_id);
+    if (!p) return;
+    const m = mapEntryRow(n);
+    const i = p.entries.findIndex(e => e.id === m.id);
+    if (i >= 0) p.entries[i] = m; else p.entries.push(m);
+  } else if (t === 'DELETE') {
+    const id = payload.old.id;
+    for (const p of people) {
+      const i = p.entries.findIndex(e => e.id === id);
+      if (i >= 0) { p.entries.splice(i, 1); break; }
+    }
+  }
+  renderPeople(); renderMonths(); renderSummary();
+}
+
+function handlePerson(payload) {
+  const t = payload.eventType;
+  if (t === 'INSERT') {
+    people.push({ id: payload.new.id, name: payload.new.name, entries: [] });
+  } else if (t === 'UPDATE') {
+    const p = people.find(pp => pp.id === payload.new.id);
+    if (p) p.name = payload.new.name;
+  } else if (t === 'DELETE') {
+    people = people.filter(p => p.id !== payload.old.id);
+  }
+  renderAll();
+}
+
+function startRealtime() {
+  sb.channel('dashboard')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'deals'   }, handleDeal)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'entries' }, handleEntry)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'people'  }, handlePerson)
+    .subscribe();
+}
+
+// ══════════════════════════════════════════════════════════
+//  WRITES
+// ══════════════════════════════════════════════════════════
+async function updateDealField(id, field, value) {
+  markSaving();
+  const { error } = await sb.from('deals').update({ [field]: value }).eq('id', id);
+  if (error) { console.error(error); markError('сохранение'); return; }
+  markSaved();
+}
+
+async function deleteDealFromDB(id) {
+  markSaving();
+  const { error } = await sb.from('deals').delete().eq('id', id);
+  if (error) { console.error(error); markError('удаление'); return; }
+  markSaved();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -726,92 +618,54 @@ function renderDealsRows() {
 function editDeal(el) {
   el.style.borderBottomColor='transparent';
   const deal = closedDeals.find(d=>d.id===el.dataset.id);
-  if(deal) { deal[el.dataset.field]=el.textContent.trim(); persistState(); }
+  if (!deal) return;
+  const value = el.textContent.trim();
+  if (deal[el.dataset.field] === value) return;
+  deal[el.dataset.field] = value;
+  updateDealField(deal.id, el.dataset.field, value);
   updateDealsKPI();
 }
 function editDealSelect(sel) {
   const deal = closedDeals.find(d=>d.id===sel.dataset.id);
-  if(deal) { deal[sel.dataset.field]=sel.value; persistState(); renderDealsRows(); buildFilterButtons(); }
+  if (!deal) return;
+  const field = sel.dataset.field;
+  const value = sel.value;
+  if (deal[field] === value) return;
+  deal[field] = value;
+  updateDealField(deal.id, field, value);
+  renderDealsRows();
+  buildFilterButtons();
 }
 function editDealInput(inp) {
   const deal = closedDeals.find(d=>d.id===inp.dataset.id);
-  if(deal) {
-    deal[inp.dataset.field] = inp.dataset.field==='revenue' ? inp.value : (parseFloat(inp.value)||0);
-    persistState();
+  if (!deal) return;
+  const field = inp.dataset.field;
+  if (field === 'revenue') {
+    const raw = inp.value.trim();
+    deal.revenue = raw;
+    updateDealField(deal.id, 'revenue', raw === '' ? null : parseFloat(raw));
+  } else {
+    const num = parseFloat(inp.value) || 0;
+    deal[field] = num;
+    updateDealField(deal.id, field, num);
   }
   updateDealsKPI();
 }
 function deleteDeal(id) {
   const row = document.querySelector(`.deal-row[data-id="${id}"]`);
-  if(row) {
-    row.style.opacity='0';
-    setTimeout(()=>{
-      closedDeals = closedDeals.filter(d=>d.id!==id);
-      persistState();
-      renderDealsRows();
-      buildFilterButtons();
-    }, 180);
-  }
+  if (row) row.style.opacity = '0';
+  setTimeout(() => {
+    closedDeals = closedDeals.filter(d => d.id !== id);
+    renderDealsRows();
+    buildFilterButtons();
+    deleteDealFromDB(id);
+  }, 180);
 }
 function filterDeals(filter, el) {
   dealsFilter = filter;
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
   if(el) el.classList.add('active');
   renderDealsRows();
-}
-
-// ══════════════════════════════════════════════════════════
-//  EXPORT JSON
-// ══════════════════════════════════════════════════════════
-function exportJSON() {
-  const snapshot = {
-    meta: {
-      title: 'Sales Bonus Data — Leadgen Team',
-      period: 'Сентябрь 2025 — Март 2026',
-      currency: 'USD',
-      exported_at: new Date().toISOString(),
-      months_order: MONTHS
-    },
-    people,
-    closedDeals
-  };
-  const blob = new Blob([JSON.stringify(snapshot, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'bonus_data_' + new Date().toISOString().slice(0,10) + '.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-// ══════════════════════════════════════════════════════════
-//  IMPORT JSON
-// ══════════════════════════════════════════════════════════
-function loadFromFile(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const parsed = JSON.parse(e.target.result);
-      if (!parsed.people || !parsed.closedDeals) {
-        alert('Неверный формат файла. Ожидается JSON с полями people и closedDeals.');
-        return;
-      }
-      people = parsed.people;
-      closedDeals = parsed.closedDeals;
-      persistState();
-      renderAll();
-      // show feedback
-      const lbl = document.getElementById('save-label');
-      lbl.textContent = '✓ Загружено из файла';
-      setTimeout(()=>{ lbl.textContent = 'Сохранено'; }, 3000);
-    } catch(err) {
-      alert('Ошибка чтения файла: ' + err.message);
-    }
-    // reset input so same file can be loaded again
-    event.target.value = '';
-  };
-  reader.readAsText(file);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -836,8 +690,11 @@ function showView(id,el){
 // ══════════════════════════════════════════════════════════
 //  BOOT
 // ══════════════════════════════════════════════════════════
-initState();
-renderAll();
+(async () => {
+  await loadState();
+  renderAll();
+  startRealtime();
+})();
 </script>
 </body>
 </html>
