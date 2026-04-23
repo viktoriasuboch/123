@@ -928,59 +928,90 @@ function showDealsView(type, el) {
 function renderSalaries() {
   if (!salaries.length) return;
 
+  // active periods from data, sorted chronologically
+  const seenP = new Set();
+  const periods = [];
+  salaries.forEach(s => {
+    const k = `${s.year}-${s.month}`;
+    if (!seenP.has(k)) { seenP.add(k); periods.push({month: s.month, year: s.year}); }
+  });
+  periods.sort((a,b) => monthSortKey(a.month,a.year) - monthSortKey(b.month,b.year));
+
   // group by person
   const byName = {};
   salaries.forEach(s => {
-    if (!byName[s.name]) byName[s.name] = { gross: [], total: [], byMonth: {} };
+    if (!byName[s.name]) byName[s.name] = { gross: [], total: [], byPeriod: {} };
     byName[s.name].gross.push(s.gross);
-    byName[s.name].byMonth[s.month] = { gross: s.gross, total: s.total };
     byName[s.name].total.push(s.total);
+    byName[s.name].byPeriod[`${s.year}-${s.month}`] = { gross: s.gross, total: s.total };
+  });
+
+  // column totals (sum of к выплате per month across all people)
+  const colTotals = {};
+  periods.forEach(({month, year}) => {
+    const k = `${year}-${month}`;
+    colTotals[k] = salaries.filter(s => s.month===month && s.year===year).reduce((sum,s)=>sum+s.total, 0);
   });
 
   const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
   const fmt = v => v ? '$' + Math.round(v).toLocaleString() : '—';
 
-  // overall KPIs
   const allGross = salaries.map(s => s.gross);
   const allTotal = salaries.map(s => s.total);
   const avgGrossPerPerson = Object.values(byName).map(p => avg(p.gross));
   const avgTotalPerPerson = Object.values(byName).map(p => avg(p.total));
 
   document.getElementById('sal-kpi').innerHTML = [
-    { l: 'Ср. FIX GROSS лидгена',    v: fmt(avg(avgGrossPerPerson)),  c: 'var(--accent)' },
-    { l: 'Ср. к выплате лидгена',    v: fmt(avg(avgTotalPerPerson)),  c: 'var(--calls)'  },
-    { l: 'Макс. FIX GROSS',           v: fmt(Math.max(...allGross)),   c: 'var(--closed)' },
-    { l: 'Макс. к выплате (месяц)',   v: fmt(Math.max(...allTotal)),   c: 'var(--special)'},
-    { l: 'Лидгенов в базе',           v: Object.keys(byName).length,   c: 'var(--text)'   },
-    { l: 'Месяцев данных',            v: salaries.length,              c: 'var(--muted2)' },
+    { l: 'Ср. FIX GROSS лидгена',  v: fmt(avg(avgGrossPerPerson)),  c: 'var(--accent)' },
+    { l: 'Ср. к выплате лидгена',  v: fmt(avg(avgTotalPerPerson)),  c: 'var(--calls)'  },
+    { l: 'Макс. FIX GROSS',         v: fmt(Math.max(...allGross)),   c: 'var(--closed)' },
+    { l: 'Макс. к выплате (месяц)', v: fmt(Math.max(...allTotal)),   c: 'var(--special)'},
+    { l: 'Лидгенов в базе',         v: Object.keys(byName).length,   c: 'var(--text)'   },
+    { l: 'Месяцев данных',          v: periods.length,               c: 'var(--muted2)' },
   ].map(k => `<div class="kpi"><div class="kpi-label">${k.l}</div><div class="kpi-val" style="color:${k.c}">${k.v}</div></div>`).join('');
 
-  // ranked table
   const ranked = Object.entries(byName)
-    .map(([name, d]) => ({ name, avgGross: avg(d.gross), avgTotal: avg(d.total), byMonth: d.byMonth }))
-    .sort((a, b) => b.avgTotal - a.avgTotal);
+    .map(([name, d]) => ({ name, avgGross: avg(d.gross), avgTotal: avg(d.total), byPeriod: d.byPeriod }))
+    .sort((a,b) => b.avgTotal - a.avgTotal);
 
-  const COL_W = '28px 160px repeat(7,62px) 80px 86px';
+  const COL_W = `28px 160px repeat(${periods.length},64px) 80px 86px`;
+  const mono = `font-family:'IBM Plex Mono',monospace`;
+
+  const cellStyle = (color) => `${mono};font-size:11px;text-align:right;color:${color}`;
+  const headStyle = (color='var(--muted)') => `${mono};font-size:8px;color:${color};text-transform:uppercase;letter-spacing:.8px;text-align:right`;
+
   document.getElementById('sal-table').innerHTML = `
-    <div style="display:grid;grid-template-columns:${COL_W};gap:6px;padding:9px 16px;border-bottom:1px solid var(--border);min-width:820px">
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">#</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">Имя</span>
-      ${MONTHS.map(m=>`<span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:${mColor(m)};text-transform:uppercase;letter-spacing:.8px;text-align:right">${m.slice(0,3)}</span>`).join('')}
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;text-align:right">Avg Gross</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--accent);text-transform:uppercase;letter-spacing:.8px;text-align:right">Avg к выплате</span>
+    <!-- header -->
+    <div style="display:grid;grid-template-columns:${COL_W};gap:6px;padding:9px 16px;border-bottom:1px solid var(--border);min-width:700px">
+      <span style="${headStyle()}">#</span>
+      <span style="${headStyle()};text-align:left">Имя</span>
+      ${periods.map(({month,year})=>`<span style="${headStyle(mColor(month))}">${monthLabel(month,year)}</span>`).join('')}
+      <span style="${headStyle()}">Avg Gross</span>
+      <span style="${headStyle('var(--accent)')}">Avg выплата</span>
     </div>
-    ${ranked.map((r, i) => `
-      <div style="display:grid;grid-template-columns:${COL_W};gap:6px;padding:9px 16px;border-bottom:1px solid #111;align-items:center;min-width:820px" onmouseover="this.style.background='#111'" onmouseout="this.style.background=''">
+    <!-- totals row -->
+    <div style="display:grid;grid-template-columns:${COL_W};gap:6px;padding:10px 16px;border-bottom:2px solid var(--border);background:#111;min-width:700px;align-items:center">
+      <div></div>
+      <div style="${mono};font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">Итого</div>
+      ${periods.map(({month,year})=>{
+        const v = colTotals[`${year}-${month}`];
+        return `<div style="${cellStyle('var(--accent)')};font-size:13px;font-weight:600">${v?'$'+Math.round(v).toLocaleString():'—'}</div>`;
+      }).join('')}
+      <div></div><div></div>
+    </div>
+    <!-- per-person rows -->
+    ${ranked.map((r,i)=>`
+      <div style="display:grid;grid-template-columns:${COL_W};gap:6px;padding:9px 16px;border-bottom:1px solid #111;align-items:center;min-width:700px" onmouseover="this.style.background='#111'" onmouseout="this.style.background=''">
         <div class="rank-num">${i+1}</div>
         <div style="font-size:12px;font-weight:600">${r.name}</div>
-        ${MONTHS.map(m => {
-          const cell = r.byMonth[m];
+        ${periods.map(({month,year})=>{
+          const cell = r.byPeriod[`${year}-${month}`];
           return cell
-            ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:right;color:${mColor(m)}" title="Gross: $${Math.round(cell.gross)}">${fmt(cell.total)}</div>`
-            : `<div style="font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:right;color:var(--muted)">—</div>`;
+            ? `<div style="${cellStyle(mColor(month))}" title="Gross: $${Math.round(cell.gross)}">${fmt(cell.total)}</div>`
+            : `<div style="${cellStyle('var(--muted)')}">—</div>`;
         }).join('')}
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:right;color:var(--muted2)">${fmt(r.avgGross)}</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:right;color:var(--accent);font-weight:600">${fmt(r.avgTotal)}</div>
+        <div style="${cellStyle('var(--muted2)')}">${fmt(r.avgGross)}</div>
+        <div style="${cellStyle('var(--accent)')};font-weight:600">${fmt(r.avgTotal)}</div>
       </div>`).join('')}`;
 }
 
