@@ -207,8 +207,8 @@
 
   <!-- toolbar: filter + actions -->
   <div class="deals-toolbar">
-    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;">Фильтр:</span>
-    <div id="deals-filters" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;flex-shrink:0">Лидген:</span>
+    <div id="deals-filters" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex:1">
       <div class="filter-btn active" onclick="filterDeals('all',this)">Все</div>
     </div>
     <div style="margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -216,6 +216,12 @@
         <div class="save-dot saved" id="save-dot"></div>
         <span id="save-label">Синхронизировано</span>
       </div>
+    </div>
+  </div>
+  <div class="deals-toolbar" style="margin-top:-10px">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;flex-shrink:0">Месяц:</span>
+    <div id="deals-month-filters" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      <div class="filter-btn active" onclick="filterDealsMonth('all',this)">Все</div>
     </div>
   </div>
 
@@ -262,6 +268,7 @@ let people = [];
 let closedDeals = [];
 let salaries = [];
 let dealsFilter = 'all';
+let dealsMonthFilter = 'all';
 let dealTypeFilter = 'sql';
 
 // ══════════════════════════════════════════════════════════
@@ -564,20 +571,38 @@ function renderSummary() {
 // ══════════════════════════════════════════════════════════
 function buildFilterButtons() {
   const byType = closedDeals.filter(d => d.deal_type === dealTypeFilter);
+
+  // leadgen filters
   const filtersEl = document.getElementById('deals-filters');
   filtersEl.innerHTML = `<div class="filter-btn ${dealsFilter==='all'?'active':''}" onclick="filterDeals('all',this)">Все</div>`;
-  [...new Set(byType.map(d=>d.leadgen))].forEach(lg=>{
+  [...new Set(byType.map(d=>d.leadgen))].sort().forEach(lg=>{
     const btn = document.createElement('div');
     btn.className='filter-btn'+(dealsFilter===lg?' active':'');
     btn.textContent=lg;
     btn.onclick=function(){filterDeals(lg,this);};
     filtersEl.appendChild(btn);
   });
+
+  // month filters — only show months that exist in this tab
+  const monthsEl = document.getElementById('deals-month-filters');
+  const presentMonths = MONTHS.filter(m => byType.some(d => d.month === m));
+  monthsEl.innerHTML = `<div class="filter-btn ${dealsMonthFilter==='all'?'active':''}" onclick="filterDealsMonth('all',this)">Все</div>`;
+  presentMonths.forEach(m=>{
+    const btn = document.createElement('div');
+    btn.className='filter-btn'+(dealsMonthFilter===m?' active':'');
+    btn.style.color = dealsMonthFilter===m ? 'var(--accent)' : `var(--${M_CLS[m]})`;
+    btn.style.borderColor = dealsMonthFilter===m ? 'var(--accent)' : `rgba(0,0,0,0)`;
+    btn.textContent = m.slice(0,3);
+    btn.onclick = function(){ filterDealsMonth(m, this); };
+    monthsEl.appendChild(btn);
+  });
 }
 
 function updateDealsKPI() {
   const byType = closedDeals.filter(d => d.deal_type === dealTypeFilter);
-  const visible = dealsFilter==='all' ? byType : byType.filter(d=>d.leadgen===dealsFilter);
+  const visible = byType
+    .filter(d => dealsFilter === 'all' || d.leadgen === dealsFilter)
+    .filter(d => dealsMonthFilter === 'all' || d.month === dealsMonthFilter);
   const totalBonus   = visible.reduce((s,d)=>s+d.bonus,0);
   const totalRevenue = visible.reduce((s,d)=>s+(parseFloat(d.revenue)||0),0);
   const uLg = [...new Set(visible.map(d=>d.leadgen))].length;
@@ -593,7 +618,9 @@ function updateDealsKPI() {
 
 function renderDealsRows() {
   const byType = closedDeals.filter(d => d.deal_type === dealTypeFilter);
-  const filtered = dealsFilter === 'all' ? byType : byType.filter(d => d.leadgen === dealsFilter);
+  const filtered = byType
+    .filter(d => dealsFilter === 'all' || d.leadgen === dealsFilter)
+    .filter(d => dealsMonthFilter === 'all' || d.month === dealsMonthFilter);
 
   // group by project name (case-insensitive), preserve display name from first occurrence
   const groupMap = {};
@@ -762,8 +789,23 @@ function editGroupName(el) {
 }
 function filterDeals(filter, el) {
   dealsFilter = filter;
-  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#deals-filters .filter-btn').forEach(b=>b.classList.remove('active'));
   if(el) el.classList.add('active');
+  renderDealsRows();
+}
+
+function filterDealsMonth(month, el) {
+  dealsMonthFilter = month;
+  document.querySelectorAll('#deals-month-filters .filter-btn').forEach(b=>{
+    b.classList.remove('active');
+    b.style.color = `var(--${M_CLS[b.textContent.trim()] || 'muted'})`;
+    b.style.borderColor = 'rgba(0,0,0,0)';
+  });
+  if (el) {
+    el.classList.add('active');
+    el.style.color = 'var(--accent)';
+    el.style.borderColor = 'var(--accent)';
+  }
   renderDealsRows();
 }
 
@@ -781,6 +823,7 @@ function editDealTypeSelect(sel) {
 function showDealsView(type, el) {
   dealTypeFilter = type;
   dealsFilter = 'all';
+  dealsMonthFilter = 'all';
   showView('deals', el);
   buildFilterButtons();
   renderDealsRows();
