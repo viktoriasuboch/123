@@ -168,9 +168,147 @@
   .mc-apr{color:var(--apr);} .mc-may{color:var(--may);} .mc-jun{color:var(--jun);}
   .mc-jul{color:var(--jul);} .mc-aug{color:var(--aug);}
   .mc-sep{color:var(--sep);} .mc-oct{color:var(--oct);} .mc-nov{color:var(--nov);} .mc-dec{color:var(--dec);}
+
+  /* ── MULTI-SECTION AUTH ── */
+  .app-screen{display:none;}
+  .app-screen.active{display:block;}
+
+  /* Landing */
+  #screen-landing{
+    min-height:100vh;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;padding:40px 20px;
+  }
+  .landing-logo{
+    font-family:'Bebas Neue',sans-serif;font-size:clamp(32px,6vw,72px);
+    letter-spacing:6px;color:var(--accent);line-height:1;margin-bottom:8px;text-align:center;
+  }
+  .landing-sub{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);
+    letter-spacing:3px;text-transform:uppercase;margin-bottom:60px;text-align:center;
+  }
+  .section-cards{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;max-width:720px;width:100%;}
+  .section-card{
+    flex:1;min-width:260px;max-width:320px;
+    background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    padding:32px 28px;cursor:pointer;transition:border-color .2s,transform .15s,box-shadow .2s;
+    position:relative;overflow:hidden;
+  }
+  .section-card:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 8px 32px rgba(232,255,71,.08);}
+  .section-card.locked:hover{border-color:#444;}
+  .section-card-icon{font-size:36px;margin-bottom:16px;display:block;}
+  .section-card-title{
+    font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:3px;
+    color:var(--text);margin-bottom:8px;
+  }
+  .section-card-desc{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.8px;line-height:1.6;}
+  .section-card-status{
+    position:absolute;top:16px;right:16px;
+    width:8px;height:8px;border-radius:50%;background:var(--muted);
+  }
+  .section-card-status.unlocked{background:#4ade80;box-shadow:0 0 8px rgba(74,222,128,.5);}
+  .section-card.locked .section-card-title{color:var(--muted2);}
+  .section-card.coming-soon{cursor:default;}
+  .section-card.coming-soon:hover{border-color:var(--border);transform:none;box-shadow:none;}
+  .coming-badge{
+    font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;
+    background:rgba(80,80,80,.3);border:1px solid #333;color:var(--muted);
+    padding:2px 8px;border-radius:2px;display:inline-block;margin-top:10px;
+  }
+
+  /* Auth screen */
+  #screen-auth{
+    min-height:100vh;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;padding:40px 20px;
+  }
+  #screen-auth.active{display:flex;}
+  .auth-back{
+    position:fixed;top:28px;left:28px;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);
+    cursor:pointer;letter-spacing:1px;text-transform:uppercase;
+    display:none;align-items:center;gap:6px;transition:color .15s;
+  }
+  .auth-back:hover{color:var(--text);}
+  #screen-auth.active .auth-back{display:flex;}
+  .auth-box{text-align:center;width:100%;max-width:360px;}
+  .auth-icon{font-size:48px;display:block;margin-bottom:20px;}
+  .auth-title{
+    font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:4px;
+    color:var(--text);margin-bottom:6px;
+  }
+  .auth-hint{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:32px;}
+  .auth-input{
+    width:100%;background:#0f0f0f;border:1px solid var(--border);border-radius:4px;
+    color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:16px;letter-spacing:3px;
+    padding:14px 18px;outline:none;text-align:center;transition:border-color .15s;margin-bottom:12px;
+  }
+  .auth-input:focus{border-color:var(--accent);}
+  .auth-input.error{border-color:#ef4444;}
+  .auth-btn{
+    width:100%;background:var(--accent);color:#000;border:none;border-radius:4px;
+    font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;
+    font-weight:700;padding:14px;cursor:pointer;transition:opacity .15s;
+  }
+  .auth-btn:hover{opacity:.85;}
+  .auth-error{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:#ef4444;
+    margin-top:12px;min-height:18px;letter-spacing:.5px;
+  }
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+  .shake{animation:shake .3s ease;}
+
+  /* Back-to-home button inside sections */
+  .home-btn{
+    position:fixed;top:20px;right:20px;z-index:100;
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;
+    background:var(--surface);border:1px solid var(--border);color:var(--muted);
+    padding:6px 12px;border-radius:3px;cursor:pointer;transition:all .15s;
+  }
+  .home-btn:hover{border-color:#555;color:var(--text);}
 </style>
 </head>
 <body>
+
+<!-- ══ LANDING SCREEN ══════════════════════════════════ -->
+<div id="screen-landing" class="app-screen active">
+  <div class="landing-logo">Leadge Analytics</div>
+  <div class="landing-sub">Internal Operations Platform</div>
+  <div class="section-cards">
+    <div class="section-card" id="card-leadgen" onclick="openSection('leadgen')">
+      <div class="section-card-status" id="status-leadgen"></div>
+      <span class="section-card-icon">🎯</span>
+      <div class="section-card-title">Leadgen Bonus</div>
+      <div class="section-card-desc">Бонусы · Сделки SQL / Закрытые<br>Зарплаты · Revenue</div>
+    </div>
+    <div class="section-card coming-soon locked">
+      <div class="section-card-status"></div>
+      <span class="section-card-icon">📁</span>
+      <div class="section-card-title">Projects</div>
+      <div class="section-card-desc">Управление проектами<br>Аналитика и статусы</div>
+      <span class="coming-badge">Coming soon</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ AUTH SCREEN ═════════════════════════════════════ -->
+<div id="screen-auth" class="app-screen">
+  <div class="auth-back" onclick="showLanding()">← Назад</div>
+  <div class="auth-box">
+    <span class="auth-icon" id="auth-icon">🎯</span>
+    <div class="auth-title" id="auth-title">Leadgen Bonus</div>
+    <div class="auth-hint">Введите пароль для доступа</div>
+    <input class="auth-input" id="auth-password" type="password"
+      placeholder="••••••••"
+      onkeydown="if(event.key==='Enter')tryUnlock()"
+      oninput="document.getElementById('auth-error').textContent='';this.classList.remove('error')"
+    />
+    <button class="auth-btn" onclick="tryUnlock()">Войти</button>
+    <div class="auth-error" id="auth-error"></div>
+  </div>
+</div>
+
+<!-- ══ LEADGEN BONUS SECTION ════════════════════════════ -->
+<div id="screen-leadgen" class="app-screen">
+<button class="home-btn" onclick="showLanding()">⌂ Главная</button>
 
 <header>
   <h1>Sales Bonus Report 2025–2026</h1>
@@ -302,9 +440,104 @@
     <button class="btn btn-accent" onclick="addRevenueEntry()" style="align-self:flex-end">+ Добавить</button>
   </div>
   <div class="rank-table" style="overflow-x:auto" id="rev-table"></div>
+</div><!-- end view-revenue -->
+
+</div><!-- end screen-leadgen -->
+
+<!-- ══ PROJECTS SECTION (coming soon) ══════════════════ -->
+<div id="screen-projects" class="app-screen">
+  <button class="home-btn" onclick="showLanding()">⌂ Главная</button>
+  <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px">
+    <div style="font-size:64px;margin-bottom:24px">📁</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;letter-spacing:4px;color:var(--accent);margin-bottom:12px">Projects</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:2px;text-transform:uppercase">В разработке · Coming soon</div>
+  </div>
 </div>
 
 <script>
+// ══════════════════════════════════════════════════════════
+//  AUTH
+//  To change a password: generate SHA-256 of new password and
+//  replace the hash below. Quick tool: https://emn178.github.io/online-tools/sha256.html
+// ══════════════════════════════════════════════════════════
+const SECTION_HASHES = {
+  leadgen:  '16ce8a1ed29698af24aeb804c756ad0626a775640c7d0974508328126a5a3f3f',
+  projects: '2030996f3741eced1ea7e1ed02c86f4d39214492a46b713574232ca539e0a09a',
+};
+const SECTION_META = {
+  leadgen:  { title:'Leadgen Bonus', icon:'🎯' },
+  projects: { title:'Projects',      icon:'📁' },
+};
+
+let pendingSection = null;
+
+async function hashPassword(pass) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pass));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.app-screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+}
+
+function showLanding() {
+  pendingSection = null;
+  // refresh unlock status dots
+  Object.keys(SECTION_META).forEach(s => {
+    const el = document.getElementById('status-' + s);
+    if (el) el.classList.toggle('unlocked', sessionStorage.getItem('unlocked_' + s) === '1');
+  });
+  showScreen('landing');
+}
+
+function openSection(section) {
+  if (sessionStorage.getItem('unlocked_' + section) === '1') {
+    enterSection(section); return;
+  }
+  pendingSection = section;
+  const meta = SECTION_META[section];
+  document.getElementById('auth-icon').textContent  = meta.icon;
+  document.getElementById('auth-title').textContent = meta.title;
+  document.getElementById('auth-password').value    = '';
+  document.getElementById('auth-error').textContent = '';
+  document.getElementById('auth-password').classList.remove('error');
+  showScreen('auth');
+  setTimeout(() => document.getElementById('auth-password').focus(), 80);
+}
+
+async function tryUnlock() {
+  const pass = document.getElementById('auth-password').value;
+  if (!pass) return;
+  const hash = await hashPassword(pass);
+  if (hash === SECTION_HASHES[pendingSection]) {
+    sessionStorage.setItem('unlocked_' + pendingSection, '1');
+    enterSection(pendingSection);
+  } else {
+    const inp = document.getElementById('auth-password');
+    const err = document.getElementById('auth-error');
+    inp.classList.add('error', 'shake');
+    err.textContent = 'Неверный пароль';
+    setTimeout(() => inp.classList.remove('shake'), 350);
+  }
+}
+
+function enterSection(section) {
+  showScreen(section);
+  if (section === 'leadgen' && !window._leadgenLoaded) {
+    window._leadgenLoaded = true;
+    (async () => { await loadState(); renderAll(); startRealtime(); })();
+  }
+}
+
+// On load: refresh dots (if returning to page with active session)
+document.addEventListener('DOMContentLoaded', () => {
+  Object.keys(SECTION_META).forEach(s => {
+    const el = document.getElementById('status-' + s);
+    if (el && sessionStorage.getItem('unlocked_' + s) === '1') el.classList.add('unlocked');
+  });
+});
+
 // ══════════════════════════════════════════════════════════
 //  SUPABASE
 // ══════════════════════════════════════════════════════════
@@ -1241,14 +1474,7 @@ function showView(id,el){
   el.classList.add('active');
 }
 
-// ══════════════════════════════════════════════════════════
-//  BOOT
-// ══════════════════════════════════════════════════════════
-(async () => {
-  await loadState();
-  renderAll();
-  startRealtime();
-})();
+// Boot is triggered by enterSection('leadgen') after auth — see AUTH block above.
 </script>
 </body>
 </html>
