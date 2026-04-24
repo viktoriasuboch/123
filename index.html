@@ -456,13 +456,11 @@
 
 <script>
 // ══════════════════════════════════════════════════════════
-//  AUTH
-//  To change a password: generate SHA-256 of new password and
-//  replace the hash below. Quick tool: https://emn178.github.io/online-tools/sha256.html
+//  AUTH  (to change password — update SECTION_PASS below)
 // ══════════════════════════════════════════════════════════
-const SECTION_HASHES = {
-  leadgen:  '16ce8a1ed29698af24aeb804c756ad0626a775640c7d0974508328126a5a3f3f',
-  projects: '2030996f3741eced1ea7e1ed02c86f4d39214492a46b713574232ca539e0a09a',
+const SECTION_PASS = {
+  leadgen:  'leadgen2025',
+  projects: 'projects2025',
 };
 const SECTION_META = {
   leadgen:  { title:'Leadgen Bonus', icon:'🎯' },
@@ -470,11 +468,6 @@ const SECTION_META = {
 };
 
 let pendingSection = null;
-
-async function hashPassword(pass) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pass));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
 
 function showScreen(id) {
   document.querySelectorAll('.app-screen').forEach(s => s.classList.remove('active'));
@@ -506,11 +499,10 @@ function openSection(section) {
   setTimeout(() => document.getElementById('auth-password').focus(), 80);
 }
 
-async function tryUnlock() {
+function tryUnlock() {
   const pass = document.getElementById('auth-password').value;
   if (!pass) return;
-  const hash = await hashPassword(pass);
-  if (hash === SECTION_HASHES[pendingSection]) {
+  if (pass === SECTION_PASS[pendingSection]) {
     sessionStorage.setItem('unlocked_' + pendingSection, '1');
     enterSection(pendingSection);
   } else {
