@@ -1222,9 +1222,7 @@ function showDealsView(type, el) {
   dealsFilter = 'all';
   dealsMonthFilter = 'all';
   dealsYearFilter = 'all';
-  showView('deals', el);
-  buildFilterButtons();
-  renderDealsRows();
+  showView('deals', el);   // sets activeView='deals', calls buildFilterButtons+renderDealsRows
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1450,24 +1448,31 @@ async function deleteRevEntry(id) {
 }
 
 // ══════════════════════════════════════════════════════════
-//  RENDER ALL
+//  RENDER — only the active tab
 // ══════════════════════════════════════════════════════════
+let activeView = 'people';
+
 function renderAll() {
-  renderPeople();
-  renderMonths();
-  renderSummary();
-  buildFilterButtons();
-  renderDealsRows();
-  renderSalaries();
-  renderRevenue();
+  renderActiveView();
+}
+
+function renderActiveView() {
+  if      (activeView === 'people')   renderPeople();
+  else if (activeView === 'months')   renderMonths();
+  else if (activeView === 'summary')  renderSummary();
+  else if (activeView === 'deals')    { buildFilterButtons(); renderDealsRows(); }
+  else if (activeView === 'salaries') renderSalaries();
+  else if (activeView === 'revenue')  renderRevenue();
 }
 
 // ── TABS ──
-function showView(id,el){
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('view-'+id).classList.add('active');
-  el.classList.add('active');
+function showView(id, el) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('view-' + id).classList.add('active');
+  if (el) el.classList.add('active');
+  activeView = id;
+  renderActiveView();
 }
 
 // Boot is triggered by enterSection('leadgen') after auth — see AUTH block above.
