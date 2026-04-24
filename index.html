@@ -1068,7 +1068,11 @@ function renderDealsRows() {
           <div style="display:flex;align-items:center;gap:6px">
             ${(()=>{
               const key = d.project.trim().toLowerCase();
-              const autoRev = projectRevenues.filter(r=>r.project.trim().toLowerCase()===key).reduce((s,r)=>s+r.amount,0);
+              const autoRev = projectRevenues.filter(r=>{
+                const rk = r.project.trim().toLowerCase();
+                return rk === key || rk.startsWith(key) || key.startsWith(rk) ||
+                       rk.includes(key) || key.includes(rk);
+              }).reduce((s,r)=>s+r.amount,0);
               if (autoRev > 0) return `<div style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:var(--accent)" title="Из Revenue tab">$${autoRev.toLocaleString()} <span style="font-size:9px;color:var(--muted);font-weight:400">auto</span></div>`;
               return `<span style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px">$</span>
                 <input type="number"
