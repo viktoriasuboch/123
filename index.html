@@ -491,9 +491,6 @@ function showLanding() {
 }
 
 function openSection(section) {
-  if (sessionStorage.getItem('unlocked_' + section) === '1') {
-    enterSection(section); return;
-  }
   pendingSection = section;
   const meta = SECTION_META[section];
   document.getElementById('auth-icon').textContent  = meta.icon;
@@ -509,7 +506,6 @@ function tryUnlock() {
   const pass = document.getElementById('auth-password').value;
   if (!pass) return;
   if (pass === SECTION_PASS[pendingSection]) {
-    sessionStorage.setItem('unlocked_' + pendingSection, '1');
     enterSection(pendingSection);
   } else {
     const inp = document.getElementById('auth-password');
