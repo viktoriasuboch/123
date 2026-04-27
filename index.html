@@ -219,18 +219,39 @@
   .dev-stat{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);}
   .dev-stat span{color:var(--text);}
   .dev-projects{padding:2px 0 6px;}
+  /* Fixed column widths so numbers align across all cards */
+  .dev-proj-cols{grid-template-columns:minmax(0,1fr) 78px 78px 88px 110px;}
+  .dev-proj-head{
+    display:grid;padding:5px 20px 4px;font-family:'IBM Plex Mono',monospace;font-size:9px;
+    color:var(--muted);letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid #1a1a1a;
+  }
+  .dev-proj-head > div:not(:first-child){text-align:right;}
   .dev-proj-row{
-    display:grid;grid-template-columns:1fr auto auto auto auto;gap:0 16px;
-    align-items:center;padding:8px 20px;border-bottom:1px solid #161616;
-    font-family:'IBM Plex Mono',monospace;font-size:11px;
+    display:grid;align-items:center;padding:8px 20px;border-bottom:1px solid #161616;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:pointer;
   }
   .dev-proj-row:last-child{border-bottom:none;}
   .dev-proj-row:hover{background:#161616;}
   .dev-proj-name{color:var(--text);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .dev-proj-role{color:var(--muted);font-size:10px;}
-  .dev-proj-buy {color:#60a5fa;white-space:nowrap;}
-  .dev-proj-sell{color:#4ade80;white-space:nowrap;}
-  .dev-proj-margin{white-space:nowrap;}
+  .dev-proj-role{color:var(--muted);font-size:10px;margin-top:1px;}
+  .dev-proj-buy {color:#60a5fa;text-align:right;}
+  .dev-proj-sell{color:#4ade80;text-align:right;}
+  .dev-proj-margin{text-align:right;}
+  .dev-proj-rev{color:var(--muted);text-align:right;}
+  /* Section labels between staff / freelancer groups */
+  .dev-section-label{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--muted);padding:18px 0 8px;display:flex;align-items:center;gap:10px;
+  }
+  .dev-section-label::after{content:'';flex:1;height:1px;background:var(--border);}
+  /* Type filter pills */
+  .dev-type-pill{
+    background:none;border:1px solid var(--border);border-radius:3px;
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;
+    padding:5px 14px;cursor:pointer;color:var(--muted);transition:all .15s;
+  }
+  .dev-type-pill:hover{border-color:#444;color:var(--text);}
+  .dev-type-pill.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
 
   /* members table */
   .members-table{width:100%;border-collapse:collapse;margin-top:12px;}
@@ -675,6 +696,11 @@
         color:var(--muted);font-size:14px;pointer-events:none">🔍</span>
     </div>
 
+    <div id="dev-type-btns" style="display:none;margin-bottom:14px;display:none;gap:6px">
+      <button class="dev-type-pill active" data-dtype="all"        onclick="switchDevType('all')">Все</button>
+      <button class="dev-type-pill"        data-dtype="staff"      onclick="switchDevType('staff')">Штатные</button>
+      <button class="dev-type-pill"        data-dtype="freelancer" onclick="switchDevType('freelancer')">Фрилансеры</button>
+    </div>
     <div id="proj-cards" style="display:flex;flex-direction:column;gap:10px"></div>
     <div id="dev-cards"  style="display:none;flex-direction:column;gap:10px"></div>
   </div>
@@ -1823,6 +1849,7 @@ let currentProjId   = null;
 let editingProjId   = null;
 let projStatusFilter = 'active';   // 'active' | 'inactive'
 let projSearchQuery  = '';         // search string
+let devTypeFilter    = 'all';      // 'all' | 'staff' | 'freelancer'
 
 // ── LOAD ──
 async function loadProjectsData() {
@@ -1882,8 +1909,13 @@ function switchProjTab(tab) {
     si.placeholder = tab === 'devs' ? 'Поиск по имени или проекту…' : 'Поиск по названию…';
   }
   const isDevs = tab === 'devs';
-  document.getElementById('proj-cards').style.display = isDevs ? 'none'  : 'flex';
-  document.getElementById('dev-cards').style.display  = isDevs ? 'flex'  : 'none';
+  document.getElementById('proj-cards').style.display    = isDevs ? 'none'  : 'flex';
+  document.getElementById('dev-cards').style.display     = isDevs ? 'flex'  : 'none';
+  document.getElementById('dev-type-btns').style.display = isDevs ? 'flex'  : 'none';
+  if (!isDevs) {
+    devTypeFilter = 'all';
+    document.querySelectorAll('.dev-type-pill').forEach(b => b.classList.toggle('active', b.dataset.dtype==='all'));
+  }
   if (isDevs) renderDevsList(); else renderProjectsList();
 }
 
@@ -1940,28 +1972,48 @@ function renderProjectsList() {
   }).join('');
 }
 
+// ── DEV TYPE FILTER ──
+function switchDevType(t) {
+  devTypeFilter = t;
+  document.querySelectorAll('.dev-type-pill').forEach(b => b.classList.toggle('active', b.dataset.dtype === t));
+  renderDevsList();
+}
+
 // ── RENDER DEVELOPERS ──
 function renderDevsList() {
-  const q = projSearchQuery.trim().toLowerCase();
+  const q  = projSearchQuery.trim().toLowerCase();
   const el = document.getElementById('dev-cards');
 
-  // Group members by dev_name
+  // Group members by dev_name, attach project name
   const devMap = {};
   projMembers.forEach(m => {
+    const p = projects.find(x => x.id === m.project_id);
+    const entry = { ...m, projectName: p ? p.name : '—' };
     if (!devMap[m.dev_name]) devMap[m.dev_name] = [];
-    devMap[m.dev_name].push(m);
+    devMap[m.dev_name].push(entry);
   });
 
-  // Build dev entries with their projects
+  // Update counter (all unique devs)
+  const dc = document.getElementById('proj-tab-devs-count');
+  if (dc) dc.textContent = Object.keys(devMap).length;
+
+  // Build entries
   let devEntries = Object.entries(devMap).map(([name, rows]) => {
-    const proj = rows.map(m => {
-      const p = projects.find(x => x.id === m.project_id);
-      return { ...m, projectName: p ? p.name : '—', projectStatus: p ? p.status : '' };
-    });
-    return { name, rows: proj };
+    const empType   = rows[0].employment_type || 'freelancer';
+    const projCount = new Set(rows.map(r => r.project_id)).size;
+    const totalMgm  = rows.filter(r => r.is_active !== false).reduce((s, m) => {
+      const buy = m.employment_type === 'staff' ? (m.salary||0)/160 : (m.buy_rate||0);
+      return s + ((m.sell_rate||0) - buy) * (m.hours_load||0);
+    }, 0);
+    return { name, rows, empType, projCount, totalMgm };
   });
 
-  // Search filter: match dev name OR any project name
+  // Type filter
+  if (devTypeFilter !== 'all') {
+    devEntries = devEntries.filter(d => d.empType === devTypeFilter);
+  }
+
+  // Search filter
   if (q) {
     devEntries = devEntries.filter(d =>
       d.name.toLowerCase().includes(q) ||
@@ -1969,53 +2021,42 @@ function renderDevsList() {
     );
   }
 
-  // Sort alphabetically
-  devEntries.sort((a, b) => a.name.localeCompare(b.name));
-
-  // Update count
-  const dc = document.getElementById('proj-tab-devs-count');
-  if (dc) dc.textContent = Object.keys(devMap).length;
-
   if (!devEntries.length) {
     el.innerHTML = `<div style="text-align:center;padding:60px 20px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted)">Разработчики не найдены</div>`;
     return;
   }
 
-  el.innerHTML = devEntries.map(({name, rows}) => {
+  // Sort alphabetically within each type
+  devEntries.sort((a,b) => a.name.localeCompare(b.name));
+
+  // Helper: render one dev card
+  function devCard({name, rows, empType, projCount, totalMgm}) {
     const initials = name.split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
-    // Dominant employment type
-    const empType = rows[0].employment_type || 'freelancer';
-    // Unique projects count (by project_id)
-    const projCount = new Set(rows.map(r => r.project_id)).size;
-
-    // Total margin/month across active projects
-    const totalMarginMonth = rows.filter(r => r.is_active !== false).reduce((s, m) => {
-      const buy = m.employment_type === 'staff' ? (m.salary||0)/160 : (m.buy_rate||0);
-      return s + ((m.sell_rate||0) - buy) * (m.hours_load||0);
-    }, 0);
-
-    // Rows sorted: active first, then by project name
-    const sorted = [...rows].sort((a,b)=>{
-      if ((a.is_active===false) !== (b.is_active===false)) return a.is_active===false ? 1 : -1;
+    const sorted   = [...rows].sort((a,b) => {
+      if ((a.is_active===false) !== (b.is_active===false)) return a.is_active===false ? 1:-1;
       return a.projectName.localeCompare(b.projectName);
     });
-
     const projRows = sorted.map(m => {
-      const buy  = m.employment_type === 'staff' ? (m.salary||0)/160 : (m.buy_rate||0);
-      const marg = (m.sell_rate||0) - buy;
+      const buy       = m.employment_type==='staff' ? (m.salary||0)/160 : (m.buy_rate||0);
+      const marg      = (m.sell_rate||0) - buy;
+      const revMonth  = (m.sell_rate||0) * (m.hours_load||0);
       const margColor = marg >= 20 ? '#4ade80' : marg > 0 ? '#fbbf24' : '#f87171';
       const inactive  = m.is_active === false;
-      const hpd = Math.round((m.hours_load||0)/20*10)/10;
+      const hpd       = Math.round((m.hours_load||0)/20*10)/10;
+      const buyFmt    = buy  % 1 === 0 ? buy  : buy.toFixed(2);
+      const margFmt   = marg % 1 === 0 ? marg : marg.toFixed(2);
       return `
-      <div class="dev-proj-row" style="${inactive?'opacity:.45':''}" onclick="openProjectDetail('${m.project_id}');event.stopPropagation()">
-        <div>
-          <div class="dev-proj-name" title="${m.projectName}">${inactive?'<s>':''} ${m.projectName} ${inactive?'</s>':''}</div>
-          <div class="dev-proj-role">${m.role||'—'} · ${hpd}ч/д</div>
+      <div class="dev-proj-row dev-proj-cols" style="${inactive?'opacity:.42':''}"
+        onclick="openProjectDetail('${m.project_id}');event.stopPropagation()">
+        <div style="overflow:hidden">
+          <div class="dev-proj-name"${inactive?' style="text-decoration:line-through"':''}
+            title="${m.projectName}">${m.projectName}</div>
+          <div class="dev-proj-role">${m.role||'—'}&nbsp;·&nbsp;${hpd}&thinsp;ч/д</div>
         </div>
-        <div class="dev-proj-buy">$${buy%1===0?buy:buy.toFixed(2)}/h</div>
+        <div class="dev-proj-buy">$${buyFmt}/h</div>
         <div class="dev-proj-sell">$${m.sell_rate||0}/h</div>
-        <div class="dev-proj-margin" style="color:${margColor}">+$${marg%1===0?marg:marg.toFixed(2)}</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">$${Math.round((m.sell_rate||0)*(m.hours_load||0)).toLocaleString()}/мес</div>
+        <div class="dev-proj-margin" style="color:${margColor}">+$${margFmt}</div>
+        <div class="dev-proj-rev">$${Math.round(revMonth).toLocaleString()}</div>
       </div>`;
     }).join('');
 
@@ -2024,24 +2065,42 @@ function renderDevsList() {
       <div class="dev-card-header">
         <div class="dev-avatar">${initials}</div>
         <div class="dev-name">${name}</div>
-        <div class="dev-badge ${empType}">${empType === 'staff' ? 'штатный' : 'фриланс'}</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-left:8px">${projCount}&nbsp;пр.</div>
+        <div class="dev-badge ${empType}">${empType==='staff'?'штатный':'фриланс'}</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-left:auto">${projCount}&thinsp;пр.</div>
       </div>
       <div class="dev-stats">
-        <div class="dev-stat">Маржа/мес&nbsp;<span style="color:${totalMarginMonth>0?'var(--accent)':'var(--muted)'}">$${Math.round(totalMarginMonth).toLocaleString()}</span></div>
-        <div class="dev-stat">Проектов&nbsp;<span>${projCount}</span></div>
-        <div class="dev-stat">Ролей&nbsp;<span>${[...new Set(rows.map(r=>r.role))].filter(Boolean).join(', ')||'—'}</span></div>
+        <div class="dev-stat">Маржа/мес&thinsp;<span style="color:${totalMgm>0?'var(--accent)':'var(--muted)'}">$${Math.round(totalMgm).toLocaleString()}</span></div>
+        <div class="dev-stat">Проектов&thinsp;<span>${projCount}</span></div>
+        <div class="dev-stat">Роль&thinsp;<span>${[...new Set(rows.map(r=>r.role))].filter(Boolean).join(', ')||'—'}</span></div>
       </div>
       <div class="dev-projects">
-        <div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:0 16px;
-          padding:5px 20px 4px;font-family:'IBM Plex Mono',monospace;font-size:9px;
-          color:var(--muted);letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid #1a1a1a">
-          <div>Проект / Роль</div><div>Buy</div><div>Sell</div><div>Маржа</div><div>Rev/мес</div>
+        <div class="dev-proj-head dev-proj-cols">
+          <div>Проект / Роль</div><div style="text-align:right">Buy</div>
+          <div style="text-align:right">Sell</div><div style="text-align:right">Маржа/h</div>
+          <div style="text-align:right">Rev/мес</div>
         </div>
         ${projRows}
       </div>
     </div>`;
-  }).join('');
+  }
+
+  // Render with section labels when showing all types
+  if (devTypeFilter === 'all') {
+    const staff = devEntries.filter(d => d.empType === 'staff');
+    const free  = devEntries.filter(d => d.empType !== 'staff');
+    let html = '';
+    if (staff.length) {
+      html += `<div class="dev-section-label">Штатные &nbsp;<span style="font-size:11px;color:#60a5fa">${staff.length}</span></div>`;
+      html += staff.map(devCard).join('');
+    }
+    if (free.length) {
+      html += `<div class="dev-section-label" style="margin-top:${staff.length?'12px':'0'}">Фрилансеры &nbsp;<span style="font-size:11px;color:#fb923c">${free.length}</span></div>`;
+      html += free.map(devCard).join('');
+    }
+    el.innerHTML = html;
+  } else {
+    el.innerHTML = devEntries.map(devCard).join('');
+  }
 }
 
 // ── OPEN / CLOSE DETAIL ──
