@@ -2106,15 +2106,21 @@ function updateNmBuyFromSalary() {
 }
 
 async function saveMemberSalary(id, value) {
-  const salary = parseFloat(value) || 0;
+  const salary  = parseFloat(value) || 0;
   const buyRate = Math.round(salary / 160 * 100) / 100;
-  const old = projMembers.find(m=>m.id===id);
-  if (!old) return;
+  const idx = projMembers.findIndex(m=>m.id===id);
+  if (idx<0) return;
+  const old = projMembers[idx];
+
+  // Optimistic update
+  projMembers[idx] = { ...old, salary, buy_rate: buyRate };
+  if (currentProjId) renderProjectDetail(currentProjId);
+
   const {error} = await sb.from('project_members').update({ salary, buy_rate: buyRate }).eq('id', id);
-  if (error) return;
+  if (error) { projMembers[idx] = old; if (currentProjId) renderProjectDetail(currentProjId); return; }
   await sb.from('project_events').insert([{
     project_id: old.project_id, member_id: id, event_type:'rate_change',
-    description:`${old.dev_name}: зарплата изменена → $${salary}/мес (buy rate $${buyRate}/h)`,
+    description:`${old.dev_name}: зарплата → $${salary}/мес (buy rate $${buyRate}/h)`,
     meta:{ salary, buy_rate: buyRate },
   }]);
 }
@@ -2158,15 +2164,27 @@ async function submitNewMember(projId) {
 }
 
 async function saveMemberField(id, field, value) {
-  const old = projMembers.find(m=>m.id===id);
-  if (!old || old[field] == value) return;
+  const idx = projMembers.findIndex(m=>m.id===id);
+  if (idx<0) return;
+  const old = projMembers[idx];
+  if (old[field] == value) return;
+
+  // ── Optimistic local update → instant margin recalc ──
+  projMembers[idx] = { ...old, [field]: value };
+  if (currentProjId) renderProjectDetail(currentProjId);
+
   const {error} = await sb.from('project_members').update({[field]:value}).eq('id',id);
-  if (error) return;
-  // log rate changes
+  if (error) {
+    // rollback on error
+    projMembers[idx] = old;
+    if (currentProjId) renderProjectDetail(currentProjId);
+    return;
+  }
+  // log rate/status changes
   if (field==='buy_rate'||field==='sell_rate') {
     await sb.from('project_events').insert([{
       project_id: old.project_id, member_id: id, event_type:'rate_change',
-      description:`${old.dev_name}: ${field==='buy_rate'?'buy':'sell'} rate изменён $${old[field]} → $${value}`,
+      description:`${old.dev_name}: ${field==='buy_rate'?'buy':'sell'} rate $${old[field]} → $${value}`,
       meta:{ field, old_value: old[field], new_value: value },
     }]);
   }
