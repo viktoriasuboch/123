@@ -252,6 +252,24 @@
   }
   .dev-type-pill:hover{border-color:#444;color:var(--text);}
   .dev-type-pill.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
+  /* Developer profile */
+  .dev-profile-wrap{max-width:1200px;margin:0 auto;padding:70px 24px 60px;}
+  .dev-profile-kpi{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:32px;}
+  .dev-stat-fired{
+    font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;
+    padding:2px 10px;border-radius:2px;
+    background:rgba(248,113,113,.1);color:#f87171;border:1px solid rgba(248,113,113,.2);
+  }
+  .dev-stat-active{
+    font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;
+    padding:2px 10px;border-radius:2px;
+    background:rgba(74,222,128,.12);color:#4ade80;border:1px solid rgba(74,222,128,.25);
+  }
+  .dev-proj-link{
+    color:var(--accent);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11px;
+    text-decoration:none;
+  }
+  .dev-proj-link:hover{text-decoration:underline;}
 
   /* members table */
   .members-table{width:100%;border-collapse:collapse;margin-top:12px;}
@@ -696,10 +714,12 @@
         color:var(--muted);font-size:14px;pointer-events:none">🔍</span>
     </div>
 
-    <div id="dev-type-btns" style="display:none;margin-bottom:14px;display:none;gap:6px">
+    <div id="dev-type-btns" style="display:none;margin-bottom:14px;gap:6px;flex-wrap:wrap">
       <button class="dev-type-pill active" data-dtype="all"        onclick="switchDevType('all')">Все</button>
       <button class="dev-type-pill"        data-dtype="staff"      onclick="switchDevType('staff')">Штатные</button>
       <button class="dev-type-pill"        data-dtype="freelancer" onclick="switchDevType('freelancer')">Фрилансеры</button>
+      <button class="dev-type-pill"        data-dtype="inactive"   onclick="switchDevType('inactive')"
+        style="color:#f87171;border-color:rgba(248,113,113,.25)">Уволенные</button>
     </div>
     <div id="proj-cards" style="display:flex;flex-direction:column;gap:10px"></div>
     <div id="dev-cards"  style="display:none;flex-direction:column;gap:10px"></div>
@@ -713,6 +733,16 @@
       ← Все проекты
     </button>
     <div id="proj-detail-content"></div>
+  </div>
+
+  <!-- DEV PROFILE VIEW -->
+  <div id="dev-detail-view" style="display:none;max-width:1200px;margin:0 auto;padding:70px 24px 60px">
+    <button onclick="closeDevProfile()"
+      style="background:none;border:none;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;
+      letter-spacing:1px;text-transform:uppercase;cursor:pointer;margin-bottom:28px;padding:0;display:flex;align-items:center;gap:6px">
+      ← Все разработчики
+    </button>
+    <div id="dev-detail-content"></div>
   </div>
 
   <!-- ADD / EDIT PROJECT MODAL -->
@@ -830,7 +860,11 @@ function enterSection(section) {
   }
   if (section === 'projects' && !window._projectsLoaded) {
     window._projectsLoaded = true;
-    (async () => { await loadProjectsData(); renderProjectsList(); startProjectsRealtime(); })();
+    (async () => {
+      await Promise.all([loadProjectsData(), loadDevStatuses()]);
+      renderProjectsList();
+      startProjectsRealtime();
+    })();
   }
 }
 
@@ -1849,7 +1883,9 @@ let currentProjId   = null;
 let editingProjId   = null;
 let projStatusFilter = 'active';   // 'active' | 'inactive'
 let projSearchQuery  = '';         // search string
-let devTypeFilter    = 'all';      // 'all' | 'staff' | 'freelancer'
+let devTypeFilter    = 'all';      // 'all' | 'staff' | 'freelancer' | 'inactive'
+let devStatuses      = {};         // { "Name": { status, notes } }
+let currentDevName   = null;
 
 // ── LOAD ──
 async function loadProjectsData() {
@@ -1861,6 +1897,11 @@ async function loadProjectsData() {
   projects    = pr.data || [];
   projMembers = pm.data || [];
   projEvents  = pe.data || [];
+}
+async function loadDevStatuses() {
+  const { data } = await sb.from('developer_status').select('*');
+  devStatuses = {};
+  (data || []).forEach(d => { devStatuses[d.dev_name] = d; });
 }
 
 // ── REALTIME ──
@@ -1883,7 +1924,8 @@ function handleMemberChange(p) {
   const t = p.eventType;
   if (t==='DELETE') { projMembers = projMembers.filter(x=>x.id!==p.old.id); }
   else { const i=projMembers.findIndex(x=>x.id===p.new.id); i>=0?projMembers[i]=p.new:projMembers.push(p.new); }
-  if (currentProjId) renderProjectDetail(currentProjId);
+  if (currentDevName) renderDevProfile(currentDevName);
+  else if (currentProjId) renderProjectDetail(currentProjId);
 }
 function handleEventChange(p) {
   const t = p.eventType;
@@ -1979,12 +2021,8 @@ function switchDevType(t) {
   renderDevsList();
 }
 
-// ── RENDER DEVELOPERS ──
-function renderDevsList() {
-  const q  = projSearchQuery.trim().toLowerCase();
-  const el = document.getElementById('dev-cards');
-
-  // Group members by dev_name, attach project name
+// ── SHARED: build dev entries from projMembers ──
+function buildDevEntries() {
   const devMap = {};
   projMembers.forEach(m => {
     const p = projects.find(x => x.id === m.project_id);
@@ -1992,114 +2030,293 @@ function renderDevsList() {
     if (!devMap[m.dev_name]) devMap[m.dev_name] = [];
     devMap[m.dev_name].push(entry);
   });
-
-  // Update counter (all unique devs)
-  const dc = document.getElementById('proj-tab-devs-count');
-  if (dc) dc.textContent = Object.keys(devMap).length;
-
-  // Build entries
-  let devEntries = Object.entries(devMap).map(([name, rows]) => {
+  return Object.entries(devMap).map(([name, rows]) => {
     const empType   = rows[0].employment_type || 'freelancer';
     const projCount = new Set(rows.map(r => r.project_id)).size;
+    const fired     = devStatuses[name]?.status === 'inactive';
     const totalMgm  = rows.filter(r => r.is_active !== false).reduce((s, m) => {
       const buy = m.employment_type === 'staff' ? (m.salary||0)/160 : (m.buy_rate||0);
       return s + ((m.sell_rate||0) - buy) * (m.hours_load||0);
     }, 0);
-    return { name, rows, empType, projCount, totalMgm };
+    return { name, rows, empType, projCount, totalMgm, fired };
   });
+}
 
-  // Type filter
-  if (devTypeFilter !== 'all') {
-    devEntries = devEntries.filter(d => d.empType === devTypeFilter);
+// ── SHARED: render one dev card ──
+function renderDevCard({name, rows, empType, projCount, totalMgm, fired}) {
+  const initials = name.split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+  const sorted   = [...rows].sort((a,b) => {
+    if ((a.is_active===false) !== (b.is_active===false)) return a.is_active===false ? 1:-1;
+    return a.projectName.localeCompare(b.projectName);
+  });
+  const projRows = sorted.map(m => {
+    const buy       = m.employment_type==='staff' ? (m.salary||0)/160 : (m.buy_rate||0);
+    const marg      = (m.sell_rate||0) - buy;
+    const revMonth  = (m.sell_rate||0) * (m.hours_load||0);
+    const margColor = marg >= 20 ? '#4ade80' : marg > 0 ? '#fbbf24' : '#f87171';
+    const inactive  = m.is_active === false;
+    const hpd       = Math.round((m.hours_load||0)/20*10)/10;
+    const buyFmt    = buy  % 1 === 0 ? buy  : buy.toFixed(2);
+    const margFmt   = marg % 1 === 0 ? marg : marg.toFixed(2);
+    return `
+    <div class="dev-proj-row dev-proj-cols" style="${inactive?'opacity:.42':''}"
+      onclick="openProjectDetail('${m.project_id}');event.stopPropagation()">
+      <div style="overflow:hidden">
+        <div class="dev-proj-name"${inactive?' style="text-decoration:line-through"':''}
+          title="${m.projectName}">${m.projectName}</div>
+        <div class="dev-proj-role">${m.role||'—'}&nbsp;·&nbsp;${hpd}&thinsp;ч/д</div>
+      </div>
+      <div class="dev-proj-buy">$${buyFmt}/h</div>
+      <div class="dev-proj-sell">$${m.sell_rate||0}/h</div>
+      <div class="dev-proj-margin" style="color:${margColor}">+$${margFmt}</div>
+      <div class="dev-proj-rev">$${Math.round(revMonth).toLocaleString()}</div>
+    </div>`;
+  }).join('');
+
+  const firedBadge = fired
+    ? `<span class="dev-stat-fired">● уволен</span>`
+    : '';
+
+  return `
+  <div class="dev-card" style="${fired?'opacity:.65':''}">
+    <div class="dev-card-header" onclick="openDevProfile(${JSON.stringify(name)})" style="cursor:pointer">
+      <div class="dev-avatar">${initials}</div>
+      <div class="dev-name">${name}</div>
+      <div class="dev-badge ${empType}">${empType==='staff'?'штатный':'фриланс'}</div>
+      ${firedBadge}
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-left:auto">${projCount}&thinsp;пр.</div>
+    </div>
+    <div class="dev-stats">
+      <div class="dev-stat">Маржа/мес&thinsp;<span style="color:${totalMgm>0?'var(--accent)':'var(--muted)'}">$${Math.round(totalMgm).toLocaleString()}</span></div>
+      <div class="dev-stat">Проектов&thinsp;<span>${projCount}</span></div>
+      <div class="dev-stat">Роль&thinsp;<span>${[...new Set(rows.map(r=>r.role))].filter(Boolean).join(', ')||'—'}</span></div>
+    </div>
+    <div class="dev-projects">
+      <div class="dev-proj-head dev-proj-cols">
+        <div>Проект / Роль</div><div style="text-align:right">Buy</div>
+        <div style="text-align:right">Sell</div><div style="text-align:right">Маржа/h</div>
+        <div style="text-align:right">Rev/мес</div>
+      </div>
+      ${projRows}
+    </div>
+  </div>`;
+}
+
+// ── RENDER DEVELOPERS LIST ──
+function renderDevsList() {
+  const q  = projSearchQuery.trim().toLowerCase();
+  const el = document.getElementById('dev-cards');
+
+  let all = buildDevEntries();
+
+  // Update counter
+  const dc = document.getElementById('proj-tab-devs-count');
+  if (dc) dc.textContent = all.length;
+
+  // Split fired / active
+  const firedAll  = all.filter(d => d.fired);
+  const activeAll = all.filter(d => !d.fired);
+
+  // Apply type filter
+  let show, showFired;
+  if (devTypeFilter === 'inactive') {
+    show = []; showFired = firedAll;
+  } else if (devTypeFilter === 'all') {
+    show = activeAll; showFired = firedAll;
+  } else {
+    show = activeAll.filter(d => d.empType === devTypeFilter); showFired = [];
   }
 
-  // Search filter
-  if (q) {
-    devEntries = devEntries.filter(d =>
-      d.name.toLowerCase().includes(q) ||
-      d.rows.some(r => r.projectName.toLowerCase().includes(q))
-    );
-  }
+  // Search
+  const applySearch = arr => !q ? arr : arr.filter(d =>
+    d.name.toLowerCase().includes(q) ||
+    d.rows.some(r => r.projectName.toLowerCase().includes(q))
+  );
+  show      = applySearch(show).sort((a,b) => a.name.localeCompare(b.name));
+  showFired = applySearch(showFired).sort((a,b) => a.name.localeCompare(b.name));
 
-  if (!devEntries.length) {
+  if (!show.length && !showFired.length) {
     el.innerHTML = `<div style="text-align:center;padding:60px 20px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted)">Разработчики не найдены</div>`;
     return;
   }
 
-  // Sort alphabetically within each type
-  devEntries.sort((a,b) => a.name.localeCompare(b.name));
-
-  // Helper: render one dev card
-  function devCard({name, rows, empType, projCount, totalMgm}) {
-    const initials = name.split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
-    const sorted   = [...rows].sort((a,b) => {
-      if ((a.is_active===false) !== (b.is_active===false)) return a.is_active===false ? 1:-1;
-      return a.projectName.localeCompare(b.projectName);
-    });
-    const projRows = sorted.map(m => {
-      const buy       = m.employment_type==='staff' ? (m.salary||0)/160 : (m.buy_rate||0);
-      const marg      = (m.sell_rate||0) - buy;
-      const revMonth  = (m.sell_rate||0) * (m.hours_load||0);
-      const margColor = marg >= 20 ? '#4ade80' : marg > 0 ? '#fbbf24' : '#f87171';
-      const inactive  = m.is_active === false;
-      const hpd       = Math.round((m.hours_load||0)/20*10)/10;
-      const buyFmt    = buy  % 1 === 0 ? buy  : buy.toFixed(2);
-      const margFmt   = marg % 1 === 0 ? marg : marg.toFixed(2);
-      return `
-      <div class="dev-proj-row dev-proj-cols" style="${inactive?'opacity:.42':''}"
-        onclick="openProjectDetail('${m.project_id}');event.stopPropagation()">
-        <div style="overflow:hidden">
-          <div class="dev-proj-name"${inactive?' style="text-decoration:line-through"':''}
-            title="${m.projectName}">${m.projectName}</div>
-          <div class="dev-proj-role">${m.role||'—'}&nbsp;·&nbsp;${hpd}&thinsp;ч/д</div>
-        </div>
-        <div class="dev-proj-buy">$${buyFmt}/h</div>
-        <div class="dev-proj-sell">$${m.sell_rate||0}/h</div>
-        <div class="dev-proj-margin" style="color:${margColor}">+$${margFmt}</div>
-        <div class="dev-proj-rev">$${Math.round(revMonth).toLocaleString()}</div>
-      </div>`;
-    }).join('');
-
-    return `
-    <div class="dev-card">
-      <div class="dev-card-header">
-        <div class="dev-avatar">${initials}</div>
-        <div class="dev-name">${name}</div>
-        <div class="dev-badge ${empType}">${empType==='staff'?'штатный':'фриланс'}</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-left:auto">${projCount}&thinsp;пр.</div>
-      </div>
-      <div class="dev-stats">
-        <div class="dev-stat">Маржа/мес&thinsp;<span style="color:${totalMgm>0?'var(--accent)':'var(--muted)'}">$${Math.round(totalMgm).toLocaleString()}</span></div>
-        <div class="dev-stat">Проектов&thinsp;<span>${projCount}</span></div>
-        <div class="dev-stat">Роль&thinsp;<span>${[...new Set(rows.map(r=>r.role))].filter(Boolean).join(', ')||'—'}</span></div>
-      </div>
-      <div class="dev-projects">
-        <div class="dev-proj-head dev-proj-cols">
-          <div>Проект / Роль</div><div style="text-align:right">Buy</div>
-          <div style="text-align:right">Sell</div><div style="text-align:right">Маржа/h</div>
-          <div style="text-align:right">Rev/мес</div>
-        </div>
-        ${projRows}
-      </div>
-    </div>`;
-  }
-
-  // Render with section labels when showing all types
+  let html = '';
   if (devTypeFilter === 'all') {
-    const staff = devEntries.filter(d => d.empType === 'staff');
-    const free  = devEntries.filter(d => d.empType !== 'staff');
-    let html = '';
+    const staff = show.filter(d => d.empType === 'staff');
+    const free  = show.filter(d => d.empType !== 'staff');
     if (staff.length) {
-      html += `<div class="dev-section-label">Штатные &nbsp;<span style="font-size:11px;color:#60a5fa">${staff.length}</span></div>`;
-      html += staff.map(devCard).join('');
+      html += `<div class="dev-section-label">Штатные&nbsp;<span style="font-size:11px;color:#60a5fa">${staff.length}</span></div>`;
+      html += staff.map(renderDevCard).join('');
     }
     if (free.length) {
-      html += `<div class="dev-section-label" style="margin-top:${staff.length?'12px':'0'}">Фрилансеры &nbsp;<span style="font-size:11px;color:#fb923c">${free.length}</span></div>`;
-      html += free.map(devCard).join('');
+      html += `<div class="dev-section-label"${staff.length?' style="margin-top:12px"':''}>Фрилансеры&nbsp;<span style="font-size:11px;color:#fb923c">${free.length}</span></div>`;
+      html += free.map(renderDevCard).join('');
     }
-    el.innerHTML = html;
-  } else {
-    el.innerHTML = devEntries.map(devCard).join('');
+  } else if (devTypeFilter !== 'inactive') {
+    html = show.map(renderDevCard).join('');
+  }
+  if (showFired.length) {
+    html += `<div class="dev-section-label" style="margin-top:${show.length?'20px':'0'}">Уволенные&nbsp;<span style="font-size:11px;color:#f87171">${showFired.length}</span></div>`;
+    html += showFired.map(renderDevCard).join('');
+  }
+  el.innerHTML = html;
+}
+
+// ── DEVELOPER PROFILE ──
+function openDevProfile(name) {
+  currentDevName = name;
+  document.getElementById('proj-list-view').style.display    = 'none';
+  document.getElementById('dev-detail-view').style.display   = 'block';
+  renderDevProfile(name);
+}
+function closeDevProfile() {
+  currentDevName = null;
+  document.getElementById('dev-detail-view').style.display   = 'none';
+  document.getElementById('proj-list-view').style.display    = 'block';
+  document.getElementById('proj-cards').style.display        = 'none';
+  document.getElementById('dev-cards').style.display         = 'flex';
+  document.getElementById('dev-type-btns').style.display     = 'flex';
+  renderDevsList();
+}
+
+function renderDevProfile(name) {
+  const rows = projMembers.filter(m => m.dev_name === name).map(m => {
+    const p = projects.find(x => x.id === m.project_id);
+    return { ...m, projectName: p ? p.name : '—' };
+  });
+  if (!rows.length) { document.getElementById('dev-detail-content').innerHTML = '<p style="color:var(--muted)">Нет данных</p>'; return; }
+
+  const ds      = devStatuses[name] || { status: 'active' };
+  const empType = rows[0].employment_type || 'freelancer';
+  const initials= name.split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+  const fired   = ds.status === 'inactive';
+  const roles   = [...new Set(rows.map(r=>r.role).filter(Boolean))].join(', ') || '—';
+
+  const activeRows = rows.filter(r => r.is_active !== false);
+  const monthlyRev = activeRows.reduce((s,m) => s + (m.sell_rate||0)*(m.hours_load||0), 0);
+  const monthlyBuy = activeRows.reduce((s,m) => {
+    const buy = m.employment_type==='staff' ? (m.salary||0)/160 : (m.buy_rate||0);
+    return s + buy*(m.hours_load||0);
+  }, 0);
+  const monthlyMarg = monthlyRev - monthlyBuy;
+
+  // Estimated all-time revenue: sell_rate * hours * months_on_project
+  let totalRevEst = 0;
+  rows.forEach(m => {
+    const p = projects.find(x => x.id === m.project_id);
+    const startStr = m.dev_start_date || (p && p.start_date);
+    if (!startStr) { totalRevEst += (m.sell_rate||0)*(m.hours_load||0); return; }
+    const start  = new Date(startStr);
+    const endStr = m.dev_end_date;
+    const end    = endStr ? new Date(endStr) : new Date();
+    const months = Math.max(1, (end - start) / (1000*60*60*24*30.44));
+    totalRevEst += (m.sell_rate||0) * (m.hours_load||0) * months;
+  });
+
+  const kpis = [
+    ['Rev/мес',       '$' + Math.round(monthlyRev).toLocaleString(),  'var(--accent)'],
+    ['Маржа/мес',     '$' + Math.round(monthlyMarg).toLocaleString(), monthlyMarg>0?'var(--accent)':'#f87171'],
+    ['Активных пр.',  activeRows.length,                               'var(--text)'],
+    ['Всего пр.',     new Set(rows.map(r=>r.project_id)).size,         'var(--muted2)'],
+    ['≈ Всего rev',   '$' + Math.round(totalRevEst).toLocaleString(),  '#a78bfa'],
+  ];
+
+  const projTableRows = [...rows].sort((a,b) => {
+    if ((a.is_active===false)!==(b.is_active===false)) return a.is_active===false?1:-1;
+    return a.projectName.localeCompare(b.projectName);
+  }).map(m => {
+    const buy       = m.employment_type==='staff' ? (m.salary||0)/160 : (m.buy_rate||0);
+    const marg      = (m.sell_rate||0) - buy;
+    const revMonth  = (m.sell_rate||0) * (m.hours_load||0);
+    const margColor = marg>=20?'#4ade80':marg>0?'#fbbf24':'#f87171';
+    const inactive  = m.is_active === false;
+    const hpd       = Math.round((m.hours_load||0)/20*10)/10;
+    const buyFmt    = buy%1===0?buy:buy.toFixed(2);
+    const margFmt   = marg%1===0?marg:marg.toFixed(2);
+    const salaryStr = m.employment_type==='staff'?`$${(m.salary||0).toLocaleString()}/мес`:'—';
+    return `<tr style="${inactive?'opacity:.45':''}">
+      <td><span class="dev-proj-link" onclick="openProjectDetail('${m.project_id}')">${m.projectName}</span></td>
+      <td style="color:var(--muted2)">${m.role||'—'}</td>
+      <td style="text-align:right;color:var(--muted2)">${salaryStr}</td>
+      <td style="text-align:right;color:#60a5fa">$${buyFmt}/h</td>
+      <td style="text-align:right;color:#4ade80">$${m.sell_rate||0}/h</td>
+      <td style="text-align:right;color:${margColor}">+$${margFmt}/h</td>
+      <td style="text-align:right">${hpd}&thinsp;ч/д</td>
+      <td style="text-align:right;color:var(--accent)">$${Math.round(revMonth).toLocaleString()}</td>
+      <td style="text-align:center">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;padding:2px 7px;border-radius:2px;
+          ${inactive?'background:rgba(148,163,184,.1);color:#94a3b8;border:1px solid rgba(148,163,184,.2)'
+                    :'background:rgba(74,222,128,.12);color:#4ade80;border:1px solid rgba(74,222,128,.25)'}">
+          ${inactive?'завершён':'активен'}
+        </span>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('dev-detail-content').innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:18px;margin-bottom:28px;flex-wrap:wrap">
+      <div style="width:56px;height:56px;border-radius:50%;flex-shrink:0;
+        background:linear-gradient(135deg,#232323,#333);
+        display:flex;align-items:center;justify-content:center;
+        font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--muted2);
+        border:2px solid var(--border)">${initials}</div>
+      <div style="flex:1;min-width:160px">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:3px;color:var(--accent);line-height:1">${name}</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+          <span class="dev-badge ${empType}">${empType==='staff'?'штатный':'фриланс'}</span>
+          <span class="${fired?'dev-stat-fired':'dev-stat-active'}">${fired?'● УВОЛЕН':'● АКТИВЕН'}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">Роли: ${roles}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+        ${fired
+          ? `<button onclick="setDevStatus(${JSON.stringify(name)},'active')"
+              style="background:rgba(74,222,128,.12);color:#4ade80;border:1px solid rgba(74,222,128,.25);
+              border-radius:3px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;
+              text-transform:uppercase;padding:8px 16px;cursor:pointer">✓ Восстановить</button>`
+          : `<button onclick="setDevStatus(${JSON.stringify(name)},'inactive')"
+              style="background:none;color:#f87171;border:1px solid rgba(248,113,113,.25);border-radius:3px;
+              font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;
+              padding:8px 16px;cursor:pointer;transition:background .15s"
+              onmouseenter="this.style.background='rgba(248,113,113,.1)'"
+              onmouseleave="this.style.background='none'">✕ Уволить</button>`}
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:32px">
+      ${kpis.map(([l,v,c])=>`
+        <div class="kpi" style="flex:1;min-width:100px">
+          <div class="kpi-label">${l}</div>
+          <div class="kpi-val" style="font-size:20px;color:${c}">${v}</div>
+        </div>`).join('')}
+    </div>
+
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">Проекты</div>
+    <div style="overflow-x:auto;margin-bottom:20px">
+      <table class="members-table">
+        <thead><tr>
+          <th>Проект</th><th>Роль</th><th>Зарплата</th>
+          <th style="text-align:right">Buy</th><th style="text-align:right">Sell</th>
+          <th style="text-align:right">Маржа/h</th><th style="text-align:right">Ч/день</th>
+          <th style="text-align:right">Rev/мес</th><th>Статус</th>
+        </tr></thead>
+        <tbody>${projTableRows}</tbody>
+      </table>
+    </div>`;
+}
+
+async function setDevStatus(name, status) {
+  const prev = devStatuses[name] ? { ...devStatuses[name] } : null;
+  devStatuses[name] = { dev_name: name, status, updated_at: new Date().toISOString() };
+  if (currentDevName === name) renderDevProfile(name);
+  const { error } = await sb.from('developer_status').upsert(
+    { dev_name: name, status, updated_at: new Date().toISOString() },
+    { onConflict: 'dev_name' }
+  );
+  if (error) {
+    if (prev) devStatuses[name] = prev; else delete devStatuses[name];
+    if (currentDevName === name) renderDevProfile(name);
+    alert('Ошибка: ' + error.message);
   }
 }
 
