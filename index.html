@@ -170,6 +170,9 @@
   .mc-sep{color:var(--sep);} .mc-oct{color:var(--oct);} .mc-nov{color:var(--nov);} .mc-dec{color:var(--dec);}
 
   /* ── PROJECTS ── */
+  .proj-tab-btn{color:var(--muted)!important;}
+  .proj-tab-btn.active{color:var(--accent)!important;border-bottom-color:var(--accent)!important;}
+  .proj-tab-btn:hover{color:var(--text)!important;}
   .proj-card{
     background:var(--surface);border:1px solid var(--border);border-radius:6px;
     padding:18px 22px;cursor:pointer;transition:border-color .15s,box-shadow .15s;
@@ -585,7 +588,7 @@
 
   <!-- LIST VIEW -->
   <div id="proj-list-view" style="max-width:1200px;margin:0 auto;padding:80px 24px 40px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;flex-wrap:wrap;gap:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
       <div>
         <div style="font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:4px;color:var(--accent)">Projects</div>
         <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:2px">Команда · Рейты · Маржа</div>
@@ -596,6 +599,23 @@
         + Проект
       </button>
     </div>
+
+    <!-- Active / Inactive tabs -->
+    <div style="display:flex;gap:6px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:0">
+      <button class="proj-tab-btn active" data-tab="active" onclick="switchProjTab('active')"
+        style="background:none;border:none;border-bottom:2px solid transparent;padding:8px 18px 10px;
+        font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;
+        cursor:pointer;color:var(--muted);transition:all .15s;margin-bottom:-1px">
+        Активные&nbsp;<span id="proj-tab-active-count" style="font-size:10px;opacity:.6"></span>
+      </button>
+      <button class="proj-tab-btn" data-tab="inactive" onclick="switchProjTab('inactive')"
+        style="background:none;border:none;border-bottom:2px solid transparent;padding:8px 18px 10px;
+        font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;
+        cursor:pointer;color:var(--muted);transition:all .15s;margin-bottom:-1px">
+        Неактивные&nbsp;<span id="proj-tab-inactive-count" style="font-size:10px;opacity:.6"></span>
+      </button>
+    </div>
+
     <div id="proj-cards" style="display:flex;flex-direction:column;gap:10px"></div>
   </div>
 
@@ -1736,11 +1756,12 @@ async function submitNewDeal() {
 // ══════════════════════════════════════════════════════════
 //  PROJECTS STATE
 // ══════════════════════════════════════════════════════════
-let projects      = [];
-let projMembers   = [];
-let projEvents    = [];
-let currentProjId = null;
-let editingProjId = null;   // for modal edit
+let projects        = [];
+let projMembers     = [];
+let projEvents      = [];
+let currentProjId   = null;
+let editingProjId   = null;
+let projStatusFilter = 'active';   // 'active' | 'inactive'
 
 // ── LOAD ──
 async function loadProjectsData() {
@@ -1787,17 +1808,43 @@ const marginDollar = m => ((m.sell_rate||0)-(m.buy_rate||0))*(m.hours_load||0);
 const marginPct    = m => m.sell_rate>0 ? (((m.sell_rate-m.buy_rate)/m.sell_rate)*100) : 0;
 const EVENT_ICONS  = { member_added:'➕', member_removed:'➖', rate_change:'💰', note:'📝', status_change:'🔄', date_change:'📅' };
 
+// ── STATUS FILTER TABS ──
+function switchProjTab(tab) {
+  projStatusFilter = tab;
+  document.querySelectorAll('.proj-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  renderProjectsList();
+}
+
 // ── RENDER LIST ──
 function renderProjectsList() {
+  // update tab counters
+  const activeCount   = projects.filter(p => p.status === 'active').length;
+  const inactiveCount = projects.filter(p => p.status !== 'active').length;
+  const ac = document.getElementById('proj-tab-active-count');
+  const ic = document.getElementById('proj-tab-inactive-count');
+  if (ac) ac.textContent = activeCount;
+  if (ic) ic.textContent = inactiveCount;
+
+  const filtered = projects.filter(p =>
+    projStatusFilter === 'active' ? p.status === 'active' : p.status !== 'active'
+  );
+
   const el = document.getElementById('proj-cards');
-  if (!projects.length) {
-    el.innerHTML = `<div style="text-align:center;padding:60px 20px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted)">Нет проектов — нажми «+ Проект»</div>`;
+  if (!filtered.length) {
+    el.innerHTML = `<div style="text-align:center;padding:60px 20px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted)">Нет проектов</div>`;
     return;
   }
-  el.innerHTML = projects.map(p => {
-    const members = projMembers.filter(m => m.project_id === p.id && m.is_active);
-    const totalMargin = members.reduce((s,m)=>s+marginDollar(m),0);
-    const hasLowMargin = members.some(m=>((m.sell_rate||0)-(m.buy_rate||0))<20);
+  el.innerHTML = filtered.map(p => {
+    const members = projMembers.filter(m => m.project_id === p.id);
+    const active  = members.filter(m => m.is_active);
+    const totalMargin = active.reduce((s,m)=>{
+      const buy = m.employment_type==='staff'?(m.salary||0)/160:(m.buy_rate||0);
+      return s+((m.sell_rate||0)-buy)*(m.hours_load||0);
+    },0);
+    const hasLowMargin = active.some(m=>{
+      const buy = m.employment_type==='staff'?(m.salary||0)/160:(m.buy_rate||0);
+      return ((m.sell_rate||0)-buy)<20;
+    });
     return `
     <div class="proj-card" onclick="openProjectDetail('${p.id}')">
       <div class="proj-card-header">
@@ -2080,6 +2127,8 @@ async function saveProjModal() {
         project_id: editingProjId, event_type:'status_change',
         description: `Статус изменён: ${oldP.status} → ${payload.status}`,
       }]);
+      // auto-switch list tab to match new status
+      projStatusFilter = payload.status === 'active' ? 'active' : 'inactive';
     }
   } else {
     ({ error: err } = await sb.from('projects').insert([payload]));
