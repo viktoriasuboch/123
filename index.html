@@ -1996,10 +1996,13 @@ function renderProjectsList() {
   el.innerHTML = filtered.map(p => {
     const members = projMembers.filter(m => m.project_id === p.id);
     const active  = members.filter(m => m.is_active);
+    const totalHours  = active.reduce((s,m) => s+(m.hours_load||0), 0);
+    const totalRev    = active.reduce((s,m) => s+(m.sell_rate||0)*(m.hours_load||0), 0);
     const totalMargin = active.reduce((s,m)=>{
       const buy = m.employment_type==='staff'?(m.salary||0)/160:(m.buy_rate||0);
       return s+((m.sell_rate||0)-buy)*(m.hours_load||0);
     },0);
+    const avgMargH = totalHours > 0 ? totalMargin / totalHours : 0;
     const hasLowMargin = active.some(m=>{
       const buy = m.employment_type==='staff'?(m.salary||0)/160:(m.buy_rate||0);
       return ((m.sell_rate||0)-buy)<20;
@@ -2013,9 +2016,10 @@ function renderProjectsList() {
       </div>
       <div class="proj-card-meta">
         <div class="proj-meta-item">Старт<span>${fmtDate(p.start_date)}</span></div>
-        <div class="proj-meta-item">Продолжительность<span>${p.expected_duration||'—'}</span></div>
         <div class="proj-meta-item">Команда<span>${members.length} чел.</span></div>
-        <div class="proj-meta-item">Маржа/мес<span style="color:${totalMargin>0?'var(--accent)':'var(--muted)'}">$${Math.round(totalMargin).toLocaleString()}</span></div>
+        <div class="proj-meta-item">Rev/мес<span style="color:var(--accent)">$${Math.round(totalRev).toLocaleString()}</span></div>
+        <div class="proj-meta-item">Маржа/мес<span style="color:${totalMargin>0?'#4ade80':'var(--muted)'}">$${Math.round(totalMargin).toLocaleString()}</span></div>
+        <div class="proj-meta-item">Ср. маржа<span style="color:${avgMargH>=20?'#4ade80':avgMargH>0?'#fbbf24':'var(--muted)'}">$${avgMargH.toFixed(1)}/h</span></div>
       </div>
     </div>`;
   }).join('');
@@ -2148,7 +2152,42 @@ function renderDevsList() {
     return;
   }
 
-  let html = '';
+  // Summary bar – active projects only
+  const activeProjIds = new Set(projects.filter(p=>(p.status||'active')==='active').map(p=>p.id));
+  const amems = projMembers.filter(m=>activeProjIds.has(m.project_id) && m.is_active!==false);
+  const amLen = amems.length;
+  const avgBuy  = amLen ? amems.reduce((s,m)=>s+(m.employment_type==='staff'?(m.salary||0)/160:(m.buy_rate||0)),0)/amLen : 0;
+  const avgSell = amLen ? amems.reduce((s,m)=>s+(m.sell_rate||0),0)/amLen : 0;
+  const totRevA = amems.reduce((s,m)=>s+(m.sell_rate||0)*(m.hours_load||0),0);
+  const totMargA= amems.reduce((s,m)=>{
+    const b=m.employment_type==='staff'?(m.salary||0)/160:(m.buy_rate||0);
+    return s+((m.sell_rate||0)-b)*(m.hours_load||0);
+  },0);
+  const summaryBar = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;padding:14px 16px;
+      background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px">
+      <div style="flex:1;min-width:110px;text-align:center">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Ср. buy rate</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--accent)">$${avgBuy.toFixed(1)}<span style="font-size:12px;color:var(--muted)">/h</span></div>
+      </div>
+      <div style="flex:1;min-width:110px;text-align:center">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Ср. sell rate</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:#4ade80">$${avgSell.toFixed(1)}<span style="font-size:12px;color:var(--muted)">/h</span></div>
+      </div>
+      <div style="flex:1;min-width:110px;text-align:center">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Rev/мес</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--text)">$${Math.round(totRevA).toLocaleString()}</div>
+      </div>
+      <div style="flex:1;min-width:110px;text-align:center">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Маржа/мес</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:#60a5fa">$${Math.round(totMargA).toLocaleString()}</div>
+      </div>
+      <div style="flex:0 0 auto;align-self:center;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);padding-left:8px;border-left:1px solid var(--border)">
+        Активные проекты · ${amLen} позиций
+      </div>
+    </div>`;
+
+  let html = summaryBar;
   if (devTypeFilter === 'all') {
     const staff = show.filter(d => d.empType === 'staff');
     const free  = show.filter(d => d.empType !== 'staff');
@@ -2161,7 +2200,7 @@ function renderDevsList() {
       html += free.map(renderDevCard).join('');
     }
   } else if (devTypeFilter !== 'inactive') {
-    html = show.map(renderDevCard).join('');
+    html += show.map(renderDevCard).join('');
   }
   if (showFired.length) {
     html += `<div class="dev-section-label" style="margin-top:${show.length?'20px':'0'}">Уволенные&nbsp;<span style="font-size:11px;color:#f87171">${showFired.length}</span></div>`;
@@ -2456,19 +2495,27 @@ function renderProjectDetail(id) {
 
     <!-- KPI row -->
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
-      ${[
-        ['Всего в команде', members.length + ' чел.'],
-        ['Активных', members.filter(m=>m.is_active).length + ' чел.'],
-        ['Маржа/мес', '$' + Math.round(members.filter(m=>m.is_active).reduce((s,m)=>{
-          const buy = m.employment_type==='staff' ? (m.salary||0)/160 : (m.buy_rate||0);
-          return s + ((m.sell_rate||0)-buy)*(m.hours_load||0);
-        },0)).toLocaleString()],
-        ['Низкая маржа', members.filter(m=>{
-          if(!m.is_active) return false;
-          const buy = m.employment_type==='staff' ? (m.salary||0)/160 : (m.buy_rate||0);
-          return ((m.sell_rate||0)-buy)<20;
-        }).length + ' чел.'],
-      ].map(([l,v])=>`<div class="kpi" style="flex:1;min-width:120px"><div class="kpi-label">${l}</div><div class="kpi-val" style="font-size:22px">${v}</div></div>`).join('')}
+      ${(()=>{
+        const active = members.filter(m=>m.is_active);
+        const totalRev  = active.reduce((s,m)=>s+(m.sell_rate||0)*(m.hours_load||0),0);
+        const totalMarg = active.reduce((s,m)=>{
+          const buy = m.employment_type==='staff'?(m.salary||0)/160:(m.buy_rate||0);
+          return s+((m.sell_rate||0)-buy)*(m.hours_load||0);
+        },0);
+        const totalH  = active.reduce((s,m)=>s+(m.hours_load||0),0);
+        const avgMargH= totalH>0 ? totalMarg/totalH : 0;
+        return [
+          ['Всего в команде', members.length + ' чел.'],
+          ['Активных',        active.length + ' чел.'],
+          ['Rev/мес',         '$' + Math.round(totalRev).toLocaleString()],
+          ['Маржа/мес',       '$' + Math.round(totalMarg).toLocaleString()],
+          ['Ср. маржа $/h',   '$' + avgMargH.toFixed(1)],
+          ['Низкая маржа',    active.filter(m=>{
+            const buy = m.employment_type==='staff'?(m.salary||0)/160:(m.buy_rate||0);
+            return ((m.sell_rate||0)-buy)<20;
+          }).length + ' чел.'],
+        ].map(([l,v])=>`<div class="kpi" style="flex:1;min-width:110px"><div class="kpi-label">${l}</div><div class="kpi-val" style="font-size:22px">${v}</div></div>`).join('');
+      })()}
     </div>
 
     <!-- Team table -->
