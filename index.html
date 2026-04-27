@@ -2247,33 +2247,7 @@ function renderDevProfile(name) {
   }, 0);
   const monthlyMarg = monthlyRev - monthlyBuy;
 
-  // Estimated all-time revenue: sell_rate * hours * months_on_project
-  // Only counted when duration is knowable:
-  //   • dev_end_date is set (explicit end), OR
-  //   • member is still active AND project is still active → use today
-  // Completed projects with no end date are skipped (duration unknown).
-  let totalRevEst = 0;
-  rows.forEach(m => {
-    const p = projects.find(x => x.id === m.project_id);
-    const projActive = p && (p.status || 'active') === 'active';
-    const memActive  = m.is_active !== false;
-    const endStr     = m.dev_end_date;
-
-    let end;
-    if (endStr) {
-      end = new Date(endStr);
-    } else if (memActive && projActive) {
-      end = new Date(); // still working → use today
-    } else {
-      return; // completed/unknown assignment, skip to avoid inflated numbers
-    }
-
-    const startStr = m.dev_start_date || (p && p.start_date);
-    if (!startStr) { totalRevEst += (m.sell_rate||0)*(m.hours_load||0); return; }
-    const start  = new Date(startStr);
-    const months = Math.max(1, (end - start) / (1000*60*60*24*30.44));
-    totalRevEst += (m.sell_rate||0) * (m.hours_load||0) * months;
-  });
+  const totalRevEst = 0;
 
   const kpis = [
     ['Rev/мес',       '$' + Math.round(monthlyRev).toLocaleString(),  'var(--accent)'],
