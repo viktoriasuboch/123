@@ -299,15 +299,22 @@
   /* history */
   .event-list{display:flex;flex-direction:column;gap:0;margin-top:8px;}
   .event-item{
-    display:grid;grid-template-columns:32px 1fr;gap:12px;
-    padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04);
+    display:flex;align-items:flex-start;gap:12px;
+    padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05);
   }
   .event-icon{
     width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-    font-size:13px;background:var(--surface);border:1px solid var(--border);flex-shrink:0;margin-top:2px;
+    font-size:13px;background:var(--surface);border:1px solid var(--border);flex-shrink:0;margin-top:1px;
   }
-  .event-text{font-family:'IBM Plex Sans',sans-serif;font-size:13px;color:var(--text);line-height:1.4;}
-  .event-meta{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);margin-top:2px;}
+  .event-body{flex:1;min-width:0;}
+  .event-text{font-family:'IBM Plex Sans',sans-serif;font-size:13px;color:var(--text);line-height:1.45;word-break:break-word;}
+  .event-meta{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);margin-top:3px;}
+  .event-del{
+    background:none;border:none;cursor:pointer;flex-shrink:0;
+    color:#555;font-size:16px;line-height:1;padding:3px 6px;border-radius:3px;
+    transition:all .15s;margin-top:1px;
+  }
+  .event-del:hover{color:#f87171;background:rgba(248,113,113,.1);}
   .event-comment{
     font-family:'IBM Plex Sans',sans-serif;font-size:12px;color:var(--muted2);
     font-style:italic;margin-top:3px;
@@ -2073,13 +2080,14 @@ function renderDevCard({name, rows, empType, projCount, totalMgm, fired}) {
     </div>`;
   }).join('');
 
+  const safeName  = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   const firedBadge = fired
     ? `<span class="dev-stat-fired">● уволен</span>`
     : '';
 
   return `
   <div class="dev-card" style="${fired?'opacity:.65':''}">
-    <div class="dev-card-header" onclick="openDevProfile(${JSON.stringify(name)})" style="cursor:pointer">
+    <div class="dev-card-header" onclick="openDevProfile('${safeName}')" style="cursor:pointer">
       <div class="dev-avatar">${initials}</div>
       <div class="dev-name">${name}</div>
       <div class="dev-badge ${empType}">${empType==='staff'?'штатный':'фриланс'}</div>
@@ -2253,6 +2261,7 @@ function renderDevProfile(name) {
     </tr>`;
   }).join('');
 
+  const safeN = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   document.getElementById('dev-detail-content').innerHTML = `
     <div style="display:flex;align-items:flex-start;gap:18px;margin-bottom:28px;flex-wrap:wrap">
       <div style="width:56px;height:56px;border-radius:50%;flex-shrink:0;
@@ -2270,11 +2279,11 @@ function renderDevProfile(name) {
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
         ${fired
-          ? `<button onclick="setDevStatus(${JSON.stringify(name)},'active')"
+          ? `<button onclick="setDevStatus('${safeN}','active')"
               style="background:rgba(74,222,128,.12);color:#4ade80;border:1px solid rgba(74,222,128,.25);
               border-radius:3px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;
               text-transform:uppercase;padding:8px 16px;cursor:pointer">✓ Восстановить</button>`
-          : `<button onclick="setDevStatus(${JSON.stringify(name)},'inactive')"
+          : `<button onclick="setDevStatus('${safeN}','inactive')"
               style="background:none;color:#f87171;border:1px solid rgba(248,113,113,.25);border-radius:3px;
               font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;
               padding:8px 16px;cursor:pointer;transition:background .15s"
@@ -2396,20 +2405,14 @@ function renderProjectDetail(id) {
   }).join('');
 
   const evHtml = events.length ? events.map(e=>`
-    <div class="event-item" style="justify-content:space-between;align-items:flex-start">
-      <div style="display:flex;gap:10px;flex:1">
-        <div class="event-icon">${EVENT_ICONS[e.event_type]||'•'}</div>
-        <div>
-          <div class="event-text">${e.description||'—'}</div>
-          ${e.comment?`<div class="event-comment">"${e.comment}"</div>`:''}
-          <div class="event-meta">${new Date(e.created_at).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
-        </div>
+    <div class="event-item">
+      <div class="event-icon">${EVENT_ICONS[e.event_type]||'•'}</div>
+      <div class="event-body">
+        <div class="event-text">${e.description||'—'}</div>
+        ${e.comment?`<div class="event-comment">"${e.comment}"</div>`:''}
+        <div class="event-meta">${new Date(e.created_at).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
       </div>
-      <button onclick="deleteProjectEvent('${e.id}')"
-        style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 6px;flex-shrink:0;opacity:.5;transition:opacity .15s"
-        onmouseenter="this.style.opacity='1';this.style.color='#f87171'"
-        onmouseleave="this.style.opacity='.5';this.style.color='var(--muted)'"
-        title="Удалить">✕</button>
+      <button class="event-del" onclick="deleteProjectEvent('${e.id}')" title="Удалить">✕</button>
     </div>`).join('')
   : `<div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);padding:16px 0">История пуста</div>`;
 
