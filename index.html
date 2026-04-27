@@ -348,7 +348,7 @@
 
 <!-- ══ LANDING SCREEN ══════════════════════════════════ -->
 <div id="screen-landing" class="app-screen active">
-  <div class="landing-logo">Leadge Analytics</div>
+  <div class="landing-logo">💰 Victoria's Platform</div>
   <div class="landing-sub">Internal Operations Platform</div>
   <div class="section-cards">
     <div class="section-card" id="card-leadgen" onclick="openSection('leadgen')">
@@ -357,12 +357,11 @@
       <div class="section-card-title">Leadgen Bonus</div>
       <div class="section-card-desc">Бонусы · Сделки SQL / Закрытые<br>Зарплаты · Revenue</div>
     </div>
-    <div class="section-card coming-soon locked">
-      <div class="section-card-status"></div>
+    <div class="section-card" id="card-projects" onclick="openSection('projects')">
+      <div class="section-card-status" id="status-projects"></div>
       <span class="section-card-icon">📁</span>
       <div class="section-card-title">Projects</div>
-      <div class="section-card-desc">Управление проектами<br>Аналитика и статусы</div>
-      <span class="coming-badge">Coming soon</span>
+      <div class="section-card-desc">Управление проектами<br>Команда · Рейты · Маржа</div>
     </div>
   </div>
 </div>
@@ -1837,15 +1836,30 @@ function renderProjectDetail(id) {
   const events  = projEvents.filter(e=>e.project_id===id);
 
   const memberRows = members.map(m=>{
-    const mg  = (m.sell_rate||0)-(m.buy_rate||0);
-    const mgD = marginDollar(m);
-    const mgP = marginPct(m);
+    const isStaff = m.employment_type === 'staff';
+    const buyRate = isStaff ? Math.round((m.salary||0)/160*100)/100 : (m.buy_rate||0);
+    const mg  = (m.sell_rate||0) - buyRate;
+    const mgD = ((m.sell_rate||0) - buyRate) * (m.hours_load||0);
+    const mgP = (m.sell_rate||0) > 0 ? (((m.sell_rate||0) - buyRate) / (m.sell_rate||0) * 100) : 0;
     const low = mg < 20;
     return `
     <tr data-mid="${m.id}">
       <td><input class="proj-inline-input" value="${m.dev_name||''}" onblur="saveMemberField('${m.id}','dev_name',this.value)" style="min-width:120px"/></td>
       <td><input class="proj-inline-input" value="${m.role||''}" placeholder="—" onblur="saveMemberField('${m.id}','role',this.value)" style="min-width:80px"/></td>
-      <td><input class="proj-inline-input" type="number" value="${m.buy_rate||0}" onblur="saveMemberFieldNum('${m.id}','buy_rate',this.value)" style="min-width:60px;text-align:right"/></td>
+      <td>
+        <select class="proj-inline-select" onchange="saveMemberField('${m.id}','employment_type',this.value);renderProjectDetail('${id}')">
+          <option value="freelancer" ${!isStaff?'selected':''}>Фрилансер</option>
+          <option value="staff"      ${isStaff?'selected':''}>Штатный</option>
+        </select>
+      </td>
+      <td>${isStaff
+        ? `<input class="proj-inline-input" type="number" value="${m.salary||0}" onblur="saveMemberSalary('${m.id}',this.value)" style="min-width:80px;text-align:right" title="Зарплата в месяц ($)"/>`
+        : `<span style="color:var(--muted);font-size:11px;padding:0 8px">—</span>`
+      }</td>
+      <td>${isStaff
+        ? `<span class="proj-inline-input" style="display:inline-block;min-width:60px;text-align:right;background:rgba(255,255,255,.03);color:var(--muted2)" title="Авто: зарплата ÷ 160">$${buyRate.toFixed(2)}</span>`
+        : `<input class="proj-inline-input" type="number" value="${m.buy_rate||0}" onblur="saveMemberFieldNum('${m.id}','buy_rate',this.value)" style="min-width:60px;text-align:right"/>`
+      }</td>
       <td><input class="proj-inline-input" type="number" value="${m.sell_rate||0}" onblur="saveMemberFieldNum('${m.id}','sell_rate',this.value)" style="min-width:60px;text-align:right"/></td>
       <td class="${low?'margin-low':'margin-ok'}">$${Math.round(mgD).toLocaleString()}</td>
       <td class="${low?'margin-low':'margin-ok'}">${mgP.toFixed(1)}%</td>
@@ -1911,8 +1925,15 @@ function renderProjectDetail(id) {
       ${[
         ['Всего в команде', members.length + ' чел.'],
         ['Активных', members.filter(m=>m.is_active).length + ' чел.'],
-        ['Маржа/мес', '$' + Math.round(members.filter(m=>m.is_active).reduce((s,m)=>s+marginDollar(m),0)).toLocaleString()],
-        ['Низкая маржа', members.filter(m=>m.is_active&&((m.sell_rate||0)-(m.buy_rate||0))<20).length + ' чел.'],
+        ['Маржа/мес', '$' + Math.round(members.filter(m=>m.is_active).reduce((s,m)=>{
+          const buy = m.employment_type==='staff' ? (m.salary||0)/160 : (m.buy_rate||0);
+          return s + ((m.sell_rate||0)-buy)*(m.hours_load||0);
+        },0)).toLocaleString()],
+        ['Низкая маржа', members.filter(m=>{
+          if(!m.is_active) return false;
+          const buy = m.employment_type==='staff' ? (m.salary||0)/160 : (m.buy_rate||0);
+          return ((m.sell_rate||0)-buy)<20;
+        }).length + ' чел.'],
       ].map(([l,v])=>`<div class="kpi" style="flex:1;min-width:120px"><div class="kpi-label">${l}</div><div class="kpi-val" style="font-size:22px">${v}</div></div>`).join('')}
     </div>
 
@@ -1928,11 +1949,11 @@ function renderProjectDetail(id) {
     <div style="overflow-x:auto">
       <table class="members-table">
         <thead><tr>
-          <th>Имя</th><th>Роль</th><th>Buy $/h</th><th>Sell $/h</th>
+          <th>Имя</th><th>Роль</th><th>Тип</th><th>Зарплата/мес</th><th>Buy $/h</th><th>Sell $/h</th>
           <th>Маржа $</th><th>Маржа %</th><th>Часов/мес</th>
           <th>Старт</th><th>Конец</th><th>Статус</th><th></th>
         </tr></thead>
-        <tbody>${memberRows||`<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:20px">Нет разработчиков</td></tr>`}</tbody>
+        <tbody>${memberRows||`<tr><td colspan="13" style="text-align:center;color:var(--muted);padding:20px">Нет разработчиков</td></tr>`}</tbody>
       </table>
     </div>
 
@@ -1948,6 +1969,17 @@ function renderProjectDetail(id) {
           <label class="proj-label">Роль</label>
           <input id="nm-role" type="text" placeholder="Backend Dev" class="proj-input" style="padding:6px 10px;font-size:12px"/>
         </div>
+        <div style="display:flex;flex-direction:column;gap:4px;min-width:110px">
+          <label class="proj-label">Тип</label>
+          <select id="nm-type" class="proj-input" style="padding:6px 10px;font-size:12px" onchange="toggleNmSalary()">
+            <option value="freelancer">Фрилансер</option>
+            <option value="staff">Штатный</option>
+          </select>
+        </div>
+        <div id="nm-salary-wrap" style="display:none;flex-direction:column;gap:4px;min-width:110px">
+          <label class="proj-label">Зарплата $/мес</label>
+          <input id="nm-salary" type="number" value="0" min="0" class="proj-input" style="padding:6px 10px;font-size:12px;text-align:right" oninput="updateNmBuyFromSalary()"/>
+        </div>
         <div style="display:flex;flex-direction:column;gap:4px;min-width:80px">
           <label class="proj-label">Buy $/h</label>
           <input id="nm-buy" type="number" value="0" min="0" class="proj-input" style="padding:6px 10px;font-size:12px;text-align:right"/>
@@ -1958,7 +1990,7 @@ function renderProjectDetail(id) {
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;min-width:80px">
           <label class="proj-label">Часов/мес</label>
-          <input id="nm-hours" type="number" value="0" min="0" class="proj-input" style="padding:6px 10px;font-size:12px;text-align:right"/>
+          <input id="nm-hours" type="number" value="160" min="0" class="proj-input" style="padding:6px 10px;font-size:12px;text-align:right"/>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;min-width:120px">
           <label class="proj-label">Старт</label>
@@ -2062,32 +2094,65 @@ function openAddMember(projId) {
   document.getElementById('nm-err').style.display='none';
 }
 
+function toggleNmSalary() {
+  const isStaff = document.getElementById('nm-type').value === 'staff';
+  const wrap = document.getElementById('nm-salary-wrap');
+  wrap.style.display = isStaff ? 'flex' : 'none';
+  if (isStaff) updateNmBuyFromSalary();
+}
+function updateNmBuyFromSalary() {
+  const salary = parseFloat(document.getElementById('nm-salary').value) || 0;
+  document.getElementById('nm-buy').value = (salary / 160).toFixed(2);
+}
+
+async function saveMemberSalary(id, value) {
+  const salary = parseFloat(value) || 0;
+  const buyRate = Math.round(salary / 160 * 100) / 100;
+  const old = projMembers.find(m=>m.id===id);
+  if (!old) return;
+  const {error} = await sb.from('project_members').update({ salary, buy_rate: buyRate }).eq('id', id);
+  if (error) return;
+  await sb.from('project_events').insert([{
+    project_id: old.project_id, member_id: id, event_type:'rate_change',
+    description:`${old.dev_name}: зарплата изменена → $${salary}/мес (buy rate $${buyRate}/h)`,
+    meta:{ salary, buy_rate: buyRate },
+  }]);
+}
+
 async function submitNewMember(projId) {
   const name = document.getElementById('nm-name').value.trim();
   if (!name) { const e=document.getElementById('nm-err'); e.textContent='Укажите имя'; e.style.display='block'; return; }
+  const empType = document.getElementById('nm-type').value;
+  const salary  = empType==='staff' ? (parseFloat(document.getElementById('nm-salary').value)||0) : 0;
+  const buyRate = empType==='staff' ? Math.round(salary/160*100)/100 : (parseFloat(document.getElementById('nm-buy').value)||0);
   const payload = {
-    project_id:     projId,
-    dev_name:       name,
-    role:           document.getElementById('nm-role').value.trim() || null,
-    buy_rate:       parseFloat(document.getElementById('nm-buy').value)   || 0,
-    sell_rate:      parseFloat(document.getElementById('nm-sell').value)  || 0,
-    hours_load:     parseFloat(document.getElementById('nm-hours').value) || 0,
-    dev_start_date: document.getElementById('nm-start').value || null,
+    project_id:      projId,
+    dev_name:        name,
+    role:            document.getElementById('nm-role').value.trim() || null,
+    employment_type: empType,
+    salary:          salary,
+    buy_rate:        buyRate,
+    sell_rate:       parseFloat(document.getElementById('nm-sell').value)  || 0,
+    hours_load:      parseFloat(document.getElementById('nm-hours').value) || 160,
+    dev_start_date:  document.getElementById('nm-start').value || null,
     is_active: true,
   };
   const {error} = await sb.from('project_members').insert([payload]);
   if (error) { const e=document.getElementById('nm-err'); e.textContent='Ошибка: '+error.message; e.style.display='block'; return; }
-  // log event
+  const typeLabel = empType==='staff'?'штатный':'фрилансер';
   await sb.from('project_events').insert([{
     project_id: projId, event_type:'member_added',
-    description:`Добавлен разработчик: ${name}${payload.role?' ('+payload.role+')':''}`,
-    meta:{ buy_rate:payload.buy_rate, sell_rate:payload.sell_rate, hours_load:payload.hours_load },
+    description:`Добавлен разработчик: ${name}${payload.role?' ('+payload.role+')':''} [${typeLabel}]`,
+    meta:{ employment_type:empType, salary, buy_rate:buyRate, sell_rate:payload.sell_rate, hours_load:payload.hours_load },
   }]);
   document.getElementById('nm-name').value='';
   document.getElementById('nm-role').value='';
+  document.getElementById('nm-type').value='freelancer';
+  document.getElementById('nm-salary').value='0';
+  document.getElementById('nm-salary-wrap').style.display='none';
   document.getElementById('nm-buy').value='0';
   document.getElementById('nm-sell').value='0';
-  document.getElementById('nm-hours').value='0';
+  document.getElementById('nm-hours').value='160';
   document.getElementById('nm-start').value='';
   document.getElementById('add-member-form').style.display='none';
 }
