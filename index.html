@@ -616,6 +616,19 @@
       </button>
     </div>
 
+    <!-- Search -->
+    <div style="margin-bottom:16px;position:relative">
+      <input id="proj-search" type="text" placeholder="Поиск по названию…"
+        oninput="projSearchQuery=this.value;renderProjectsList()"
+        style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:5px;
+        padding:9px 36px 9px 14px;font-family:'IBM Plex Mono',monospace;font-size:12px;
+        color:var(--text);outline:none;transition:border-color .15s;"
+        onfocus="this.style.borderColor='var(--accent)'"
+        onblur="this.style.borderColor='var(--border)'">
+      <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);
+        color:var(--muted);font-size:14px;pointer-events:none">🔍</span>
+    </div>
+
     <div id="proj-cards" style="display:flex;flex-direction:column;gap:10px"></div>
   </div>
 
@@ -1762,6 +1775,7 @@ let projEvents      = [];
 let currentProjId   = null;
 let editingProjId   = null;
 let projStatusFilter = 'active';   // 'active' | 'inactive'
+let projSearchQuery  = '';         // search string
 
 // ── LOAD ──
 async function loadProjectsData() {
@@ -1812,6 +1826,9 @@ const EVENT_ICONS  = { member_added:'➕', member_removed:'➖', rate_change:'�
 function switchProjTab(tab) {
   projStatusFilter = tab;
   document.querySelectorAll('.proj-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  projSearchQuery = '';
+  const si = document.getElementById('proj-search');
+  if (si) si.value = '';
   renderProjectsList();
 }
 
@@ -1825,9 +1842,12 @@ function renderProjectsList() {
   if (ac) ac.textContent = activeCount;
   if (ic) ic.textContent = inactiveCount;
 
-  const filtered = projects.filter(p =>
-    projStatusFilter === 'active' ? p.status === 'active' : p.status !== 'active'
-  );
+  const q = projSearchQuery.trim().toLowerCase();
+  const filtered = projects.filter(p => {
+    const statusOk = projStatusFilter === 'active' ? p.status === 'active' : p.status !== 'active';
+    const searchOk = !q || p.name.toLowerCase().includes(q);
+    return statusOk && searchOk;
+  });
 
   const el = document.getElementById('proj-cards');
   if (!filtered.length) {
