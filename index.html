@@ -2248,14 +2248,29 @@ function renderDevProfile(name) {
   const monthlyMarg = monthlyRev - monthlyBuy;
 
   // Estimated all-time revenue: sell_rate * hours * months_on_project
+  // Only counted when duration is knowable:
+  //   • dev_end_date is set (explicit end), OR
+  //   • member is still active AND project is still active → use today
+  // Completed projects with no end date are skipped (duration unknown).
   let totalRevEst = 0;
   rows.forEach(m => {
     const p = projects.find(x => x.id === m.project_id);
+    const projActive = p && (p.status || 'active') === 'active';
+    const memActive  = m.is_active !== false;
+    const endStr     = m.dev_end_date;
+
+    let end;
+    if (endStr) {
+      end = new Date(endStr);
+    } else if (memActive && projActive) {
+      end = new Date(); // still working → use today
+    } else {
+      return; // completed/unknown assignment, skip to avoid inflated numbers
+    }
+
     const startStr = m.dev_start_date || (p && p.start_date);
     if (!startStr) { totalRevEst += (m.sell_rate||0)*(m.hours_load||0); return; }
     const start  = new Date(startStr);
-    const endStr = m.dev_end_date;
-    const end    = endStr ? new Date(endStr) : new Date();
     const months = Math.max(1, (end - start) / (1000*60*60*24*30.44));
     totalRevEst += (m.sell_rate||0) * (m.hours_load||0) * months;
   });
@@ -2265,7 +2280,7 @@ function renderDevProfile(name) {
     ['Маржа/мес',     '$' + Math.round(monthlyMarg).toLocaleString(), monthlyMarg>0?'var(--accent)':'#f87171'],
     ['Активных пр.',  activeRows.length,                               'var(--text)'],
     ['Всего пр.',     new Set(rows.map(r=>r.project_id)).size,         'var(--muted2)'],
-    ['≈ Всего rev',   '$' + Math.round(totalRevEst).toLocaleString(),  '#a78bfa'],
+    ['≈ Всего rev',   totalRevEst > 0 ? '$' + Math.round(totalRevEst).toLocaleString() : '—',  '#a78bfa'],
   ];
 
   const projTableRows = [...rows].sort((a,b) => {
