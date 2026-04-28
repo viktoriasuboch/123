@@ -7,13 +7,13 @@
 /* ── LIGHT theme (default) ──────────────────────────────────────────── */
 :root {
   /* core surfaces */
-  --bg:        #f6f6f6;
+  --bg:        #f4f4f5;            /* zinc-100 — slightly cooler/darker than #f6f6f6 */
   --surface:   #ffffff;
-  --border-c:  #e4e4e7;
+  --border-c:  #d4d4d8;            /* zinc-300 — was zinc-200, more visible */
   --accent:    #ff1493;            /* neon pink — replaces lime accent */
-  --text:      #18181b;            /* zinc-900 */
-  --muted-c:   #71717a;            /* zinc-500 */
-  --muted2:    #52525b;            /* zinc-600 */
+  --text:      #09090b;            /* zinc-950 — slightly stronger than zinc-900 */
+  --muted-c:   #52525b;            /* zinc-600 — was zinc-500, darker for contrast */
+  --muted2:    #3f3f46;            /* zinc-700 — was zinc-600 */
 
   /* status colors — greens replaced with neon pink, others unchanged */
   --good:    #ec4899;              /* pink-500 — replaces green */
@@ -38,8 +38,8 @@
   --primary-foreground: #1a1a1a;
   --secondary: #e4e4e7;
   --secondary-foreground: var(--text);
-  --muted: #f4f4f5;
-  --muted-foreground: var(--muted-c);
+  --muted: #ececef;                /* slightly darker than --bg for visible cards-on-bg */
+  --muted-foreground: var(--muted2);  /* darker for legibility on white */
   --accent-foreground: #1a1a1a;
   --destructive: var(--bad);
   --border: var(--border-c);
