@@ -59,21 +59,22 @@
   --sidebar-ring: var(--accent);
 }
 
-/* ── DARK theme ─────────────────────────────────────────────────────── */
+/* ── DARK theme — vibrant / pure black ──────────────────────────────── */
 .dark {
-  --bg:        #3b3b3b;
-  --surface:   #434343;
-  --border-c:  #555555;
-  --accent:    #e8ff47;            /* original brand lime */
+  --bg:        #050505;            /* near-pure black */
+  --surface:   #0f0f0f;            /* card bg */
+  --border-c:  #1f1f1f;
+  --accent:    #e8ff47;            /* brand lime, unchanged */
   --text:      #f0f0f0;
-  --muted-c:   #787878;
-  --muted2:    #b0b0b0;
+  --muted-c:   #5a5a5a;
+  --muted2:    #a3a3a3;
 
-  --good:    #4ade80;
-  --bad:     #f87171;
-  --warn:    #fb923c;
-  --info:    #60a5fa;
-  --special: #a78bfa;
+  /* highly saturated status palette to match legacy SALES BONUS look */
+  --good:    #22ee7a;              /* neon green */
+  --bad:     #ff5757;              /* vivid red */
+  --warn:    #ff7a3c;              /* bright orange */
+  --info:    #22d3ee;              /* cyan */
+  --special: #c084fc;              /* vivid purple */
 
   --background: var(--bg);
   --foreground: var(--text);
@@ -82,12 +83,12 @@
   --popover: var(--surface);
   --popover-foreground: var(--text);
   --primary: var(--accent);
-  --primary-foreground: #1a1a1a;
-  --secondary: #525252;
+  --primary-foreground: #050505;
+  --secondary: #1f1f1f;
   --secondary-foreground: var(--text);
-  --muted: #4a4a4a;
+  --muted: #161616;
   --muted-foreground: var(--muted2);
-  --accent-foreground: #1a1a1a;
+  --accent-foreground: #050505;
   --destructive: var(--bad);
   --border: var(--border-c);
   --input: var(--border-c);
@@ -96,8 +97,8 @@
   --sidebar: var(--surface);
   --sidebar-foreground: var(--text);
   --sidebar-primary: var(--accent);
-  --sidebar-primary-foreground: #1a1a1a;
-  --sidebar-accent: #525252;
+  --sidebar-primary-foreground: #050505;
+  --sidebar-accent: #1f1f1f;
   --sidebar-accent-foreground: var(--text);
   --sidebar-border: var(--border-c);
   --sidebar-ring: var(--accent);
