@@ -13,6 +13,7 @@ import {
   ProjectEventInsert,
   Uuid,
 } from "@/lib/schemas";
+import { MONTHS } from "@/lib/months";
 
 const sb = () => createServerSupabase();
 
@@ -36,7 +37,34 @@ export async function createProject(formData: FormData) {
     .single();
   if (error) throw error;
 
+  // Auto-create a matching closed-deal placeholder in Leadgen so the
+  // project shows up there immediately. Bonus/leadgen are empty —
+  // they'll be filled later by hand or via the CSV import.
+  const now = new Date();
+  const monthOfStart = parsed.data.start_date
+    ? new Date(parsed.data.start_date).getMonth()
+    : now.getMonth();
+  const yearOfStart = parsed.data.start_date
+    ? new Date(parsed.data.start_date).getFullYear()
+    : now.getFullYear();
+
+  const { error: dealErr } = await sb().from("deals").insert({
+    project: parsed.data.name,
+    leadgen: null,
+    month: MONTHS[monthOfStart],
+    year: yearOfStart,
+    bonus: 0,
+    revenue: null,
+    comment: "Авто-создан из Projects",
+    deal_type: "closed",
+  });
+  if (dealErr) {
+    console.error("Failed to auto-create closed deal", dealErr);
+    // Non-fatal — project itself is created.
+  }
+
   revalidatePath("/projects");
+  revalidatePath("/leadgen/deals");
   redirect(`/projects/${data.id}`);
 }
 
@@ -72,13 +100,32 @@ const ProjectNamePatch = z.object({ name: z.string().min(1).max(200) });
 export async function renameProject(id: string, name: string) {
   await requireSection("projects");
   const parsed = ProjectNamePatch.parse({ name });
+
+  // Read the old name first so we can rename the deals' project field too
+  const { data: prev } = await sb()
+    .from("projects")
+    .select("name")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await sb()
     .from("projects")
     .update(parsed)
     .eq("id", id);
   if (error) throw error;
+
+  // Mirror the rename to deals (case-insensitive match on the previous name)
+  if (prev?.name && prev.name !== parsed.name) {
+    const { error: dealErr } = await sb()
+      .from("deals")
+      .update({ project: parsed.name })
+      .ilike("project", prev.name);
+    if (dealErr) console.error("Failed to rename deals", dealErr);
+  }
+
   revalidatePath(`/projects/${id}`);
   revalidatePath("/projects");
+  revalidatePath("/leadgen/deals");
 }
 
 export async function deleteProject(id: string) {

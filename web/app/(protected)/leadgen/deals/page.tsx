@@ -6,6 +6,7 @@ import {
 import { DealsFilters } from "@/components/leadgen/deals-filters";
 import { DealsTable } from "@/components/leadgen/deals-table";
 import { NewDealButton } from "@/components/leadgen/new-deal-button";
+import { ImportDealsButton } from "@/components/leadgen/import-deals-button";
 import type { Deal } from "@/lib/schemas";
 
 export const dynamic = "force-dynamic";
@@ -95,11 +96,14 @@ export default async function DealsView({
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <h2 className="font-display text-2xl tracking-wide">Сделки</h2>
-        <NewDealButton
-          leadgenNames={peopleNames}
-          yearOptions={yearOptions.length > 0 ? yearOptions : [2025, 2026, 2027]}
-          defaultType={type as "sql" | "closed"}
-        />
+        <div className="flex gap-2 flex-wrap">
+          <ImportDealsButton defaultType={type as "sql" | "closed"} />
+          <NewDealButton
+            leadgenNames={peopleNames}
+            yearOptions={yearOptions.length > 0 ? yearOptions : [2025, 2026, 2027]}
+            defaultType={type as "sql" | "closed"}
+          />
+        </div>
       </div>
 
       <DealsFilters
