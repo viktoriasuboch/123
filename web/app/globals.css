@@ -10,21 +10,21 @@
   --bg:        #f6f6f6;
   --surface:   #ffffff;
   --border-c:  #e4e4e7;
-  --accent:    #84cc16;            /* lime-500: darker variant for light bg */
+  --accent:    #ff1493;            /* neon pink — replaces lime accent */
   --text:      #18181b;            /* zinc-900 */
   --muted-c:   #71717a;            /* zinc-500 */
   --muted2:    #52525b;            /* zinc-600 */
 
-  /* status colors — slightly darker shades for legibility on white */
-  --good:    #16a34a;              /* green-600 */
+  /* status colors — greens replaced with neon pink, others unchanged */
+  --good:    #ec4899;              /* pink-500 — replaces green */
   --bad:     #dc2626;              /* red-600 */
   --warn:    #ea580c;              /* orange-600 */
   --info:    #2563eb;              /* blue-600 */
   --special: #7c3aed;              /* violet-600 */
 
-  /* per-month palette (mirrors legacy SALES BONUS) */
-  --jan: #0284c7; --feb: #7c3aed; --mar: #16a34a; --apr: #db2777;
-  --may: #0d9488; --jun: #d97706; --jul: #2563eb; --aug: #65a30d;
+  /* per-month palette — greens (mar/may/aug) swapped to pink shades */
+  --jan: #0284c7; --feb: #7c3aed; --mar: #ec4899; --apr: #db2777;
+  --may: #f43f5e; --jun: #d97706; --jul: #2563eb; --aug: #ff10aa;
   --sep: #ea580c; --oct: #f97316; --nov: #ca8a04; --dec: #e11d48;
 
   /* shadcn token mapping → palette */
