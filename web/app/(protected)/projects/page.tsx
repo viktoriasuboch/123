@@ -7,6 +7,7 @@ import { ProjectCard } from "@/components/projects/project-card";
 import { DevCard, type DevCardEntry } from "@/components/projects/dev-card";
 import { ProjectsFilters } from "@/components/projects/projects-filters";
 import { DevsSummaryBar } from "@/components/projects/devs-summary-bar";
+import { ProjectsSummaryBar } from "@/components/projects/projects-summary-bar";
 import { NewProjectButton } from "@/components/projects/new-project-button";
 import type { Project, ProjectMember } from "@/lib/schemas";
 
@@ -72,12 +73,21 @@ export default async function ProjectsPage({
           <DevsList entries={devEntries.filter(devMatch)} />
         </>
       ) : (
-        <ProjectsGrid
-          projects={(tab === "active" ? activeProjects : inactiveProjects).filter(
+        (() => {
+          const visible = (tab === "active" ? activeProjects : inactiveProjects).filter(
             projMatch,
-          )}
-          membersByProject={membersByProject}
-        />
+          );
+          return (
+            <>
+              <ProjectsSummaryBar
+                projects={visible}
+                membersByProject={membersByProject}
+                label={tab === "active" ? "Активные" : "Завершённые"}
+              />
+              <ProjectsGrid projects={visible} membersByProject={membersByProject} />
+            </>
+          );
+        })()
       )}
     </div>
   );
