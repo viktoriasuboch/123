@@ -38,7 +38,23 @@ export function MembersTable({
         />
       ) : null}
 
-      <table className="w-full text-sm font-mono min-w-[1100px]">
+      <table className="w-full text-sm font-mono min-w-[1500px] table-fixed">
+        <colgroup>
+          <col className="w-[180px]" /> {/* Имя */}
+          <col className="w-[110px]" /> {/* Роль */}
+          <col className="w-[120px]" /> {/* Тип */}
+          <col className="w-[100px]" /> {/* Зарплата */}
+          <col className="w-[80px]"  /> {/* Buy */}
+          <col className="w-[70px]"  /> {/* Sell */}
+          <col className="w-[90px]"  /> {/* Маржа $ */}
+          <col className="w-[80px]"  /> {/* Маржа % */}
+          <col className="w-[100px]" /> {/* Rev/мес */}
+          <col className="w-[70px]"  /> {/* ч/день */}
+          <col className="w-[150px]" /> {/* Старт */}
+          <col className="w-[150px]" /> {/* Конец */}
+          <col className="w-[120px]" /> {/* Статус */}
+          <col className="w-[40px]"  /> {/* ✕ */}
+        </colgroup>
         <thead>
           <tr className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground border-b">
             <th className="text-left p-2 font-normal">Имя</th>
