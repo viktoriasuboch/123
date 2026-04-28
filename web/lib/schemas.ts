@@ -2,8 +2,9 @@ import { z } from "zod";
 
 /* ─── primitives ────────────────────────────────────────────────────── */
 export const Uuid = z.string().uuid();
-export const MonthIdx = z.number().int().min(0).max(11); // legacy uses 0-based months
-export const Year = z.number().int().min(2020).max(2100);
+/** Russian month name as stored in DB ("Январь"…"Декабрь") */
+export const MonthName = z.string().min(1).max(20);
+export const Year = z.coerce.number().int().min(2020).max(2100);
 export const ISODate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
@@ -21,7 +22,7 @@ export type Person = z.infer<typeof Person>;
 export const Entry = z.object({
   id: Uuid,
   person_id: Uuid,
-  month: MonthIdx,
+  month: MonthName,
   year: Year.nullable(),
   cat: z.string().max(50),
   name: z.string().max(200),
@@ -37,7 +38,7 @@ export const Deal = z.object({
   id: Uuid,
   project: z.string().max(200),
   leadgen: z.string().max(100).nullable().optional(),
-  month: MonthIdx,
+  month: MonthName,
   year: Year.nullable(),
   bonus: z.coerce.number(),
   revenue: z.coerce.string().nullable().optional(),
@@ -54,7 +55,7 @@ export const DealUpdate = DealInsert.partial();
 export const Salary = z.object({
   id: Uuid,
   leadgen_name: z.string().max(100),
-  month: MonthIdx,
+  month: MonthName,
   year: Year,
   gross: z.coerce.number(),
   total: z.coerce.number(),
@@ -65,7 +66,7 @@ export type Salary = z.infer<typeof Salary>;
 export const ProjectRevenue = z.object({
   id: Uuid,
   project_name: z.string().max(200),
-  month: MonthIdx,
+  month: MonthName,
   year: Year.nullable(),
   amount: z.coerce.number(),
   note: z.string().max(1000).nullable().optional(),
