@@ -1,5 +1,6 @@
 import { listProjectRevenues } from "@/lib/data/leadgen";
-import { activeMonths, shortMonth } from "@/lib/months";
+import { MONTHS, activeMonths, inRange, monthKey, shortMonth } from "@/lib/months";
+import { PeriodFilter } from "@/components/leadgen/period-filter";
 import { NewRevenueButton } from "@/components/leadgen/new-revenue-button";
 import { RevenueRowDelete } from "@/components/leadgen/revenue-row-delete";
 import type { ProjectRevenue } from "@/lib/schemas";
@@ -12,8 +13,33 @@ type ProjectRow = {
   total: number;
 };
 
-export default async function RevenueView() {
-  const revenues = await listProjectRevenues();
+type SP = Promise<{ fm?: string; fy?: string; tm?: string; ty?: string }>;
+
+export default async function RevenueView({
+  searchParams,
+}: {
+  searchParams: SP;
+}) {
+  const revenuesAll = await listProjectRevenues();
+
+  const sp = await searchParams;
+  const fM = sp.fm && (MONTHS as readonly string[]).includes(sp.fm) ? sp.fm : null;
+  const fY = sp.fy ? Number(sp.fy) : null;
+  const tM = sp.tm && (MONTHS as readonly string[]).includes(sp.tm) ? sp.tm : null;
+  const tY = sp.ty ? Number(sp.ty) : null;
+  const revenues =
+    fM && fY && tM && tY
+      ? (() => {
+          const swap = monthKey(fM, fY) > monthKey(tM, tY);
+          const f1 = swap ? tM : fM;
+          const y1 = swap ? tY : fY;
+          const f2 = swap ? fM : tM;
+          const y2 = swap ? fY : tY;
+          return revenuesAll.filter((r) =>
+            inRange(r.month, r.year ?? 2026, f1, y1, f2, y2),
+          );
+        })()
+      : revenuesAll;
 
   const periods = activeMonths(
     revenues.map((r) => ({ month: r.month, year: r.year ?? 2026 })),
@@ -60,12 +86,23 @@ export default async function RevenueView() {
     ]),
   ).sort((a, b) => a - b);
 
+  const minYear = yearOptions[0] ?? new Date().getFullYear();
+  const maxYear = yearOptions[yearOptions.length - 1] ?? minYear;
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="font-display text-2xl tracking-wide">Project Revenue</h2>
         <NewRevenueButton yearOptions={yearOptions} />
       </div>
+
+      <PeriodFilter
+        availableYears={yearOptions}
+        defaultFromMonth={MONTHS[0]}
+        defaultFromYear={minYear}
+        defaultToMonth={MONTHS[11]}
+        defaultToYear={maxYear}
+      />
 
       <div className="rounded-md border bg-card/60 p-4 flex flex-wrap gap-4">
         <Kpi label="Всего ревеню" value={`$${Math.round(grandTotal).toLocaleString("en-US")}`} accent />

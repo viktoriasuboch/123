@@ -1,17 +1,49 @@
 import { listPeople, listEntries } from "@/lib/data/leadgen";
-import { activeMonths, shortMonth } from "@/lib/months";
+import { MONTHS, activeMonths, inRange, monthKey, shortMonth } from "@/lib/months";
 import { catMeta } from "@/components/leadgen/categories";
+import { PeriodFilter } from "@/components/leadgen/period-filter";
 
 export const dynamic = "force-dynamic";
 
-export default async function MonthsView() {
+type SP = Promise<{ fm?: string; fy?: string; tm?: string; ty?: string }>;
+
+export default async function MonthsView({
+  searchParams,
+}: {
+  searchParams: SP;
+}) {
   const [people, entries] = await Promise.all([
     listPeople(),
     listEntries(),
   ]);
 
   const peopleById = new Map(people.map((p) => [p.id, p.name]));
-  const positive = entries.filter((e) => (e.bonus || 0) > 0);
+  const allPositive = entries.filter((e) => (e.bonus || 0) > 0);
+
+  const yearsList = Array.from(
+    new Set(allPositive.map((e) => e.year ?? 2026)),
+  ).sort((a, b) => a - b);
+  const minYear = yearsList[0] ?? new Date().getFullYear();
+  const maxYear = yearsList[yearsList.length - 1] ?? minYear;
+
+  const sp = await searchParams;
+  const fM = sp.fm && (MONTHS as readonly string[]).includes(sp.fm) ? sp.fm : null;
+  const fY = sp.fy ? Number(sp.fy) : null;
+  const tM = sp.tm && (MONTHS as readonly string[]).includes(sp.tm) ? sp.tm : null;
+  const tY = sp.ty ? Number(sp.ty) : null;
+  const positive =
+    fM && fY && tM && tY
+      ? (() => {
+          const swap = monthKey(fM, fY) > monthKey(tM, tY);
+          const f1 = swap ? tM : fM;
+          const y1 = swap ? tY : fY;
+          const f2 = swap ? fM : tM;
+          const y2 = swap ? fY : tY;
+          return allPositive.filter((e) =>
+            inRange(e.month, e.year ?? 2026, f1, y1, f2, y2),
+          );
+        })()
+      : allPositive;
 
   // Each unique (month, year) pair sorted chronologically
   const periods = activeMonths(
@@ -46,7 +78,15 @@ export default async function MonthsView() {
   });
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="space-y-5">
+      <PeriodFilter
+        availableYears={yearsList.length > 0 ? yearsList : [minYear, maxYear]}
+        defaultFromMonth={MONTHS[0]}
+        defaultFromYear={minYear}
+        defaultToMonth={MONTHS[11]}
+        defaultToYear={maxYear}
+      />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {blocks.map((b) => (
         <article
           key={`${b.year}-${b.month}`}
@@ -107,9 +147,10 @@ export default async function MonthsView() {
           </ul>
         </article>
       ))}
+      </div>
       {blocks.length === 0 ? (
-        <p className="font-mono text-xs text-muted-foreground py-12 text-center col-span-full">
-          Нет данных
+        <p className="font-mono text-xs text-muted-foreground py-12 text-center">
+          Нет данных в выбранном периоде
         </p>
       ) : null}
     </div>

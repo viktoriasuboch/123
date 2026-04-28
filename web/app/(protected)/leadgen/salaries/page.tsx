@@ -1,5 +1,6 @@
 import { listSalaries } from "@/lib/data/leadgen";
-import { activeMonths, shortMonth } from "@/lib/months";
+import { MONTHS, activeMonths, inRange, monthKey, shortMonth } from "@/lib/months";
+import { PeriodFilter } from "@/components/leadgen/period-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -10,15 +11,47 @@ type Row = {
   avgTotal: number;
 };
 
-export default async function SalariesView() {
-  const salaries = await listSalaries();
+type SP = Promise<{ fm?: string; fy?: string; tm?: string; ty?: string }>;
+
+export default async function SalariesView({
+  searchParams,
+}: {
+  searchParams: SP;
+}) {
+  const salariesAll = await listSalaries();
+
+  const years = Array.from(
+    new Set(salariesAll.map((s) => s.year)),
+  ).sort((a, b) => a - b);
+  const minYear = years[0] ?? new Date().getFullYear();
+  const maxYear = years[years.length - 1] ?? minYear;
+
+  const sp = await searchParams;
+  const fM = sp.fm && (MONTHS as readonly string[]).includes(sp.fm) ? sp.fm : null;
+  const fY = sp.fy ? Number(sp.fy) : null;
+  const tM = sp.tm && (MONTHS as readonly string[]).includes(sp.tm) ? sp.tm : null;
+  const tY = sp.ty ? Number(sp.ty) : null;
+  const filtered =
+    fM && fY && tM && tY
+      ? (() => {
+          const swap = monthKey(fM, fY) > monthKey(tM, tY);
+          const f1 = swap ? tM : fM;
+          const y1 = swap ? tY : fY;
+          const f2 = swap ? fM : tM;
+          const y2 = swap ? fY : tY;
+          return salariesAll.filter((s) =>
+            inRange(s.month, s.year, f1, y1, f2, y2),
+          );
+        })()
+      : salariesAll;
+
   const periods = activeMonths(
-    salaries.map((s) => ({ month: s.month, year: s.year })),
+    filtered.map((s) => ({ month: s.month, year: s.year })),
   );
 
   // group by name
   const byName = new Map<string, Row>();
-  for (const s of salaries) {
+  for (const s of filtered) {
     if (!byName.has(s.leadgen_name)) {
       byName.set(s.leadgen_name, {
         name: s.leadgen_name,
@@ -67,6 +100,14 @@ export default async function SalariesView() {
   return (
     <div className="space-y-5">
       <h2 className="font-display text-2xl tracking-wide">Зарплаты Leadgen</h2>
+
+      <PeriodFilter
+        availableYears={years.length > 0 ? years : [minYear, maxYear]}
+        defaultFromMonth={MONTHS[0]}
+        defaultFromYear={minYear}
+        defaultToMonth={MONTHS[11]}
+        defaultToYear={maxYear}
+      />
 
       <div className="rounded-md border bg-card/60 p-4 flex flex-wrap gap-4">
         <Kpi label="Всего к выплате" value={`$${Math.round(grandTotal).toLocaleString("en-US")}`} accent />

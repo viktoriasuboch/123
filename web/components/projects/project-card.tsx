@@ -32,7 +32,7 @@ export function ProjectCard({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-x-7 gap-y-1.5 text-[11px] font-mono">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-2 text-[11px] font-mono">
         <Cell label="Старт" value={fmtDate(project.start_date)} />
         <Cell
           label="Продолжительность"
@@ -87,11 +87,11 @@ function Cell({
             ? "text-warn"
             : "text-foreground";
   return (
-    <div className="flex items-baseline gap-2">
-      <span className="text-muted-foreground uppercase tracking-[0.08em] text-[10px]">
+    <div className="min-w-0">
+      <div className="text-muted-foreground uppercase tracking-[0.08em] text-[10px] mb-0.5 truncate">
         {label}
-      </span>
-      <span className={`font-semibold ${colorClass}`}>{value}</span>
+      </div>
+      <div className={`font-semibold truncate ${colorClass}`}>{value}</div>
     </div>
   );
 }
