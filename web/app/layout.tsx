@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Bebas_Neue, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({
@@ -33,11 +34,14 @@ export default function RootLayout({
   return (
     <html
       lang="ru"
-      className={`dark ${plexSans.variable} ${plexMono.variable} ${bebas.variable} h-full antialiased`}
+      suppressHydrationWarning
+      className={`${plexSans.variable} ${plexMono.variable} ${bebas.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <TooltipProvider>{children}</TooltipProvider>
-        <Toaster richColors position="top-right" />
+        <ThemeProvider>
+          <TooltipProvider>{children}</TooltipProvider>
+          <Toaster richColors position="top-right" />
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { hasSection } from "@/lib/auth";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function LandingPage() {
   const [hasLeadgen, hasProjects] = await Promise.all([
@@ -8,7 +9,10 @@ export default async function LandingPage() {
   ]);
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-6 py-16">
+    <main className="min-h-screen flex items-center justify-center px-6 py-16 relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-2xl space-y-12">
         <header className="text-center space-y-3">
           <h1 className="font-display text-6xl text-primary">LEADGE BONUS</h1>

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { LoginForm } from "./login-form";
 import { hasSection } from "@/lib/auth";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { SectionId } from "@/lib/session";
 
 const VALID = new Set<SectionId>(["leadgen", "projects"]);
@@ -23,7 +24,10 @@ export default async function LoginPage({
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-6 py-16">
+    <main className="min-h-screen flex items-center justify-center px-6 py-16 relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm space-y-10">
         <div className="text-center space-y-2">
           <h1 className="font-display text-5xl text-primary">LEADGE BONUS</h1>

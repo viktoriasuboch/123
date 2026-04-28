@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { hasSection } from "@/lib/auth";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function ProtectedLayout({
   children,
@@ -35,6 +36,7 @@ export default async function ProtectedLayout({
                 Projects
               </Link>
             ) : null}
+            <ThemeToggle />
             <form action="/logout" method="POST">
               <button
                 type="submit"
