@@ -95,6 +95,7 @@ export default async function ProjectsPage({
             projects={projects}
             members={members}
             devEntries={devEntries}
+            filter={devFilter}
           />
           <DevsList
             entries={devEntries.filter(devMatch)}
@@ -146,7 +147,7 @@ function ProjectsList({
     );
   const containerCls =
     view === "grid"
-      ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+      ? "grid gap-4 grid-cols-1 lg:grid-cols-2"
       : "space-y-3";
   return (
     <div className={containerCls}>
@@ -191,8 +192,8 @@ function DevsList({
 
   const containerCls =
     view === "list"
-      ? "grid gap-3 lg:grid-cols-2"
-      : "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+      ? "space-y-3"
+      : "grid gap-3 grid-cols-1 lg:grid-cols-2";
 
   return (
     <div className={containerCls}>

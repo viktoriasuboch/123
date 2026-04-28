@@ -2,7 +2,11 @@
 
 import { useTransition } from "react";
 import type { Project } from "@/lib/schemas";
-import { renameProject, deleteProject } from "../../app/(protected)/projects/_actions";
+import {
+  renameProject,
+  deleteProject,
+  setProjectStatus,
+} from "../../app/(protected)/projects/_actions";
 import { fmtDate } from "@/lib/calc";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -69,11 +73,55 @@ export function ProjectHeader({ project }: { project: Project }) {
       </div>
 
       <div className="flex gap-2 items-start">
-        <Button
-          variant="outline"
-          size="sm"
+        {status === "active" ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (!confirm(`Завершить проект "${project.name}"?`)) return;
+              start(async () => {
+                try {
+                  await setProjectStatus(project.id, "completed");
+                  toast.success("Проект перенесён в Завершённые");
+                } catch (err) {
+                  toast.error(`Не получилось: ${(err as Error).message}`);
+                }
+              });
+            }}
+            className="font-mono text-[10px] uppercase tracking-[0.15em] border-good/50 text-good hover:bg-good/10 hover:border-good"
+            disabled={pending}
+          >
+            ✓ Завершить
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (!confirm(`Возобновить проект "${project.name}"?`)) return;
+              start(async () => {
+                try {
+                  await setProjectStatus(project.id, "active");
+                  toast.success("Проект снова активен");
+                } catch (err) {
+                  toast.error(`Не получилось: ${(err as Error).message}`);
+                }
+              });
+            }}
+            className="font-mono text-[10px] uppercase tracking-[0.15em] border-primary/50 text-primary hover:bg-primary/10 hover:border-primary"
+            disabled={pending}
+          >
+            ↻ Возобновить
+          </Button>
+        )}
+        <button
+          type="button"
           onClick={() => {
-            if (!confirm(`Удалить проект "${project.name}"? Откатить будет нельзя.`))
+            if (
+              !confirm(
+                `Удалить проект "${project.name}" безвозвратно? Это действие нельзя отменить.`,
+              )
+            )
               return;
             start(async () => {
               try {
@@ -83,11 +131,13 @@ export function ProjectHeader({ project }: { project: Project }) {
               }
             });
           }}
-          className="font-mono text-[10px] uppercase tracking-[0.15em] border-bad/40 text-bad hover:bg-bad/10 hover:border-bad"
           disabled={pending}
+          className="size-9 inline-flex items-center justify-center rounded border border-border text-muted-foreground hover:text-bad hover:border-bad/60 transition"
+          title="Удалить проект безвозвратно"
+          aria-label="Удалить проект"
         >
-          🗑 Удалить
-        </Button>
+          🗑
+        </button>
       </div>
     </div>
   );

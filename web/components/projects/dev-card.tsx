@@ -73,7 +73,7 @@ export function DevCard({ entry }: { entry: DevCardEntry }) {
                   ) : null}
                 </span>
                 <span className="text-muted-foreground text-[10px] shrink-0 whitespace-nowrap">
-                  {m.hours_load || 0} ч/мес
+                  {(Math.round(((m.hours_load || 0) / 20) * 10) / 10).toString()} ч/день
                 </span>
               </div>
               {/* rates row */}

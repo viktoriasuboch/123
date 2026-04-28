@@ -91,6 +91,39 @@ export async function deleteProject(id: string) {
   redirect("/projects");
 }
 
+const StatusPatch = z.object({
+  status: z.enum(["active", "completed", "paused"]),
+});
+
+export async function setProjectStatus(
+  id: string,
+  status: "active" | "completed" | "paused",
+) {
+  await requireSection("projects");
+  Uuid.parse(id);
+  const parsed = StatusPatch.parse({ status });
+
+  const { error } = await sb()
+    .from("projects")
+    .update(parsed)
+    .eq("id", id);
+  if (error) throw error;
+
+  await sb().from("project_events").insert({
+    project_id: id,
+    event_type: "status_change",
+    description:
+      status === "completed"
+        ? "Проект завершён"
+        : status === "active"
+          ? "Проект возобновлён"
+          : "Проект приостановлен",
+  });
+
+  revalidatePath(`/projects/${id}`);
+  revalidatePath("/projects");
+}
+
 /* ─── members ───────────────────────────────────────────────────────── */
 
 export async function addMember(projectId: string, formData: FormData) {
