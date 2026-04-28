@@ -18,6 +18,26 @@ export type MonthName = (typeof MONTHS)[number];
 
 const IDX = new Map<string, number>(MONTHS.map((m, i) => [m, i]));
 
+const COLOR_VAR: Record<string, string> = {
+  Январь: "var(--jan)",
+  Февраль: "var(--feb)",
+  Март: "var(--mar)",
+  Апрель: "var(--apr)",
+  Май: "var(--may)",
+  Июнь: "var(--jun)",
+  Июль: "var(--jul)",
+  Август: "var(--aug)",
+  Сентябрь: "var(--sep)",
+  Октябрь: "var(--oct)",
+  Ноябрь: "var(--nov)",
+  Декабрь: "var(--dec)",
+};
+
+/** Returns the CSS color variable string for a given month (e.g. "var(--jan)") */
+export function monthColor(m: string): string {
+  return COLOR_VAR[m] ?? "var(--muted-foreground)";
+}
+
 /** 0-11 index for sorting; unknown month → 0 */
 export function monthIdx(m: string): number {
   return IDX.get(m) ?? 0;

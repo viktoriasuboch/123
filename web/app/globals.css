@@ -22,6 +22,11 @@
   --info:    #2563eb;              /* blue-600 */
   --special: #7c3aed;              /* violet-600 */
 
+  /* per-month palette (mirrors legacy SALES BONUS) */
+  --jan: #0284c7; --feb: #7c3aed; --mar: #16a34a; --apr: #db2777;
+  --may: #0d9488; --jun: #d97706; --jul: #2563eb; --aug: #65a30d;
+  --sep: #ea580c; --oct: #f97316; --nov: #ca8a04; --dec: #e11d48;
+
   /* shadcn token mapping → palette */
   --background: var(--bg);
   --foreground: var(--text);
@@ -75,6 +80,11 @@
   --warn:    #ff7a3c;              /* bright orange */
   --info:    #22d3ee;              /* cyan */
   --special: #c084fc;              /* vivid purple */
+
+  /* per-month palette */
+  --jan: #38bdf8; --feb: #a78bfa; --mar: #4ade80; --apr: #f472b6;
+  --may: #10b981; --jun: #f59e0b; --jul: #60a5fa; --aug: #a3e635;
+  --sep: #f97316; --oct: #fb923c; --nov: #fbbf24; --dec: #f43f5e;
 
   --background: var(--bg);
   --foreground: var(--text);

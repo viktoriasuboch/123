@@ -1,6 +1,7 @@
 import { requireSection } from "@/lib/auth";
 import { LeadgenTabs } from "@/components/leadgen/leadgen-tabs";
 import { LeadgenRealtime } from "@/components/leadgen/leadgen-realtime";
+import { LeadgenHeader } from "@/components/leadgen/leadgen-header";
 
 export default async function LeadgenSegmentLayout({
   children,
@@ -11,9 +12,7 @@ export default async function LeadgenSegmentLayout({
   return (
     <>
       <LeadgenRealtime />
-      <h1 className="font-display text-4xl tracking-widest text-foreground mb-4">
-        LEAD GENERATION
-      </h1>
+      <LeadgenHeader />
       <LeadgenTabs />
       {children}
     </>

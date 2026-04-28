@@ -54,10 +54,15 @@ export default async function ProjectsPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-        <h1 className="font-display text-4xl tracking-widest text-foreground">
-          PROJECTS
-        </h1>
+      <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
+        <div>
+          <h1 className="font-display text-4xl tracking-widest text-primary leading-none">
+            PROJECTS
+          </h1>
+          <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            Команда · Рейты · Маржа
+          </p>
+        </div>
         <NewProjectButton />
       </div>
 
@@ -109,7 +114,7 @@ function ProjectsGrid({
       </p>
     );
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="space-y-3">
       {projects.map((p) => (
         <ProjectCard
           key={p.id}
