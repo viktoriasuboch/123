@@ -5,24 +5,32 @@ import { aggregateProject, fmtMoney, fmtDate } from "@/lib/calc";
 export function ProjectCard({
   project,
   members,
+  compact = false,
 }: {
   project: Project;
   members: ProjectMember[];
+  compact?: boolean;
 }) {
   const a = aggregateProject(members);
   const status = project.status ?? "active";
   const lowMargin = a.activeCount > 0 && a.avgMargH < 20;
+
+  // Compact (grid) view: stack cells in 2 cols, fewer KPIs
+  // List view (default): full-width row with 6 columns
+  const gridCls = compact
+    ? "grid grid-cols-2 gap-x-3 gap-y-2 text-[11px] font-mono"
+    : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-2 text-[11px] font-mono";
 
   return (
     <Link
       href={`/projects/${project.id}`}
       className="group block rounded-md border bg-card p-5 transition hover:border-primary/60"
     >
-      <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
-        <h3 className="font-display text-2xl tracking-wide leading-none text-foreground group-hover:text-primary transition">
+      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+        <h3 className="font-display text-2xl tracking-wide leading-none text-foreground group-hover:text-primary transition min-w-0 truncate">
           {project.name}
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {lowMargin ? (
             <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-bad inline-flex items-center gap-1">
               △ низкая маржа
@@ -32,12 +40,14 @@ export function ProjectCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-2 text-[11px] font-mono">
+      <div className={gridCls}>
         <Cell label="Старт" value={fmtDate(project.start_date)} />
-        <Cell
-          label="Продолжительность"
-          value={project.expected_duration ?? "—"}
-        />
+        {compact ? null : (
+          <Cell
+            label="Продолжительность"
+            value={project.expected_duration ?? "—"}
+          />
+        )}
         <Cell label="Команда" value={`${a.activeCount} чел.`} />
         <Cell
           label="Маржа/мес"
@@ -45,10 +55,7 @@ export function ProjectCard({
           accent={a.totalMargin > 0}
           tone={a.totalMargin > 0 ? "good" : "bad"}
         />
-        <Cell
-          label="Rev/мес"
-          value={fmtMoney(a.totalRev)}
-        />
+        <Cell label="Rev/мес" value={fmtMoney(a.totalRev)} />
         <Cell
           label="Ср. маржа"
           value={`$${a.avgMargH.toFixed(1)}/h`}

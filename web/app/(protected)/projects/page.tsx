@@ -11,7 +11,7 @@ import { ProjectsSummaryBar } from "@/components/projects/projects-summary-bar";
 import { NewProjectButton } from "@/components/projects/new-project-button";
 import type { Project, ProjectMember } from "@/lib/schemas";
 
-type SP = Promise<{ tab?: string; q?: string }>;
+type SP = Promise<{ tab?: string; q?: string; view?: string }>;
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +23,7 @@ export default async function ProjectsPage({
   const sp = await searchParams;
   const tab = (sp.tab ?? "active") as "active" | "inactive" | "devs";
   const q = (sp.q ?? "").trim().toLowerCase();
+  const view = (sp.view === "grid" ? "grid" : "list") as "list" | "grid";
 
   const [projects, members, devStatuses] = await Promise.all([
     listProjects(),
@@ -75,7 +76,7 @@ export default async function ProjectsPage({
       {tab === "devs" ? (
         <>
           <DevsSummaryBar projects={projects} members={members} />
-          <DevsList entries={devEntries.filter(devMatch)} />
+          <DevsList entries={devEntries.filter(devMatch)} view={view} />
         </>
       ) : (
         (() => {
@@ -89,7 +90,11 @@ export default async function ProjectsPage({
                 membersByProject={membersByProject}
                 label={tab === "active" ? "Активные" : "Завершённые"}
               />
-              <ProjectsGrid projects={visible} membersByProject={membersByProject} />
+              <ProjectsList
+                projects={visible}
+                membersByProject={membersByProject}
+                view={view}
+              />
             </>
           );
         })()
@@ -100,12 +105,14 @@ export default async function ProjectsPage({
 
 /* ─── helpers ───────────────────────────────────────────────────────── */
 
-function ProjectsGrid({
+function ProjectsList({
   projects,
   membersByProject,
+  view,
 }: {
   projects: Project[];
   membersByProject: Map<string, ProjectMember[]>;
+  view: "list" | "grid";
 }) {
   if (projects.length === 0)
     return (
@@ -113,20 +120,31 @@ function ProjectsGrid({
         Проекты не найдены
       </p>
     );
+  const containerCls =
+    view === "grid"
+      ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+      : "space-y-3";
   return (
-    <div className="space-y-3">
+    <div className={containerCls}>
       {projects.map((p) => (
         <ProjectCard
           key={p.id}
           project={p}
           members={membersByProject.get(p.id) ?? []}
+          compact={view === "grid"}
         />
       ))}
     </div>
   );
 }
 
-function DevsList({ entries }: { entries: DevCardEntry[] }) {
+function DevsList({
+  entries,
+  view,
+}: {
+  entries: DevCardEntry[];
+  view: "list" | "grid";
+}) {
   if (entries.length === 0)
     return (
       <p className="font-mono text-xs text-muted-foreground py-12 text-center">
@@ -141,23 +159,13 @@ function DevsList({ entries }: { entries: DevCardEntry[] }) {
   return (
     <div className="space-y-6">
       {staff.length > 0 ? (
-        <Section
-          title="Штатные"
-          tone="info"
-          count={staff.length}
-          entries={staff}
-        />
+        <Section title="Штатные" tone="info" count={staff.length} entries={staff} view={view} />
       ) : null}
       {free.length > 0 ? (
-        <Section
-          title="Фрилансеры"
-          tone="warn"
-          count={free.length}
-          entries={free}
-        />
+        <Section title="Фрилансеры" tone="warn" count={free.length} entries={free} view={view} />
       ) : null}
       {fired.length > 0 ? (
-        <Section title="Уволенные" tone="bad" count={fired.length} entries={fired} />
+        <Section title="Уволенные" tone="bad" count={fired.length} entries={fired} view={view} />
       ) : null}
     </div>
   );
@@ -168,11 +176,13 @@ function Section({
   count,
   entries,
   tone,
+  view,
 }: {
   title: string;
   count: number;
   entries: DevCardEntry[];
   tone: "info" | "warn" | "bad";
+  view: "list" | "grid";
 }) {
   const toneClass =
     tone === "info"
@@ -180,13 +190,17 @@ function Section({
       : tone === "warn"
       ? "text-warn"
       : "text-bad";
+  const containerCls =
+    view === "list"
+      ? "grid gap-3 lg:grid-cols-2"
+      : "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
   return (
     <div>
       <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-2 flex items-center gap-2">
         {title}
         <span className={toneClass}>{count}</span>
       </h2>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className={containerCls}>
         {entries.map((e) => (
           <DevCard key={e.name} entry={e} />
         ))}

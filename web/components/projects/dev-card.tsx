@@ -54,15 +54,8 @@ export function DevCard({ entry }: { entry: DevCardEntry }) {
         ) : null}
       </div>
 
-      {/* per-project rows */}
-      <div className="space-y-1">
-        <div className="grid grid-cols-[minmax(0,1fr)_78px_78px_88px_110px] gap-2 text-[9px] font-mono uppercase tracking-[0.15em] text-muted-foreground border-b border-border pb-1">
-          <div>Проект</div>
-          <div className="text-right">Buy</div>
-          <div className="text-right">Sell</div>
-          <div className="text-right">Маржа/h</div>
-          <div className="text-right">Часов</div>
-        </div>
+      {/* per-project rows — project name on its own line, rates stack below */}
+      <div className="space-y-2.5">
         {rows.map((r) => {
           const m = r.member;
           const buy = buyRate(m);
@@ -70,23 +63,28 @@ export function DevCard({ entry }: { entry: DevCardEntry }) {
           const marginClass =
             margin >= 20 ? "text-good" : margin > 0 ? "text-warn" : "text-bad";
           return (
-            <div
-              key={m.id}
-              className="grid grid-cols-[minmax(0,1fr)_78px_78px_88px_110px] gap-2 text-[11px] font-mono items-baseline py-0.5"
-            >
-              <div className="truncate">
-                {r.project?.name ?? "—"}{" "}
-                {m.is_active === false ? (
-                  <span className="text-[9px] text-muted-foreground">(end)</span>
-                ) : null}
+            <div key={m.id} className="space-y-1">
+              {/* project name + status */}
+              <div className="flex items-baseline justify-between gap-2 text-[11px] font-mono min-w-0">
+                <span className="truncate text-foreground/90">
+                  {r.project?.name ?? "—"}
+                  {m.is_active === false ? (
+                    <span className="text-[9px] text-muted-foreground ml-1.5">(end)</span>
+                  ) : null}
+                </span>
+                <span className="text-muted-foreground text-[10px] shrink-0 whitespace-nowrap">
+                  {m.hours_load || 0} ч/мес
+                </span>
               </div>
-              <div className="text-right text-foreground">${buy.toFixed(2)}</div>
-              <div className="text-right text-foreground">${(m.sell_rate || 0).toFixed(0)}</div>
-              <div className={`text-right ${marginClass}`}>
-                {margin >= 0 ? "+" : ""}${margin.toFixed(2)}/h
-              </div>
-              <div className="text-right text-muted-foreground">
-                {(m.hours_load || 0)} ч/мес
+              {/* rates row */}
+              <div className="grid grid-cols-3 gap-2 text-[11px] font-mono">
+                <RateCell label="buy" value={`$${buy.toFixed(2)}`} />
+                <RateCell label="sell" value={`$${(m.sell_rate || 0).toFixed(0)}`} />
+                <RateCell
+                  label="маржа"
+                  value={`${margin >= 0 ? "+" : ""}$${margin.toFixed(2)}/h`}
+                  cls={marginClass}
+                />
               </div>
             </div>
           );
@@ -104,5 +102,24 @@ export function DevCard({ entry }: { entry: DevCardEntry }) {
         </span>
       </div>
     </Link>
+  );
+}
+
+function RateCell({
+  label,
+  value,
+  cls,
+}: {
+  label: string;
+  value: string;
+  cls?: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <span className="text-muted-foreground text-[9px] uppercase tracking-[0.1em] mr-1">
+        {label}
+      </span>
+      <span className={cls ?? "text-foreground"}>{value}</span>
+    </div>
   );
 }
