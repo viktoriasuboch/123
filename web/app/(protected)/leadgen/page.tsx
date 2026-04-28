@@ -58,10 +58,6 @@ export default async function LeadgenPage({
 
   return (
     <div>
-      <h1 className="font-display text-4xl tracking-widest text-foreground mb-5">
-        LEAD GENERATION · BONUSES
-      </h1>
-
       <PeriodFilter
         availableYears={
           years.length > 0
