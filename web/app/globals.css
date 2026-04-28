@@ -174,3 +174,38 @@
 /* utility classes for legacy display fonts */
 .font-display { font-family: var(--font-bebas), sans-serif; letter-spacing: 0.08em; }
 .font-mono    { font-family: var(--font-plex-mono), ui-monospace, monospace; }
+
+/* ─── leopard print button (light theme only) ─────────────────────────── */
+.leopard-btn {
+  /* layered ellipses simulate leopard rosettes; tan base; tile via background-size */
+  background-color: #e9b878;
+  background-image:
+    radial-gradient(ellipse 11px 8px at 18% 22%,  #3a230b 0%, #3a230b 38%, transparent 41%),
+    radial-gradient(ellipse  8px 6px at 62% 18%,  #3a230b 0%, #3a230b 38%, transparent 41%),
+    radial-gradient(ellipse 10px 7px at 85% 38%,  #3a230b 0%, #3a230b 38%, transparent 41%),
+    radial-gradient(ellipse  9px 7px at 35% 55%,  #3a230b 0%, #3a230b 38%, transparent 41%),
+    radial-gradient(ellipse  7px 5px at 78% 72%,  #3a230b 0%, #3a230b 38%, transparent 41%),
+    radial-gradient(ellipse 11px 8px at 12% 80%,  #3a230b 0%, #3a230b 38%, transparent 41%),
+    radial-gradient(ellipse  6px 5px at 50% 88%,  #3a230b 0%, #3a230b 38%, transparent 41%),
+    radial-gradient(ellipse  9px 6px at 95% 90%,  #3a230b 0%, #3a230b 38%, transparent 41%);
+  background-size: 70px 56px;
+  background-repeat: repeat;
+  color: #1a1209 !important;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-shadow: 0 1px 0 rgba(255, 220, 170, 0.6);
+  border: 1px solid #5a3a18;
+  transition: filter .15s ease, transform .1s ease;
+}
+.leopard-btn:hover { filter: brightness(1.06) saturate(1.1); }
+.leopard-btn:active { transform: translateY(1px); }
+/* Dark theme: revert to plain primary button */
+.dark .leopard-btn {
+  background-color: var(--primary);
+  background-image: none;
+  color: var(--primary-foreground) !important;
+  border: 1px solid transparent;
+  text-shadow: none;
+  letter-spacing: normal;
+  font-weight: 600;
+}

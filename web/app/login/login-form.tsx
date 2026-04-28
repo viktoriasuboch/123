@@ -16,7 +16,12 @@ const SECTION_LABEL: Record<SectionId, string> = {
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending} className="w-full" size="lg">
+    <Button
+      type="submit"
+      disabled={pending}
+      className="w-full leopard-btn"
+      size="lg"
+    >
       {pending ? "Проверяю…" : "Войти"}
     </Button>
   );
