@@ -176,28 +176,25 @@
 .font-mono    { font-family: var(--font-plex-mono), ui-monospace, monospace; }
 
 /* ─── leopard print button (light theme only) ─────────────────────────── */
+/*
+ * SVG tile (300×200) with three layers:
+ *  1. tan base (#d4a373)
+ *  2. cream patches for the lighter background areas (#e8c896)
+ *  3. dark brown irregular rosettes (#2a1810), rotated ellipses + companions
+ */
 .leopard-btn {
-  /* layered ellipses simulate leopard rosettes; tan base; tile via background-size */
-  background-color: #e9b878;
-  background-image:
-    radial-gradient(ellipse 11px 8px at 18% 22%,  #3a230b 0%, #3a230b 38%, transparent 41%),
-    radial-gradient(ellipse  8px 6px at 62% 18%,  #3a230b 0%, #3a230b 38%, transparent 41%),
-    radial-gradient(ellipse 10px 7px at 85% 38%,  #3a230b 0%, #3a230b 38%, transparent 41%),
-    radial-gradient(ellipse  9px 7px at 35% 55%,  #3a230b 0%, #3a230b 38%, transparent 41%),
-    radial-gradient(ellipse  7px 5px at 78% 72%,  #3a230b 0%, #3a230b 38%, transparent 41%),
-    radial-gradient(ellipse 11px 8px at 12% 80%,  #3a230b 0%, #3a230b 38%, transparent 41%),
-    radial-gradient(ellipse  6px 5px at 50% 88%,  #3a230b 0%, #3a230b 38%, transparent 41%),
-    radial-gradient(ellipse  9px 6px at 95% 90%,  #3a230b 0%, #3a230b 38%, transparent 41%);
-  background-size: 70px 56px;
+  background-color: #d4a373;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 200' preserveAspectRatio='xMidYMid slice'><rect width='300' height='200' fill='%23d4a373'/><g fill='%23e8c896'><path d='M0,0 Q60,8 78,38 Q70,75 28,68 Q0,50 0,28 Z'/><path d='M195,0 Q255,5 282,28 Q292,62 248,76 Q205,68 198,42 Z'/><path d='M100,72 Q150,68 168,108 Q156,146 108,140 Q78,120 92,96 Z'/><path d='M232,118 Q295,112 300,148 Q288,192 246,196 Q218,180 228,150 Z'/><path d='M28,138 Q82,132 92,168 Q80,200 32,200 Q0,184 8,162 Z'/></g><g fill='%232a1810'><ellipse cx='30' cy='22' rx='8' ry='6' transform='rotate(-18 30 22)'/><ellipse cx='44' cy='40' rx='6' ry='5'/><ellipse cx='58' cy='14' rx='7' ry='5' transform='rotate(22 58 14)'/><ellipse cx='90' cy='28' rx='9' ry='7' transform='rotate(-32 90 28)'/><ellipse cx='112' cy='48' rx='6' ry='5' transform='rotate(15 112 48)'/><ellipse cx='130' cy='32' rx='8' ry='6' transform='rotate(8 130 32)'/><ellipse cx='148' cy='18' rx='5' ry='4'/><ellipse cx='170' cy='42' rx='8' ry='6' transform='rotate(-20 170 42)'/><ellipse cx='192' cy='22' rx='7' ry='5' transform='rotate(18 192 22)'/><ellipse cx='220' cy='38' rx='9' ry='6' transform='rotate(15 220 38)'/><ellipse cx='248' cy='18' rx='6' ry='5'/><ellipse cx='270' cy='40' rx='8' ry='5' transform='rotate(-25 270 40)'/><ellipse cx='14' cy='62' rx='7' ry='5' transform='rotate(20 14 62)'/><ellipse cx='38' cy='78' rx='9' ry='7' transform='rotate(-12 38 78)'/><ellipse cx='62' cy='66' rx='6' ry='5'/><ellipse cx='80' cy='90' rx='8' ry='6' transform='rotate(-18 80 90)'/><ellipse cx='100' cy='72' rx='5' ry='4' transform='rotate(10 100 72)'/><ellipse cx='122' cy='90' rx='9' ry='7' transform='rotate(28 122 90)'/><ellipse cx='150' cy='72' rx='6' ry='5'/><ellipse cx='168' cy='92' rx='8' ry='6' transform='rotate(-12 168 92)'/><ellipse cx='192' cy='78' rx='7' ry='6' transform='rotate(15 192 78)'/><ellipse cx='220' cy='95' rx='9' ry='6' transform='rotate(-22 220 95)'/><ellipse cx='248' cy='75' rx='6' ry='5' transform='rotate(20 248 75)'/><ellipse cx='280' cy='85' rx='8' ry='6' transform='rotate(-15 280 85)'/><ellipse cx='22' cy='118' rx='8' ry='6' transform='rotate(-22 22 118)'/><ellipse cx='52' cy='128' rx='6' ry='5'/><ellipse cx='75' cy='112' rx='9' ry='7' transform='rotate(20 75 112)'/><ellipse cx='100' cy='130' rx='6' ry='5' transform='rotate(-10 100 130)'/><ellipse cx='128' cy='148' rx='8' ry='6' transform='rotate(-25 128 148)'/><ellipse cx='150' cy='115' rx='7' ry='5' transform='rotate(15 150 115)'/><ellipse cx='178' cy='128' rx='9' ry='7' transform='rotate(-18 178 128)'/><ellipse cx='205' cy='115' rx='6' ry='5'/><ellipse cx='232' cy='148' rx='8' ry='6' transform='rotate(22 232 148)'/><ellipse cx='258' cy='128' rx='5' ry='4'/><ellipse cx='284' cy='150' rx='9' ry='6' transform='rotate(-15 284 150)'/><ellipse cx='12' cy='168' rx='6' ry='5'/><ellipse cx='40' cy='178' rx='8' ry='6' transform='rotate(-18 40 178)'/><ellipse cx='68' cy='162' rx='7' ry='5' transform='rotate(20 68 162)'/><ellipse cx='95' cy='185' rx='6' ry='5'/><ellipse cx='120' cy='172' rx='9' ry='6' transform='rotate(-12 120 172)'/><ellipse cx='148' cy='190' rx='5' ry='4'/><ellipse cx='168' cy='168' rx='8' ry='6' transform='rotate(15 168 168)'/><ellipse cx='195' cy='185' rx='6' ry='5' transform='rotate(-10 195 185)'/><ellipse cx='222' cy='172' rx='9' ry='6' transform='rotate(20 222 172)'/><ellipse cx='250' cy='190' rx='6' ry='5'/><ellipse cx='278' cy='178' rx='8' ry='6' transform='rotate(-22 278 178)'/></g></svg>");
+  background-size: 180px 120px;
   background-repeat: repeat;
   color: #1a1209 !important;
   font-weight: 800;
-  letter-spacing: 0.12em;
-  text-shadow: 0 1px 0 rgba(255, 220, 170, 0.6);
-  border: 1px solid #5a3a18;
+  letter-spacing: 0.1em;
+  text-shadow: 0 1px 0 rgba(255, 230, 200, 0.7);
+  border: 1px solid #6a4218;
   transition: filter .15s ease, transform .1s ease;
 }
-.leopard-btn:hover { filter: brightness(1.06) saturate(1.1); }
+.leopard-btn:hover { filter: brightness(1.05) saturate(1.08); }
 .leopard-btn:active { transform: translateY(1px); }
 /* Dark theme: revert to plain primary button */
 .dark .leopard-btn {
