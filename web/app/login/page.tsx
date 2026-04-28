@@ -7,6 +7,11 @@ import type { SectionId } from "@/lib/session";
 
 const VALID = new Set<SectionId>(["leadgen", "projects"]);
 
+const SECTION_TITLE: Record<SectionId, { title: string; icon: string }> = {
+  leadgen: { title: "LEADGEN BONUS", icon: "🎯" },
+  projects: { title: "PROJECTS", icon: "📁" },
+};
+
 type SearchParams = Promise<{ section?: string }>;
 
 export default async function LoginPage({
@@ -30,8 +35,11 @@ export default async function LoginPage({
       </div>
       <div className="w-full max-w-sm space-y-10">
         <div className="text-center space-y-2">
-          <h1 className="font-display text-5xl text-primary">LEADGE BONUS</h1>
-          <p className="font-mono text-[11px] tracking-[0.2em] uppercase text-muted-foreground">
+          <div className="text-4xl">{SECTION_TITLE[requested].icon}</div>
+          <h1 className="font-display text-5xl text-primary leading-none">
+            {SECTION_TITLE[requested].title}
+          </h1>
+          <p className="font-mono text-[11px] tracking-[0.2em] uppercase text-muted-foreground pt-2">
             Authentication required
           </p>
         </div>
