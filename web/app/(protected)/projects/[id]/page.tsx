@@ -35,7 +35,7 @@ export default async function ProjectDetailPage({ params }: { params: Params }) 
       <ProjectHeader project={project} />
       <KpiRow members={members} />
 
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="space-y-6">
         <MembersTable projectId={project.id} members={members} />
         <EventHistory projectId={project.id} events={events} />
       </div>

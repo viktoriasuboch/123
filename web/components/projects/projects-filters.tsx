@@ -9,14 +9,25 @@ const TABS = [
   { id: "devs",     label: "👤 Разработчики" },
 ] as const;
 
+const DEV_FILTERS = [
+  { id: "all",        label: "Все" },
+  { id: "staff",      label: "Штатные" },
+  { id: "freelancer", label: "Фрилансеры" },
+  { id: "fired",      label: "Уволенные" },
+] as const;
+
+export type DevFilterId = (typeof DEV_FILTERS)[number]["id"];
+
 export function ProjectsFilters({
   activeCount,
   inactiveCount,
   devsCount,
+  devsByFilter,
 }: {
   activeCount: number;
   inactiveCount: number;
   devsCount: number;
+  devsByFilter: Record<DevFilterId, number>;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -24,6 +35,7 @@ export function ProjectsFilters({
   const [pending, start] = useTransition();
 
   const tab = (params.get("tab") ?? "active") as (typeof TABS)[number]["id"];
+  const devFilter = (params.get("dev") ?? "all") as DevFilterId;
   const q = params.get("q") ?? "";
   const view = (params.get("view") ?? "list") as "list" | "grid";
 
@@ -43,31 +55,31 @@ export function ProjectsFilters({
   };
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-      <div className="flex flex-wrap gap-1.5">
-        {TABS.map((t) => {
-          const sel = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setParam("tab", t.id)}
-              className={`px-3 py-1.5 rounded border font-mono text-[10px] uppercase tracking-[0.15em] transition ${
-                sel
-                  ? "border-primary text-primary bg-primary/10"
-                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
-              }`}
-              disabled={pending}
-            >
-              {t.label}
-              <span className="ml-1.5 text-[9px] opacity-70">{counts[t.id]}</span>
-            </button>
-          );
-        })}
-      </div>
+    <div className="flex flex-col gap-3 mb-5">
+      {/* Row 1: main tabs + view toggle */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex flex-wrap gap-1.5">
+          {TABS.map((t) => {
+            const sel = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setParam("tab", t.id)}
+                className={`px-3 py-1.5 rounded border font-mono text-[10px] uppercase tracking-[0.15em] transition ${
+                  sel
+                    ? "border-primary text-primary bg-primary/10"
+                    : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
+                }`}
+                disabled={pending}
+              >
+                {t.label}
+                <span className="ml-1.5 text-[9px] opacity-70">{counts[t.id]}</span>
+              </button>
+            );
+          })}
+        </div>
 
-      <div className="flex items-center gap-2 w-full sm:w-auto">
-        {/* view-mode toggle */}
-        <div className="inline-flex rounded border border-border overflow-hidden shrink-0">
+        <div className="ml-auto inline-flex rounded border border-border overflow-hidden shrink-0">
           <button
             type="button"
             onClick={() => setParam("view", "list")}
@@ -97,15 +109,44 @@ export function ProjectsFilters({
             <GridIcon />
           </button>
         </div>
-
-        <input
-          type="search"
-          defaultValue={q}
-          placeholder="Поиск…"
-          onChange={(e) => setParam("q", e.target.value)}
-          className="h-9 px-3 rounded border bg-background text-sm font-mono w-full sm:w-72 placeholder:text-muted-foreground/60"
-        />
       </div>
+
+      {/* Row 2: dev sub-filter (only on devs tab) */}
+      {tab === "devs" ? (
+        <div className="flex flex-wrap gap-1.5">
+          {DEV_FILTERS.map((f) => {
+            const sel = devFilter === f.id;
+            return (
+              <button
+                key={f.id}
+                onClick={() =>
+                  setParam("dev", f.id === "all" ? null : f.id)
+                }
+                disabled={pending}
+                className={`h-8 px-3 rounded border font-mono text-[10px] uppercase tracking-[0.12em] transition ${
+                  sel
+                    ? "border-primary text-primary bg-primary/10"
+                    : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
+                }`}
+              >
+                {f.label}
+                <span className="ml-1.5 text-[9px] opacity-70">
+                  {devsByFilter[f.id] ?? 0}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {/* Row 3: search */}
+      <input
+        type="search"
+        defaultValue={q}
+        placeholder="Поиск…"
+        onChange={(e) => setParam("q", e.target.value)}
+        className="h-9 px-3 rounded border bg-background text-sm font-mono w-full placeholder:text-muted-foreground/60"
+      />
     </div>
   );
 }

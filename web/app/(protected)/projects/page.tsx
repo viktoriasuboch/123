@@ -5,13 +5,13 @@ import {
 } from "@/lib/data/projects";
 import { ProjectCard } from "@/components/projects/project-card";
 import { DevCard, type DevCardEntry } from "@/components/projects/dev-card";
-import { ProjectsFilters } from "@/components/projects/projects-filters";
+import { ProjectsFilters, type DevFilterId } from "@/components/projects/projects-filters";
 import { DevsSummaryBar } from "@/components/projects/devs-summary-bar";
 import { ProjectsSummaryBar } from "@/components/projects/projects-summary-bar";
 import { NewProjectButton } from "@/components/projects/new-project-button";
 import type { Project, ProjectMember } from "@/lib/schemas";
 
-type SP = Promise<{ tab?: string; q?: string; view?: string }>;
+type SP = Promise<{ tab?: string; q?: string; view?: string; dev?: string }>;
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +24,11 @@ export default async function ProjectsPage({
   const tab = (sp.tab ?? "active") as "active" | "inactive" | "devs";
   const q = (sp.q ?? "").trim().toLowerCase();
   const view = (sp.view === "grid" ? "grid" : "list") as "list" | "grid";
+  const devFilter = (
+    sp.dev && ["all", "staff", "freelancer", "fired"].includes(sp.dev)
+      ? sp.dev
+      : "all"
+  ) as DevFilterId;
 
   const [projects, members, devStatuses] = await Promise.all([
     listProjects(),
@@ -41,6 +46,16 @@ export default async function ProjectsPage({
 
   // Build dev entries
   const devEntries = buildDevEntries(projects, members, devStatuses);
+
+  // Counts for dev sub-filter buttons (search-independent, no double-filtering)
+  const devsByFilter: Record<DevFilterId, number> = {
+    all: devEntries.filter((d) => !d.fired).length,
+    staff: devEntries.filter((d) => !d.fired && d.empType === "staff").length,
+    freelancer: devEntries.filter(
+      (d) => !d.fired && d.empType !== "staff",
+    ).length,
+    fired: devEntries.filter((d) => d.fired).length,
+  };
 
   // Apply search
   const projMatch = (p: Project) =>
@@ -70,13 +85,22 @@ export default async function ProjectsPage({
       <ProjectsFilters
         activeCount={activeProjects.length}
         inactiveCount={inactiveProjects.length}
-        devsCount={devEntries.length}
+        devsCount={devEntries.filter((d) => !d.fired).length}
+        devsByFilter={devsByFilter}
       />
 
       {tab === "devs" ? (
         <>
-          <DevsSummaryBar projects={projects} members={members} />
-          <DevsList entries={devEntries.filter(devMatch)} view={view} />
+          <DevsSummaryBar
+            projects={projects}
+            members={members}
+            devEntries={devEntries}
+          />
+          <DevsList
+            entries={devEntries.filter(devMatch)}
+            view={view}
+            filter={devFilter}
+          />
         </>
       ) : (
         (() => {
@@ -141,70 +165,40 @@ function ProjectsList({
 function DevsList({
   entries,
   view,
+  filter,
 }: {
   entries: DevCardEntry[];
   view: "list" | "grid";
+  filter: DevFilterId;
 }) {
-  if (entries.length === 0)
+  // Apply employment-type / fired filter
+  const visible = entries.filter((d) => {
+    if (filter === "fired") return d.fired;
+    if (d.fired) return false; // hide fired in non-"fired" filters
+    if (filter === "staff") return d.empType === "staff";
+    if (filter === "freelancer") return d.empType !== "staff";
+    return true; // all
+  });
+
+  if (visible.length === 0)
     return (
       <p className="font-mono text-xs text-muted-foreground py-12 text-center">
-        Разработчики не найдены
+        {filter === "fired"
+          ? "Уволенных нет"
+          : "Разработчики не найдены"}
       </p>
     );
 
-  const staff = entries.filter((d) => d.empType === "staff" && !d.fired);
-  const free = entries.filter((d) => d.empType !== "staff" && !d.fired);
-  const fired = entries.filter((d) => d.fired);
-
-  return (
-    <div className="space-y-6">
-      {staff.length > 0 ? (
-        <Section title="Штатные" tone="info" count={staff.length} entries={staff} view={view} />
-      ) : null}
-      {free.length > 0 ? (
-        <Section title="Фрилансеры" tone="warn" count={free.length} entries={free} view={view} />
-      ) : null}
-      {fired.length > 0 ? (
-        <Section title="Уволенные" tone="bad" count={fired.length} entries={fired} view={view} />
-      ) : null}
-    </div>
-  );
-}
-
-function Section({
-  title,
-  count,
-  entries,
-  tone,
-  view,
-}: {
-  title: string;
-  count: number;
-  entries: DevCardEntry[];
-  tone: "info" | "warn" | "bad";
-  view: "list" | "grid";
-}) {
-  const toneClass =
-    tone === "info"
-      ? "text-info"
-      : tone === "warn"
-      ? "text-warn"
-      : "text-bad";
   const containerCls =
     view === "list"
       ? "grid gap-3 lg:grid-cols-2"
       : "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+
   return (
-    <div>
-      <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-2 flex items-center gap-2">
-        {title}
-        <span className={toneClass}>{count}</span>
-      </h2>
-      <div className={containerCls}>
-        {entries.map((e) => (
-          <DevCard key={e.name} entry={e} />
-        ))}
-      </div>
+    <div className={containerCls}>
+      {visible.map((e) => (
+        <DevCard key={e.name} entry={e} />
+      ))}
     </div>
   );
 }
