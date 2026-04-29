@@ -38,22 +38,22 @@ export function MembersTable({
         />
       ) : null}
 
-      <table className="w-full text-sm font-mono min-w-[1500px] table-fixed">
+      <table className="w-full text-sm font-mono min-w-[1180px] table-fixed">
         <colgroup>
-          <col className="w-[180px]" /> {/* Имя */}
-          <col className="w-[110px]" /> {/* Роль */}
-          <col className="w-[120px]" /> {/* Тип */}
-          <col className="w-[100px]" /> {/* Зарплата */}
-          <col className="w-[80px]"  /> {/* Buy */}
-          <col className="w-[70px]"  /> {/* Sell */}
-          <col className="w-[90px]"  /> {/* Маржа $ */}
-          <col className="w-[80px]"  /> {/* Маржа % */}
-          <col className="w-[100px]" /> {/* Rev/мес */}
-          <col className="w-[70px]"  /> {/* ч/день */}
-          <col className="w-[150px]" /> {/* Старт */}
-          <col className="w-[150px]" /> {/* Конец */}
-          <col className="w-[120px]" /> {/* Статус */}
-          <col className="w-[40px]"  /> {/* ✕ */}
+          <col className="w-[150px]" /> {/* Имя */}
+          <col className="w-[75px]"  /> {/* Роль */}
+          <col className="w-[95px]"  /> {/* Тип */}
+          <col className="w-[80px]"  /> {/* Зарплата */}
+          <col className="w-[65px]"  /> {/* Buy */}
+          <col className="w-[55px]"  /> {/* Sell */}
+          <col className="w-[70px]"  /> {/* Маржа $ */}
+          <col className="w-[60px]"  /> {/* Маржа % */}
+          <col className="w-[80px]"  /> {/* Rev/мес */}
+          <col className="w-[50px]"  /> {/* ч/день */}
+          <col className="w-[130px]" /> {/* Старт */}
+          <col className="w-[130px]" /> {/* Конец */}
+          <col className="w-[95px]"  /> {/* Статус */}
+          <col className="w-[35px]"  /> {/* ✕ */}
         </colgroup>
         <thead>
           <tr className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground border-b">
