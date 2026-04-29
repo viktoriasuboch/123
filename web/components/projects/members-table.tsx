@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { ProjectMember } from "@/lib/schemas";
-import { buyRate, marginPerHour } from "@/lib/calc";
+import { HOURS_PER_MONTH } from "@/lib/calc";
 import { patchMember, removeMember, addMember } from "../../app/(protected)/projects/_actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,14 +100,38 @@ function MemberRow({
   m: ProjectMember;
   projectId: string;
 }) {
-  const isStaff = m.employment_type === "staff";
-  const buy = buyRate(m);
-  const margin = marginPerHour(m);
-  const marginPct = (m.sell_rate || 0) > 0 ? (margin / (m.sell_rate || 1)) * 100 : 0;
-  const revMonth = (m.sell_rate || 0) * (m.hours_load || 0);
-  const hpd = Math.round(((m.hours_load || 0) / 20) * 10) / 10;
-  const low = margin < 20;
   const [pending, start] = useTransition();
+
+  // Local state for fields that affect computed values (margin / rev / buy).
+  // Inputs are controlled, so margin recomputes immediately as the user types,
+  // without waiting for the server round-trip.
+  const [empType, setEmpType] = useState<string>(
+    m.employment_type ?? "freelancer",
+  );
+  const [salary, setSalary] = useState<number>(m.salary ?? 0);
+  const [buyRateLocal, setBuyRateLocal] = useState<number>(m.buy_rate ?? 0);
+  const [sellRate, setSellRate] = useState<number>(m.sell_rate ?? 0);
+  const [hpd, setHpd] = useState<number>(
+    Math.round(((m.hours_load ?? 0) / 20) * 10) / 10,
+  );
+
+  // Re-sync state when fresh data arrives from the server (revalidate / realtime).
+  useEffect(() => setEmpType(m.employment_type ?? "freelancer"), [m.employment_type]);
+  useEffect(() => setSalary(m.salary ?? 0), [m.salary]);
+  useEffect(() => setBuyRateLocal(m.buy_rate ?? 0), [m.buy_rate]);
+  useEffect(() => setSellRate(m.sell_rate ?? 0), [m.sell_rate]);
+  useEffect(
+    () => setHpd(Math.round(((m.hours_load ?? 0) / 20) * 10) / 10),
+    [m.hours_load],
+  );
+
+  const isStaff = empType === "staff";
+  const buy = isStaff ? salary / HOURS_PER_MONTH : buyRateLocal;
+  const margin = sellRate - buy;
+  const marginPct = sellRate > 0 ? (margin / sellRate) * 100 : 0;
+  const hoursLoad = hpd * 20;
+  const revMonth = sellRate * hoursLoad;
+  const low = margin < 20;
 
   const save = (field: string, value: string | number | boolean | null) => {
     start(async () => {
@@ -145,8 +169,11 @@ function MemberRow({
       </td>
       <td className="p-1.5">
         <select
-          defaultValue={m.employment_type ?? "freelancer"}
-          onChange={(e) => save("employment_type", e.target.value)}
+          value={empType}
+          onChange={(e) => {
+            setEmpType(e.target.value);
+            save("employment_type", e.target.value);
+          }}
           className={inputCls}
         >
           <option value="freelancer">Фрилансер</option>
@@ -157,8 +184,9 @@ function MemberRow({
         {isStaff ? (
           <input
             type="number"
-            defaultValue={m.salary || 0}
-            onBlur={(e) => save("salary", Number(e.target.value))}
+            value={salary}
+            onChange={(e) => setSalary(Number(e.target.value) || 0)}
+            onBlur={(e) => save("salary", Number(e.target.value) || 0)}
             className={numCls}
           />
         ) : (
@@ -171,8 +199,9 @@ function MemberRow({
         ) : (
           <input
             type="number"
-            defaultValue={m.buy_rate || 0}
-            onBlur={(e) => save("buy_rate", Number(e.target.value))}
+            value={buyRateLocal}
+            onChange={(e) => setBuyRateLocal(Number(e.target.value) || 0)}
+            onBlur={(e) => save("buy_rate", Number(e.target.value) || 0)}
             className={numCls}
           />
         )}
@@ -180,8 +209,9 @@ function MemberRow({
       <td className="p-1.5 text-right">
         <input
           type="number"
-          defaultValue={m.sell_rate || 0}
-          onBlur={(e) => save("sell_rate", Number(e.target.value))}
+          value={sellRate}
+          onChange={(e) => setSellRate(Number(e.target.value) || 0)}
+          onBlur={(e) => save("sell_rate", Number(e.target.value) || 0)}
           className={numCls}
         />
       </td>
@@ -194,7 +224,8 @@ function MemberRow({
         <input
           type="number"
           step={0.1}
-          defaultValue={hpd}
+          value={hpd}
+          onChange={(e) => setHpd(parseFloat(e.target.value) || 0)}
           onBlur={(e) =>
             save("hours_load", (parseFloat(e.target.value) || 0) * 20)
           }
