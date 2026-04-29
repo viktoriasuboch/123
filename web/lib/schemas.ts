@@ -121,7 +121,6 @@ export const ProjectMemberInsert = ProjectMember.omit({
   id: true,
   created_at: true,
 });
-export const ProjectMemberUpdate = ProjectMemberInsert.partial();
 
 export const EventType = z.enum([
   "note",

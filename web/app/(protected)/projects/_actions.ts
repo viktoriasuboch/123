@@ -9,7 +9,6 @@ import {
   ProjectInsert,
   ProjectUpdate,
   ProjectMemberInsert,
-  ProjectMemberUpdate,
   ProjectEventInsert,
   Uuid,
 } from "@/lib/schemas";
@@ -223,6 +222,28 @@ const MemberFieldPatch = z.object({
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
 });
 
+const MEMBER_FIELD_LABELS: Record<string, string> = {
+  dev_name: "Имя",
+  role: "Роль",
+  employment_type: "Тип",
+  buy_rate: "Buy",
+  sell_rate: "Sell",
+  salary: "Зарплата",
+  hours_load: "Часов/мес",
+  dev_start_date: "Старт",
+  dev_end_date: "Конец",
+  is_active: "Статус",
+};
+
+const fmtMemberFieldValue = (field: string, v: unknown): string => {
+  if (v === null || v === undefined || v === "") return "—";
+  if (field === "employment_type") return v === "staff" ? "Штатный" : "Фрилансер";
+  if (field === "is_active") return v ? "активен" : "завершён";
+  if (field === "buy_rate" || field === "sell_rate") return `$${Number(v).toFixed(2)}`;
+  if (field === "hours_load") return `${(Number(v) / 20).toFixed(1)} ч/день`;
+  return String(v);
+};
+
 export async function patchMember(
   projectId: string,
   memberId: string,
@@ -250,13 +271,35 @@ export async function patchMember(
   if (value === "" && (field.endsWith("_date") || field === "role")) value = null;
 
   const parsed = MemberFieldPatch.parse({ field, value });
-  const update = ProjectMemberUpdate.parse({ [parsed.field]: parsed.value });
 
+  // Read previous value (and dev_name for the history label) BEFORE update.
+  const { data: prev } = await sb()
+    .from("project_members")
+    .select(`${parsed.field}, dev_name`)
+    .eq("id", memberId)
+    .single();
+  const oldValue = prev ? (prev as Record<string, unknown>)[parsed.field] : null;
+  const devName = (prev as { dev_name?: string } | null)?.dev_name;
+
+  // Update ONLY the touched column. Going through a partial Zod schema
+  // with `.default(0)` was silently zeroing other numeric columns.
   const { error } = await sb()
     .from("project_members")
-    .update(update)
+    .update({ [parsed.field]: parsed.value })
     .eq("id", memberId);
   if (error) throw error;
+
+  // Log change to history (skip dev_name renames and no-op writes).
+  if (parsed.field !== "dev_name" && oldValue !== parsed.value) {
+    const label = MEMBER_FIELD_LABELS[parsed.field] ?? parsed.field;
+    const eventType: "status_change" | "rate_change" =
+      parsed.field === "is_active" ? "status_change" : "rate_change";
+    await sb().from("project_events").insert({
+      project_id: projectId,
+      event_type: eventType,
+      description: `${devName ?? "—"} · ${label}: ${fmtMemberFieldValue(parsed.field, oldValue)} → ${fmtMemberFieldValue(parsed.field, parsed.value)}`,
+    });
+  }
 
   revalidatePath(`/projects/${projectId}`);
 }
