@@ -17,7 +17,7 @@ export default async function ProtectedLayout({
       <header className="border-b bg-card">
         <div className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between gap-6 flex-wrap">
           <Link href="/" className="font-display text-2xl text-primary tracking-widest">
-            <span className="mr-2">💰</span>VICTORIA&apos;S PLATFORM
+            <span className="mr-2">🚀</span>INTEREXY PLATFORM
           </Link>
           <nav className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em]">
             {hasLeadgen ? (

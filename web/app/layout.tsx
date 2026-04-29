@@ -24,8 +24,8 @@ const bebas = Bebas_Neue({
 });
 
 export const metadata: Metadata = {
-  title: "Leadge Bonus",
-  description: "Internal dashboard",
+  title: "Interexy Platform",
+  description: "Internal operations platform",
 };
 
 export default function RootLayout({

@@ -16,8 +16,8 @@ export default async function LandingPage() {
       <div className="w-full max-w-4xl space-y-12">
         <header className="text-center space-y-2">
           <h1 className="font-display text-5xl sm:text-7xl text-primary leading-none">
-            <span className="mr-3 align-middle text-4xl sm:text-6xl">💰</span>
-            VICTORIA&apos;S PLATFORM
+            <span className="mr-3 align-middle text-4xl sm:text-6xl">🚀</span>
+            INTEREXY PLATFORM
           </h1>
           <p className="font-mono text-[11px] tracking-[0.25em] uppercase text-muted-foreground pt-2">
             Internal Operations Platform
