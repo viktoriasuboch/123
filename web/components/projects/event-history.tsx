@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { ProjectEvent } from "@/lib/schemas";
 import { isRedirectError } from "@/lib/errors";
-import { addProjectNote, deleteProjectEvent } from "../../app/(protected)/projects/_actions";
+import {
+  addProjectNote,
+  deleteProjectEvent,
+  editProjectNote,
+} from "../../app/(protected)/projects/_actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -69,50 +73,151 @@ export function EventHistory({
           </li>
         ) : (
           events.map((e) => (
-            <li key={e.id} className="flex gap-3 p-3 items-start group">
-              <span className="text-lg leading-none mt-0.5">
-                {ICONS[e.event_type ?? "note"] ?? "•"}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm leading-snug">{e.description ?? "—"}</p>
-                {e.comment ? (
-                  <p className="text-xs italic text-muted-foreground mt-0.5">
-                    "{e.comment}"
-                  </p>
-                ) : null}
-                <p className="font-mono text-[10px] text-muted-foreground mt-1">
-                  {e.created_at
-                    ? new Date(e.created_at).toLocaleString("ru-RU", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })
-                    : ""}
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  if (!confirm("Удалить запись?")) return;
-                  start(async () => {
-                    try {
-                      await deleteProjectEvent(projectId, e.id);
-                    } catch (err) {
-                      if (isRedirectError(err)) throw err;
-                      toast.error(`Не удалилось: ${(err as Error).message}`);
-                    }
-                  });
-                }}
-                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-bad transition px-2"
-                title="Удалить"
-              >
-                ✕
-              </button>
-            </li>
+            <EventItem key={e.id} projectId={projectId} event={e} />
           ))
         )}
       </ul>
     </section>
+  );
+}
+
+function EventItem({
+  projectId,
+  event,
+}: {
+  projectId: string;
+  event: ProjectEvent;
+}) {
+  const isNote = (event.event_type ?? "note") === "note";
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(event.description ?? "");
+  const [pending, start] = useTransition();
+
+  // Pull latest description in if revalidate brings a new one and we're
+  // not currently editing.
+  useEffect(() => {
+    if (!editing) setDraft(event.description ?? "");
+  }, [event.description, editing]);
+
+  const cancel = () => {
+    setDraft(event.description ?? "");
+    setEditing(false);
+  };
+
+  const save = () => {
+    const text = draft.trim();
+    if (!text) {
+      toast.error("Заметка не может быть пустой");
+      return;
+    }
+    if (text === (event.description ?? "")) {
+      setEditing(false);
+      return;
+    }
+    start(async () => {
+      try {
+        await editProjectNote(projectId, event.id, text);
+        setEditing(false);
+      } catch (err) {
+        if (isRedirectError(err)) throw err;
+        toast.error(`Не сохранилось: ${(err as Error).message}`);
+      }
+    });
+  };
+
+  return (
+    <li className={`flex gap-3 p-3 items-start group ${pending ? "opacity-50" : ""}`}>
+      <span className="text-lg leading-none mt-0.5">
+        {ICONS[event.event_type ?? "note"] ?? "•"}
+      </span>
+      <div className="flex-1 min-w-0">
+        {editing ? (
+          <div className="space-y-2">
+            <Textarea
+              value={draft}
+              onChange={(ev) => setDraft(ev.target.value)}
+              rows={2}
+              autoFocus
+              onKeyDown={(ev) => {
+                if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
+                  ev.preventDefault();
+                  save();
+                } else if (ev.key === "Escape") {
+                  cancel();
+                }
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={cancel}
+                disabled={pending}
+              >
+                Отмена
+              </Button>
+              <Button size="sm" onClick={save} disabled={pending}>
+                Сохранить
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm leading-snug whitespace-pre-wrap">
+              {event.description ?? "—"}
+            </p>
+            {event.comment ? (
+              <p className="text-xs italic text-muted-foreground mt-0.5">
+                "{event.comment}"
+              </p>
+            ) : null}
+            <p className="font-mono text-[10px] text-muted-foreground mt-1">
+              {event.created_at
+                ? new Date(event.created_at).toLocaleString("ru-RU", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : ""}
+            </p>
+          </>
+        )}
+      </div>
+
+      {!editing ? (
+        <div className="flex items-start gap-1 opacity-0 group-hover:opacity-100 transition">
+          {isNote ? (
+            <button
+              onClick={() => setEditing(true)}
+              className="text-muted-foreground hover:text-primary px-1.5"
+              title="Редактировать заметку"
+              aria-label="Редактировать"
+            >
+              ✏️
+            </button>
+          ) : null}
+          <button
+            onClick={() => {
+              if (!confirm("Удалить запись?")) return;
+              start(async () => {
+                try {
+                  await deleteProjectEvent(projectId, event.id);
+                } catch (err) {
+                  if (isRedirectError(err)) throw err;
+                  toast.error(`Не удалилось: ${(err as Error).message}`);
+                }
+              });
+            }}
+            className="text-muted-foreground hover:text-bad px-1.5"
+            title="Удалить"
+            aria-label="Удалить"
+          >
+            ✕
+          </button>
+        </div>
+      ) : null}
+    </li>
   );
 }

@@ -356,6 +356,33 @@ export async function deleteProjectEvent(projectId: string, eventId: string) {
   revalidatePath(`/projects/${projectId}`);
 }
 
+/**
+ * Edit the text of a manually-added note. Auto-generated events
+ * (rate_change, status_change, join, leave) are intentionally locked —
+ * editing them would corrupt the audit trail.
+ */
+export async function editProjectNote(
+  projectId: string,
+  eventId: string,
+  description: string,
+) {
+  await requireSection("projects");
+  Uuid.parse(projectId);
+  Uuid.parse(eventId);
+
+  const text = z.string().trim().min(1).max(2000).parse(description);
+
+  const { error } = await sb()
+    .from("project_events")
+    .update({ description: text })
+    .eq("id", eventId)
+    .eq("project_id", projectId)
+    .eq("event_type", "note");
+  if (error) throw error;
+
+  revalidatePath(`/projects/${projectId}`);
+}
+
 /* ─── developer status ──────────────────────────────────────────────── */
 
 export async function setDevStatus(
