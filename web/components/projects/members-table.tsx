@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import type { ProjectMember } from "@/lib/schemas";
 import { HOURS_PER_MONTH } from "@/lib/calc";
 import { isRedirectError } from "@/lib/errors";
-import { patchMember, removeMember, addMember } from "../../app/(protected)/projects/_actions";
+import { patchMember, removeMember, addMember, moveMember } from "../../app/(protected)/projects/_actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -39,8 +39,9 @@ export function MembersTable({
         />
       ) : null}
 
-      <table className="w-full text-sm font-mono min-w-[1180px] table-fixed">
+      <table className="w-full text-sm font-mono min-w-[1230px] table-fixed">
         <colgroup>
+          <col className="w-[44px]"  /> {/* ↕ move */}
           <col className="w-[150px]" /> {/* Имя */}
           <col className="w-[75px]"  /> {/* Роль */}
           <col className="w-[95px]"  /> {/* Тип */}
@@ -58,6 +59,7 @@ export function MembersTable({
         </colgroup>
         <thead>
           <tr className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground border-b">
+            <th className="p-2"></th>
             <th className="text-left p-2 font-normal">Имя</th>
             <th className="text-left p-2 font-normal">Роль</th>
             <th className="text-left p-2 font-normal">Тип</th>
@@ -75,13 +77,19 @@ export function MembersTable({
           </tr>
         </thead>
         <tbody>
-          {members.map((m) => (
-            <MemberRow key={m.id} m={m} projectId={projectId} />
+          {members.map((m, i) => (
+            <MemberRow
+              key={m.id}
+              m={m}
+              projectId={projectId}
+              isFirst={i === 0}
+              isLast={i === members.length - 1}
+            />
           ))}
           {members.length === 0 ? (
             <tr>
               <td
-                colSpan={14}
+                colSpan={15}
                 className="p-6 text-center text-muted-foreground text-xs"
               >
                 Команда пуста
@@ -97,9 +105,13 @@ export function MembersTable({
 function MemberRow({
   m,
   projectId,
+  isFirst,
+  isLast,
 }: {
   m: ProjectMember;
   projectId: string;
+  isFirst: boolean;
+  isLast: boolean;
 }) {
   const [pending, start] = useTransition();
 
@@ -150,10 +162,45 @@ function MemberRow({
   const numCls = `${inputCls} text-right`;
   const marginCls = low ? "text-bad" : "text-good";
 
+  const move = (direction: "up" | "down") => {
+    start(async () => {
+      try {
+        await moveMember(projectId, m.id, direction);
+      } catch (e) {
+        if (isRedirectError(e)) throw e;
+        toast.error(`Не получилось: ${(e as Error).message}`);
+      }
+    });
+  };
+
   return (
     <tr
       className={`border-b border-border/50 hover:bg-muted/20 transition ${pending ? "opacity-50" : ""}`}
     >
+      <td className="p-1.5">
+        <div className="flex flex-col items-center gap-0 leading-none">
+          <button
+            type="button"
+            onClick={() => move("up")}
+            disabled={isFirst || pending}
+            className="text-muted-foreground hover:text-primary disabled:opacity-25 disabled:cursor-not-allowed text-[10px] leading-none px-1"
+            title="Выше"
+            aria-label="Переместить выше"
+          >
+            ▲
+          </button>
+          <button
+            type="button"
+            onClick={() => move("down")}
+            disabled={isLast || pending}
+            className="text-muted-foreground hover:text-primary disabled:opacity-25 disabled:cursor-not-allowed text-[10px] leading-none px-1"
+            title="Ниже"
+            aria-label="Переместить ниже"
+          >
+            ▼
+          </button>
+        </div>
+      </td>
       <td className="p-1.5">
         <input
           defaultValue={m.dev_name}

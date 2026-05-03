@@ -194,7 +194,19 @@ export async function addMember(projectId: string, formData: FormData) {
     throw new Error("Invalid member data");
   }
 
-  const { error } = await sb().from("project_members").insert(parsed.data);
+  // Append to the bottom of the list by default.
+  const { data: maxRow } = await sb()
+    .from("project_members")
+    .select("sort_order")
+    .eq("project_id", projectId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextSort = ((maxRow as { sort_order?: number } | null)?.sort_order ?? 0) + 1;
+
+  const { error } = await sb()
+    .from("project_members")
+    .insert({ ...parsed.data, sort_order: nextSort });
   if (error) throw error;
 
   await sb().from("project_events").insert({
@@ -300,6 +312,59 @@ export async function patchMember(
       description: `${devName ?? "—"} · ${label}: ${fmtMemberFieldValue(parsed.field, oldValue)} → ${fmtMemberFieldValue(parsed.field, parsed.value)}`,
     });
   }
+
+  revalidatePath(`/projects/${projectId}`);
+}
+
+/**
+ * Swap a member with its neighbour in the project's order. Direction:
+ * "up" moves towards a smaller sort_order, "down" towards a larger.
+ * No-op if already at the edge.
+ */
+export async function moveMember(
+  projectId: string,
+  memberId: string,
+  direction: "up" | "down",
+) {
+  await requireSection("projects");
+  Uuid.parse(projectId);
+  Uuid.parse(memberId);
+
+  const { data: rows, error: fetchErr } = await sb()
+    .from("project_members")
+    .select("id, sort_order")
+    .eq("project_id", projectId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (fetchErr) throw fetchErr;
+
+  const list = (rows ?? []) as Array<{ id: string; sort_order: number }>;
+  const idx = list.findIndex((r) => r.id === memberId);
+  if (idx < 0) return;
+
+  const otherIdx = direction === "up" ? idx - 1 : idx + 1;
+  if (otherIdx < 0 || otherIdx >= list.length) return;
+
+  const a = list[idx];
+  const b = list[otherIdx];
+  // Swap via two updates. Use a temp negative value to dodge any unique
+  // constraint that might be added later — currently there isn't one.
+  const tmp = -1 - idx;
+  const u1 = await sb()
+    .from("project_members")
+    .update({ sort_order: tmp })
+    .eq("id", a.id);
+  if (u1.error) throw u1.error;
+  const u2 = await sb()
+    .from("project_members")
+    .update({ sort_order: a.sort_order })
+    .eq("id", b.id);
+  if (u2.error) throw u2.error;
+  const u3 = await sb()
+    .from("project_members")
+    .update({ sort_order: b.sort_order })
+    .eq("id", a.id);
+  if (u3.error) throw u3.error;
 
   revalidatePath(`/projects/${projectId}`);
 }

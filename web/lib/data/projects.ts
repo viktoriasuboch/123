@@ -25,6 +25,7 @@ export async function listProjectMembers(): Promise<ProjectMember[]> {
   const { data, error } = await sb()
     .from("project_members")
     .select("*")
+    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
   if (error) throw error;
   return z.array(ProjectMember).parse(data ?? []);
@@ -63,6 +64,7 @@ export async function getProjectMembers(projectId: string): Promise<ProjectMembe
     .from("project_members")
     .select("*")
     .eq("project_id", projectId)
+    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
   if (error) throw error;
   return z.array(ProjectMember).parse(data ?? []);
