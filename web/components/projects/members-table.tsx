@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import type { ProjectMember } from "@/lib/schemas";
 import { HOURS_PER_MONTH, fmtRate } from "@/lib/calc";
-import { isRedirectError } from "@/lib/errors";
+import { reportActionError } from "@/lib/client-errors";
 import { patchMember, removeMember, addMember, moveMember } from "../../app/(protected)/projects/_actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -151,8 +151,7 @@ function MemberRow({
       try {
         await patchMember(projectId, m.id, field, value);
       } catch (e) {
-        if (isRedirectError(e)) throw e;
-        toast.error(`Не сохранилось: ${(e as Error).message}`);
+        reportActionError(e, "Не сохранилось");
       }
     });
   };
@@ -167,8 +166,7 @@ function MemberRow({
       try {
         await moveMember(projectId, m.id, direction);
       } catch (e) {
-        if (isRedirectError(e)) throw e;
-        toast.error(`Не получилось: ${(e as Error).message}`);
+        reportActionError(e, "Не получилось");
       }
     });
   };
@@ -318,8 +316,7 @@ function MemberRow({
               try {
                 await removeMember(projectId, m.id, m.dev_name);
               } catch (e) {
-                if (isRedirectError(e)) throw e;
-                toast.error(`Не удалилось: ${(e as Error).message}`);
+                reportActionError(e, "Не удалилось");
               }
             });
           }}
@@ -350,8 +347,7 @@ function AddMemberRow({
           await addMember(projectId, fd);
           onDone();
         } catch (e) {
-          if (isRedirectError(e)) throw e;
-          toast.error(`Не добавилось: ${(e as Error).message}`);
+          reportActionError(e, "Не добавилось");
         }
       }}
       className="flex flex-wrap gap-2 p-3 border-b bg-muted/20 items-end"

@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createProject } from "../../app/(protected)/projects/_actions";
-import { isRedirectError } from "@/lib/errors";
+import { reportActionError } from "@/lib/client-errors";
 import { toast } from "sonner";
 
 export function NewProjectButton() {
@@ -41,8 +41,7 @@ export function NewProjectButton() {
               await createProject(fd);
               setOpen(false);
             } catch (err) {
-              if (isRedirectError(err)) throw err;
-              toast.error(`Не удалось создать: ${(err as Error).message}`);
+              reportActionError(err, "Не удалось создать");
             }
           }}
           className="space-y-4"

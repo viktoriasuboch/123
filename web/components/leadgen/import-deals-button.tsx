@@ -11,7 +11,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { isRedirectError } from "@/lib/errors";
+import { reportActionError } from "@/lib/client-errors";
 import { importDeals, type ImportDealsResult } from "../../app/(protected)/leadgen/_actions";
 import { toast } from "sonner";
 
@@ -94,8 +94,7 @@ export function ImportDealsButton({
                 }
                 if (fileRef.current) fileRef.current.value = "";
               } catch (err) {
-                if (isRedirectError(err)) throw err;
-                toast.error(`Ошибка: ${(err as Error).message}`);
+                reportActionError(err, "Ошибка");
               }
             });
           }}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import type { ProjectEvent } from "@/lib/schemas";
-import { isRedirectError } from "@/lib/errors";
+import { reportActionError } from "@/lib/client-errors";
 import {
   addProjectNote,
   deleteProjectEvent,
@@ -55,8 +55,7 @@ export function EventHistory({
                   await addProjectNote(projectId, text);
                   setDraft("");
                 } catch (e) {
-                  if (isRedirectError(e)) throw e;
-                  toast.error(`Не сохранилось: ${(e as Error).message}`);
+                  reportActionError(e, "Не сохранилось");
                 }
               });
             }}
@@ -119,8 +118,7 @@ function EventItem({
         await editProjectNote(projectId, event.id, text);
         setEditing(false);
       } catch (err) {
-        if (isRedirectError(err)) throw err;
-        toast.error(`Не сохранилось: ${(err as Error).message}`);
+        reportActionError(err, "Не сохранилось");
       }
     });
   };
@@ -205,8 +203,7 @@ function EventItem({
                 try {
                   await deleteProjectEvent(projectId, event.id);
                 } catch (err) {
-                  if (isRedirectError(err)) throw err;
-                  toast.error(`Не удалилось: ${(err as Error).message}`);
+                  reportActionError(err, "Не удалилось");
                 }
               });
             }}
