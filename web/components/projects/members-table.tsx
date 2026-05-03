@@ -209,15 +209,12 @@ function GroupSummaryRow({
     <tr
       className={`border-b border-border/50 text-[11px] ${pending ? "opacity-50" : ""}`}
     >
-      <td className="p-1.5 text-center text-muted-foreground">▾</td>
-      <td
-        className="p-1.5 font-display tracking-wide text-foreground truncate"
-        colSpan={2}
-      >
+      <td className="p-1.5"></td>
+      <td className="p-1.5 font-display tracking-wide text-foreground truncate">
         {label}
-        <span className="ml-2 text-muted-foreground uppercase tracking-[0.15em] text-[9px] font-mono">
-          · {list.length} чел
-        </span>
+      </td>
+      <td className="p-1.5 text-muted-foreground uppercase tracking-[0.15em] text-[9px] font-mono">
+        {list.length} чел
       </td>
       <td className="p-1.5"></td>
       <td className="p-1.5"></td>
