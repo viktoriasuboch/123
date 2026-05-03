@@ -207,15 +207,11 @@ function GroupSummaryRow({
 
   return (
     <tr
-      className={`border-b border-border/50 text-[11px] ${pending ? "opacity-50" : ""}`}
+      className={`border-b border-border/50 ${pending ? "opacity-50" : ""}`}
     >
       <td className="p-1.5"></td>
-      <td className="p-1.5 font-display tracking-wide text-foreground truncate">
-        {label}
-      </td>
-      <td className="p-1.5 text-muted-foreground uppercase tracking-[0.15em] text-[9px] font-mono">
-        {list.length} чел
-      </td>
+      <td className="p-1.5 truncate">{label}</td>
+      <td className="p-1.5 text-muted-foreground">{list.length} чел</td>
       <td className="p-1.5"></td>
       <td className="p-1.5"></td>
       <td className="p-1.5 text-right text-muted-foreground">{fmtRate(sumBuy)}</td>
@@ -236,7 +232,7 @@ function GroupSummaryRow({
           type="button"
           onClick={renameGroup}
           disabled={pending}
-          className="text-muted-foreground hover:text-primary text-[12px] px-1"
+          className="text-muted-foreground hover:text-primary px-1"
           title="Переименовать или расформировать группу"
           aria-label="Изменить группу"
         >
