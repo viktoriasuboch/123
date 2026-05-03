@@ -207,11 +207,11 @@ function GroupSummaryRow({
 
   return (
     <tr
-      className={`bg-primary/5 border-y border-primary/30 text-[11px] ${pending ? "opacity-50" : ""}`}
+      className={`border-b border-border/50 text-[11px] ${pending ? "opacity-50" : ""}`}
     >
-      <td className="p-1.5 text-center text-primary">▾</td>
+      <td className="p-1.5 text-center text-muted-foreground">▾</td>
       <td
-        className="p-1.5 font-display tracking-wide text-primary truncate"
+        className="p-1.5 font-display tracking-wide text-foreground truncate"
         colSpan={2}
       >
         {label}
@@ -334,9 +334,9 @@ function MemberRow({
 
   return (
     <tr
-      className={`border-b border-border/50 hover:bg-muted/20 transition ${pending ? "opacity-50" : ""} ${inGroup ? "bg-primary/[0.025]" : ""}`}
+      className={`border-b border-border/50 hover:bg-muted/20 transition ${pending ? "opacity-50" : ""}`}
     >
-      <td className={`p-1.5 ${inGroup ? "border-l-2 border-primary/40" : ""}`}>
+      <td className="p-1.5">
         <div className="flex flex-col items-center gap-0 leading-none">
           <button
             type="button"
