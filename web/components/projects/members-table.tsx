@@ -39,12 +39,11 @@ export function MembersTable({
         />
       ) : null}
 
-      <table className="w-full text-sm font-mono min-w-[1300px] table-fixed">
+      <table className="w-full text-sm font-mono min-w-[1230px] table-fixed">
         <colgroup>
           <col className="w-[44px]"  /> {/* ↕ move */}
-          <col className="w-[150px]" /> {/* Имя */}
+          <col className="w-[170px]" /> {/* Имя */}
           <col className="w-[75px]"  /> {/* Роль */}
-          <col className="w-[80px]"  /> {/* Группа */}
           <col className="w-[95px]"  /> {/* Тип */}
           <col className="w-[80px]"  /> {/* Зарплата */}
           <col className="w-[65px]"  /> {/* Buy */}
@@ -56,14 +55,13 @@ export function MembersTable({
           <col className="w-[130px]" /> {/* Старт */}
           <col className="w-[130px]" /> {/* Конец */}
           <col className="w-[95px]"  /> {/* Статус */}
-          <col className="w-[35px]"  /> {/* ✕ */}
+          <col className="w-[60px]"  /> {/* actions: 🔗 ✕ */}
         </colgroup>
         <thead>
           <tr className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground border-b">
             <th className="p-2"></th>
             <th className="text-left p-2 font-normal">Имя</th>
             <th className="text-left p-2 font-normal">Роль</th>
-            <th className="text-left p-2 font-normal">Группа</th>
             <th className="text-left p-2 font-normal">Тип</th>
             <th className="text-right p-2 font-normal">Зарплата</th>
             <th className="text-right p-2 font-normal">Buy</th>
@@ -83,7 +81,7 @@ export function MembersTable({
           {members.length === 0 ? (
             <tr>
               <td
-                colSpan={16}
+                colSpan={15}
                 className="p-6 text-center text-muted-foreground text-xs"
               >
                 Команда пуста
@@ -140,6 +138,7 @@ function renderRows(members: ProjectMember[], projectId: string) {
         key={`gs-${slot.label}-${slot.list[0].id}`}
         label={slot.label}
         list={slot.list}
+        projectId={projectId}
       />,
       ...slot.list.map((m, j) => (
         <MemberRow
@@ -150,6 +149,7 @@ function renderRows(members: ProjectMember[], projectId: string) {
           isLast={slot.firstIdx + j === total - 1}
           inGroup
           isLead={j === 0}
+          letter={String.fromCharCode(65 + j)}
         />
       )),
     ];
@@ -159,9 +159,11 @@ function renderRows(members: ProjectMember[], projectId: string) {
 function GroupSummaryRow({
   label,
   list,
+  projectId,
 }: {
   label: string;
   list: ProjectMember[];
+  projectId: string;
 }) {
   const lead = list[0];
   const sumBuy = list.reduce((s, m) => {
@@ -179,16 +181,40 @@ function GroupSummaryRow({
   const hpd = hours / 20;
   const cls = margin < 20 ? "text-bad" : "text-good";
 
+  const [pending, start] = useTransition();
+
+  const renameGroup = () => {
+    const next = window.prompt(
+      "Новое название группы (пусто — расформировать):",
+      label,
+    );
+    if (next === null) return;
+    const trimmed = next.trim();
+    start(async () => {
+      try {
+        for (const m of list) {
+          await patchMember(projectId, m.id, "group_label", trimmed || null);
+        }
+      } catch (e) {
+        reportActionError(e, "Не сохранилось");
+      }
+    });
+  };
+
   return (
-    <tr className="bg-primary/5 border-y border-primary/30 text-[11px]">
+    <tr
+      className={`bg-primary/5 border-y border-primary/30 text-[11px] ${pending ? "opacity-50" : ""}`}
+    >
       <td className="p-1.5 text-center text-primary">▾</td>
-      <td className="p-1.5 col-span-1 font-display tracking-wide text-primary truncate">
+      <td
+        className="p-1.5 font-display tracking-wide text-primary truncate"
+        colSpan={2}
+      >
         {label}
+        <span className="ml-2 text-muted-foreground uppercase tracking-[0.15em] text-[9px] font-mono">
+          · {list.length} чел
+        </span>
       </td>
-      <td className="p-1.5 text-muted-foreground uppercase tracking-[0.15em] text-[9px]">
-        Группа · {list.length} чел
-      </td>
-      <td className="p-1.5"></td>
       <td className="p-1.5"></td>
       <td className="p-1.5"></td>
       <td className="p-1.5 text-right text-muted-foreground">{fmtRate(sumBuy)}</td>
@@ -204,7 +230,18 @@ function GroupSummaryRow({
       <td className="p-1.5"></td>
       <td className="p-1.5"></td>
       <td className="p-1.5"></td>
-      <td className="p-1.5"></td>
+      <td className="p-1.5 text-center">
+        <button
+          type="button"
+          onClick={renameGroup}
+          disabled={pending}
+          className="text-muted-foreground hover:text-primary text-[12px] px-1"
+          title="Переименовать или расформировать группу"
+          aria-label="Изменить группу"
+        >
+          ✏️
+        </button>
+      </td>
     </tr>
   );
 }
@@ -216,6 +253,7 @@ function MemberRow({
   isLast,
   inGroup,
   isLead,
+  letter,
 }: {
   m: ProjectMember;
   projectId: string;
@@ -223,6 +261,7 @@ function MemberRow({
   isLast: boolean;
   inGroup: boolean;
   isLead?: boolean;
+  letter?: string;
 }) {
   const [pending, start] = useTransition();
 
@@ -318,11 +357,18 @@ function MemberRow({
         </div>
       </td>
       <td className="p-1.5">
-        <input
-          defaultValue={m.dev_name}
-          onBlur={(e) => save("dev_name", e.target.value)}
-          className={inputCls}
-        />
+        <div className="flex items-center gap-1.5 min-w-0">
+          {inGroup && letter ? (
+            <span className="font-mono text-muted-foreground/70 shrink-0 text-[11px] tracking-wider">
+              └─ <span className="text-muted-foreground">{letter}</span>
+            </span>
+          ) : null}
+          <input
+            defaultValue={m.dev_name}
+            onBlur={(e) => save("dev_name", e.target.value)}
+            className={`${inputCls} flex-1 min-w-0`}
+          />
+        </div>
       </td>
       <td className="p-1.5">
         <input
@@ -330,15 +376,6 @@ function MemberRow({
           onBlur={(e) => save("role", e.target.value)}
           className={inputCls}
           placeholder="—"
-        />
-      </td>
-      <td className="p-1.5">
-        <input
-          defaultValue={m.group_label ?? ""}
-          onBlur={(e) => save("group_label", e.target.value || null)}
-          className={inputCls}
-          placeholder="—"
-          title="Введите одинаковое название у нескольких разработчиков, чтобы объединить их в группу"
         />
       </td>
       <td className="p-1.5">
@@ -448,22 +485,46 @@ function MemberRow({
         </select>
       </td>
       <td className="p-1.5 text-center">
-        <button
-          onClick={() => {
-            if (!confirm(`Удалить ${m.dev_name}?`)) return;
-            start(async () => {
-              try {
-                await removeMember(projectId, m.id, m.dev_name);
-              } catch (e) {
-                reportActionError(e, "Не удалилось");
-              }
-            });
-          }}
-          className="text-muted-foreground hover:text-bad text-base px-2"
-          title="Удалить"
-        >
-          ✕
-        </button>
+        <div className="flex items-center justify-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              const cur = m.group_label ?? "";
+              const next = window.prompt(
+                "Группа (общий sell на всех; пусто — отвязать):",
+                cur,
+              );
+              if (next === null) return;
+              save("group_label", next.trim() || null);
+            }}
+            className="text-muted-foreground hover:text-primary text-[12px] px-1"
+            title={
+              m.group_label
+                ? `В группе «${m.group_label}» — клик чтобы изменить`
+                : "Привязать к группе"
+            }
+            aria-label="Группа"
+          >
+            🔗
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!confirm(`Удалить ${m.dev_name}?`)) return;
+              start(async () => {
+                try {
+                  await removeMember(projectId, m.id, m.dev_name);
+                } catch (e) {
+                  reportActionError(e, "Не удалилось");
+                }
+              });
+            }}
+            className="text-muted-foreground hover:text-bad text-base px-1"
+            title="Удалить"
+          >
+            ✕
+          </button>
+        </div>
       </td>
     </tr>
   );
@@ -493,12 +554,6 @@ function AddMemberRow({
     >
       <Field name="dev_name" label="Имя" required className="min-w-[180px]" />
       <Field name="role" label="Роль" placeholder="Dev / QA / PM" />
-      <Field
-        name="group_label"
-        label="Группа"
-        placeholder="—"
-        className="min-w-[120px]"
-      />
       <div className="flex flex-col gap-1">
         <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">
           Тип
