@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import type { ProjectMember } from "@/lib/schemas";
-import { HOURS_PER_MONTH } from "@/lib/calc";
+import { HOURS_PER_MONTH, fmtRate } from "@/lib/calc";
 import { isRedirectError } from "@/lib/errors";
 import { patchMember, removeMember, addMember, moveMember } from "../../app/(protected)/projects/_actions";
 import { Button } from "@/components/ui/button";
@@ -233,6 +233,7 @@ function MemberRow({
         {isStaff ? (
           <input
             type="number"
+            step="0.01"
             value={salary}
             onChange={(e) => setSalary(Number(e.target.value) || 0)}
             onBlur={(e) => save("salary", Number(e.target.value) || 0)}
@@ -244,10 +245,11 @@ function MemberRow({
       </td>
       <td className="p-1.5 text-right">
         {isStaff ? (
-          <span className="text-muted-foreground">${buy.toFixed(2)}</span>
+          <span className="text-muted-foreground">{fmtRate(buy)}</span>
         ) : (
           <input
             type="number"
+            step="0.01"
             value={buyRateLocal}
             onChange={(e) => setBuyRateLocal(Number(e.target.value) || 0)}
             onBlur={(e) => save("buy_rate", Number(e.target.value) || 0)}
@@ -258,13 +260,14 @@ function MemberRow({
       <td className="p-1.5 text-right">
         <input
           type="number"
+          step="0.01"
           value={sellRate}
           onChange={(e) => setSellRate(Number(e.target.value) || 0)}
           onBlur={(e) => save("sell_rate", Number(e.target.value) || 0)}
           className={numCls}
         />
       </td>
-      <td className={`p-1.5 text-right ${marginCls}`}>${margin.toFixed(2)}</td>
+      <td className={`p-1.5 text-right ${marginCls}`}>{fmtRate(margin)}</td>
       <td className={`p-1.5 text-right ${marginCls}`}>{marginPct.toFixed(1)}%</td>
       <td className="p-1.5 text-right text-muted-foreground">
         ${Math.round(revMonth).toLocaleString()}
@@ -337,6 +340,9 @@ function AddMemberRow({
   projectId: string;
   onDone: () => void;
 }) {
+  const [empType, setEmpType] = useState<"staff" | "freelancer">("freelancer");
+  const isStaff = empType === "staff";
+
   return (
     <form
       action={async (fd) => {
@@ -358,20 +364,25 @@ function AddMemberRow({
         </span>
         <select
           name="employment_type"
-          defaultValue="freelancer"
+          value={empType}
+          onChange={(e) => setEmpType(e.target.value as "staff" | "freelancer")}
           className="h-9 px-2 text-sm rounded border bg-background"
         >
           <option value="freelancer">Фрилансер</option>
           <option value="staff">Штатный</option>
         </select>
       </div>
-      <Field name="buy_rate" label="Buy ($/h)" type="number" />
-      <Field name="sell_rate" label="Sell ($/h)" type="number" />
-      <Field name="salary" label="Salary/мес" type="number" />
+      {isStaff ? (
+        <Field name="salary" label="Salary/мес" type="number" step="0.01" required />
+      ) : (
+        <Field name="buy_rate" label="Buy ($/h)" type="number" step="0.01" required />
+      )}
+      <Field name="sell_rate" label="Sell ($/h)" type="number" step="0.01" required />
       <Field
         name="hours_load"
         label="Часов/мес"
         type="number"
+        step="0.01"
         defaultValue="160"
       />
       <Field name="dev_start_date" label="Старт" type="date" />
@@ -390,6 +401,7 @@ function Field({
   placeholder,
   className,
   defaultValue,
+  step,
 }: {
   name: string;
   label: string;
@@ -398,6 +410,7 @@ function Field({
   placeholder?: string;
   className?: string;
   defaultValue?: string;
+  step?: string;
 }) {
   return (
     <div className={`flex flex-col gap-1 ${className ?? ""}`}>
@@ -411,6 +424,7 @@ function Field({
         required={required}
         placeholder={placeholder}
         defaultValue={defaultValue}
+        step={step}
         className="h-9"
       />
     </div>

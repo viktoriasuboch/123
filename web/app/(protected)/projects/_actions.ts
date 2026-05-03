@@ -13,6 +13,7 @@ import {
   Uuid,
 } from "@/lib/schemas";
 import { MONTHS } from "@/lib/months";
+import { fmtRate } from "@/lib/calc";
 
 const sb = () => createServerSupabase();
 
@@ -251,7 +252,7 @@ const fmtMemberFieldValue = (field: string, v: unknown): string => {
   if (v === null || v === undefined || v === "") return "—";
   if (field === "employment_type") return v === "staff" ? "Штатный" : "Фрилансер";
   if (field === "is_active") return v ? "активен" : "завершён";
-  if (field === "buy_rate" || field === "sell_rate") return `$${Number(v).toFixed(2)}`;
+  if (field === "buy_rate" || field === "sell_rate") return fmtRate(Number(v));
   if (field === "hours_load") return `${(Number(v) / 20).toFixed(1)} ч/день`;
   return String(v);
 };

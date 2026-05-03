@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Project, ProjectMember } from "@/lib/schemas";
-import { buyRate, marginPerHour } from "@/lib/calc";
+import { buyRate, marginPerHour, fmtRate } from "@/lib/calc";
 
 export type DevCardEntry = {
   name: string;
@@ -78,11 +78,11 @@ export function DevCard({ entry }: { entry: DevCardEntry }) {
               </div>
               {/* rates row */}
               <div className="grid grid-cols-3 gap-2 text-[11px] font-mono">
-                <RateCell label="buy" value={`$${buy.toFixed(2)}`} />
-                <RateCell label="sell" value={`$${(m.sell_rate || 0).toFixed(0)}`} />
+                <RateCell label="buy" value={fmtRate(buy)} />
+                <RateCell label="sell" value={fmtRate(m.sell_rate || 0)} />
                 <RateCell
                   label="маржа"
-                  value={`${margin >= 0 ? "+" : ""}$${margin.toFixed(2)}/h`}
+                  value={`${margin >= 0 ? "+" : ""}${fmtRate(margin)}/h`}
                   cls={marginClass}
                 />
               </div>

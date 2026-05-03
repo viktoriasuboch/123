@@ -5,7 +5,7 @@ import {
   listProjectMembers,
   listDevStatuses,
 } from "@/lib/data/projects";
-import { buyRate, marginPerHour } from "@/lib/calc";
+import { buyRate, marginPerHour, fmtRate } from "@/lib/calc";
 import { DevFireButton } from "@/components/projects/dev-fire-button";
 
 export const dynamic = "force-dynamic";
@@ -160,12 +160,13 @@ export default async function DevProfilePage({ params }: { params: Params }) {
                         ? `$${(m.salary || 0).toLocaleString()}/мес`
                         : "—"}
                     </td>
-                    <td className="p-3 text-right">${buy.toFixed(2)}/h</td>
+                    <td className="p-3 text-right">{fmtRate(buy)}/h</td>
                     <td className="p-3 text-right text-good">
-                      ${(m.sell_rate || 0).toFixed(0)}/h
+                      {fmtRate(m.sell_rate || 0)}/h
                     </td>
                     <td className={`p-3 text-right ${margClass}`}>
-                      {margin >= 0 ? "+" : ""}${margin.toFixed(2)}/h
+                      {margin >= 0 ? "+" : ""}
+                      {fmtRate(margin)}/h
                     </td>
                     <td className="p-3 text-right text-muted-foreground">
                       {hpd} ч/д
