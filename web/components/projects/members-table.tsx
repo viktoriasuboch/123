@@ -7,6 +7,7 @@ import { reportActionError } from "@/lib/client-errors";
 import { patchMember, removeMember, addMember, moveMember } from "../../app/(protected)/projects/_actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NewGroupButton } from "./new-group-button";
 import { toast } from "sonner";
 
 export function MembersTable({
@@ -22,14 +23,17 @@ export function MembersTable({
     <section className="rounded-md border bg-card overflow-x-auto">
       <header className="flex items-center justify-between p-4 border-b">
         <h2 className="font-display text-xl tracking-wide">Команда</h2>
-        <Button
-          size="sm"
-          variant={showAdd ? "ghost" : "default"}
-          onClick={() => setShowAdd((s) => !s)}
-          className="font-mono text-[10px] uppercase tracking-[0.15em]"
-        >
-          {showAdd ? "× Отмена" : "+ Добавить"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <NewGroupButton projectId={projectId} members={members} />
+          <Button
+            size="sm"
+            variant={showAdd ? "ghost" : "default"}
+            onClick={() => setShowAdd((s) => !s)}
+            className="font-mono text-[10px] uppercase tracking-[0.15em]"
+          >
+            {showAdd ? "× Отмена" : "+ Добавить"}
+          </Button>
+        </div>
       </header>
 
       {showAdd ? (
@@ -55,7 +59,7 @@ export function MembersTable({
           <col className="w-[130px]" /> {/* Старт */}
           <col className="w-[130px]" /> {/* Конец */}
           <col className="w-[95px]"  /> {/* Статус */}
-          <col className="w-[60px]"  /> {/* actions: 🔗 ✕ */}
+          <col className="w-[35px]"  /> {/* ✕ */}
         </colgroup>
         <thead>
           <tr className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground border-b">
@@ -485,46 +489,22 @@ function MemberRow({
         </select>
       </td>
       <td className="p-1.5 text-center">
-        <div className="flex items-center justify-center gap-0.5">
-          <button
-            type="button"
-            onClick={() => {
-              const cur = m.group_label ?? "";
-              const next = window.prompt(
-                "Группа (общий sell на всех; пусто — отвязать):",
-                cur,
-              );
-              if (next === null) return;
-              save("group_label", next.trim() || null);
-            }}
-            className="text-muted-foreground hover:text-primary text-[12px] px-1"
-            title={
-              m.group_label
-                ? `В группе «${m.group_label}» — клик чтобы изменить`
-                : "Привязать к группе"
-            }
-            aria-label="Группа"
-          >
-            🔗
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!confirm(`Удалить ${m.dev_name}?`)) return;
-              start(async () => {
-                try {
-                  await removeMember(projectId, m.id, m.dev_name);
-                } catch (e) {
-                  reportActionError(e, "Не удалилось");
-                }
-              });
-            }}
-            className="text-muted-foreground hover:text-bad text-base px-1"
-            title="Удалить"
-          >
-            ✕
-          </button>
-        </div>
+        <button
+          onClick={() => {
+            if (!confirm(`Удалить ${m.dev_name}?`)) return;
+            start(async () => {
+              try {
+                await removeMember(projectId, m.id, m.dev_name);
+              } catch (e) {
+                reportActionError(e, "Не удалилось");
+              }
+            });
+          }}
+          className="text-muted-foreground hover:text-bad text-base px-2"
+          title="Удалить"
+        >
+          ✕
+        </button>
       </td>
     </tr>
   );

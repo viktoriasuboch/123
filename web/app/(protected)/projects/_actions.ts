@@ -350,6 +350,118 @@ export async function patchMember(
   revalidatePath(`/projects/${projectId}`);
 }
 
+const CreateGroupInput = z.object({
+  projectId: Uuid,
+  leaderId: Uuid,
+  sellRate: z.coerce.number().min(0),
+  hoursLoad: z.coerce.number().min(0).default(160),
+  followerIds: z.array(Uuid),
+});
+
+/**
+ * Create a "shared seat" group: one leader keeps a sell_rate / hours,
+ * the followers' sell_rate is forced to 0, and all of them share the
+ * leader's dev_name as group_label. Followers are also re-ordered to
+ * appear right after the leader.
+ */
+export async function createMemberGroup(input: {
+  projectId: string;
+  leaderId: string;
+  sellRate: number;
+  hoursLoad: number;
+  followerIds: string[];
+}) {
+  await requireSection("projects");
+  const parsed = CreateGroupInput.parse(input);
+
+  // Look up leader (we need their dev_name for the label and the
+  // current sort_order so we can place followers right after).
+  const { data: leader, error: leadErr } = await sb()
+    .from("project_members")
+    .select("id, dev_name, sort_order, project_id")
+    .eq("id", parsed.leaderId)
+    .single();
+  if (leadErr) throw leadErr;
+  if (!leader || (leader as { project_id: string }).project_id !== parsed.projectId) {
+    throw new Error("Ведущий не найден в этом проекте");
+  }
+  const leaderRow = leader as {
+    id: string;
+    dev_name: string;
+    sort_order: number;
+    project_id: string;
+  };
+  const label = leaderRow.dev_name;
+
+  // 1. Update leader: shared sell + hours + label.
+  {
+    const { error } = await sb()
+      .from("project_members")
+      .update({
+        group_label: label,
+        sell_rate: parsed.sellRate,
+        hours_load: parsed.hoursLoad,
+      })
+      .eq("id", parsed.leaderId);
+    if (error) throw error;
+  }
+
+  // 2. Update followers: zero sell + label + sort right after leader.
+  if (parsed.followerIds.length > 0) {
+    // Push every member with sort_order > leader's down by N to make
+    // room for N followers immediately after.
+    const N = parsed.followerIds.length;
+    const { data: laterRows } = await sb()
+      .from("project_members")
+      .select("id, sort_order")
+      .eq("project_id", parsed.projectId)
+      .gt("sort_order", leaderRow.sort_order)
+      .order("sort_order", { ascending: true });
+
+    if (laterRows) {
+      // Two-pass swap to dodge any unique constraint that could exist:
+      // bump using negative scratch values, then settle.
+      let scratch = -10000;
+      for (const r of laterRows as Array<{ id: string; sort_order: number }>) {
+        await sb()
+          .from("project_members")
+          .update({ sort_order: scratch-- })
+          .eq("id", r.id);
+      }
+      let cursor = leaderRow.sort_order + N + 1;
+      for (const r of laterRows as Array<{ id: string; sort_order: number }>) {
+        await sb()
+          .from("project_members")
+          .update({ sort_order: cursor++ })
+          .eq("id", r.id);
+      }
+    }
+
+    // Now place followers contiguously after the leader.
+    for (let i = 0; i < parsed.followerIds.length; i++) {
+      const fid = parsed.followerIds[i];
+      const { error } = await sb()
+        .from("project_members")
+        .update({
+          group_label: label,
+          sell_rate: 0,
+          sort_order: leaderRow.sort_order + 1 + i,
+        })
+        .eq("id", fid)
+        .eq("project_id", parsed.projectId);
+      if (error) throw error;
+    }
+  }
+
+  await sb().from("project_events").insert({
+    project_id: parsed.projectId,
+    event_type: "rate_change",
+    description: `Создана группа «${label}» (${parsed.followerIds.length + 1} чел, sell ${parsed.sellRate}$/h)`,
+  });
+
+  revalidatePath(`/projects/${parsed.projectId}`);
+}
+
 /**
  * Swap a member with its neighbour in the project's order. Direction:
  * "up" moves towards a smaller sort_order, "down" towards a larger.
