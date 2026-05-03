@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import type { ProjectMember } from "@/lib/schemas";
 import { HOURS_PER_MONTH } from "@/lib/calc";
+import { isRedirectError } from "@/lib/errors";
 import { patchMember, removeMember, addMember } from "../../app/(protected)/projects/_actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -138,6 +139,7 @@ function MemberRow({
       try {
         await patchMember(projectId, m.id, field, value);
       } catch (e) {
+        if (isRedirectError(e)) throw e;
         toast.error(`Не сохранилось: ${(e as Error).message}`);
       }
     });
@@ -266,6 +268,7 @@ function MemberRow({
               try {
                 await removeMember(projectId, m.id, m.dev_name);
               } catch (e) {
+                if (isRedirectError(e)) throw e;
                 toast.error(`Не удалилось: ${(e as Error).message}`);
               }
             });
@@ -294,6 +297,7 @@ function AddMemberRow({
           await addMember(projectId, fd);
           onDone();
         } catch (e) {
+          if (isRedirectError(e)) throw e;
           toast.error(`Не добавилось: ${(e as Error).message}`);
         }
       }}

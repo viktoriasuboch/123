@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MONTHS } from "@/lib/months";
+import { isRedirectError } from "@/lib/errors";
 import { createDeal } from "../../app/(protected)/leadgen/_actions";
 import { toast } from "sonner";
 
@@ -50,6 +51,7 @@ export function NewDealButton({
               await createDeal(fd);
               setOpen(false);
             } catch (err) {
+              if (isRedirectError(err)) throw err;
               toast.error(`Не создалось: ${(err as Error).message}`);
             }
           }}

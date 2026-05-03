@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { isRedirectError } from "@/lib/errors";
 import { setDevStatus } from "../../app/(protected)/projects/_actions";
 import { toast } from "sonner";
 
@@ -27,6 +28,7 @@ export function DevFireButton({
           try {
             await setDevStatus(devName, next);
           } catch (e) {
+            if (isRedirectError(e)) throw e;
             toast.error(`Не получилось: ${(e as Error).message}`);
           }
         });

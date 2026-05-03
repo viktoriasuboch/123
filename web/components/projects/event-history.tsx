@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { ProjectEvent } from "@/lib/schemas";
+import { isRedirectError } from "@/lib/errors";
 import { addProjectNote, deleteProjectEvent } from "../../app/(protected)/projects/_actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,6 +51,7 @@ export function EventHistory({
                   await addProjectNote(projectId, text);
                   setDraft("");
                 } catch (e) {
+                  if (isRedirectError(e)) throw e;
                   toast.error(`Не сохранилось: ${(e as Error).message}`);
                 }
               });
@@ -97,6 +99,7 @@ export function EventHistory({
                     try {
                       await deleteProjectEvent(projectId, e.id);
                     } catch (err) {
+                      if (isRedirectError(err)) throw err;
                       toast.error(`Не удалилось: ${(err as Error).message}`);
                     }
                   });

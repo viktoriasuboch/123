@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { isRedirectError } from "@/lib/errors";
 import { deleteRevenue } from "../../app/(protected)/leadgen/_actions";
 import { toast } from "sonner";
 
@@ -20,6 +21,7 @@ export function RevenueRowDelete({
           try {
             await deleteRevenue(id);
           } catch (e) {
+            if (isRedirectError(e)) throw e;
             toast.error(`Не удалилось: ${(e as Error).message}`);
           }
         });

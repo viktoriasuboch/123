@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import type { Deal, ProjectRevenue } from "@/lib/schemas";
 import { MONTHS } from "@/lib/months";
+import { isRedirectError } from "@/lib/errors";
 import { patchDeal, deleteDeal } from "../../app/(protected)/leadgen/_actions";
 import { toast } from "sonner";
 
@@ -92,6 +93,7 @@ function DealRow({
       try {
         await patchDeal(d.id, field, value);
       } catch (e) {
+        if (isRedirectError(e)) throw e;
         toast.error(`Не сохранилось: ${(e as Error).message}`);
       }
     });
@@ -196,6 +198,7 @@ function DealRow({
               try {
                 await deleteDeal(d.id);
               } catch (e) {
+                if (isRedirectError(e)) throw e;
                 toast.error(`Не удалилось: ${(e as Error).message}`);
               }
             });

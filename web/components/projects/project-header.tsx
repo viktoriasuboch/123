@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import type { Project } from "@/lib/schemas";
+import { isRedirectError } from "@/lib/errors";
 import {
   renameProject,
   deleteProject,
@@ -35,6 +36,7 @@ export function ProjectHeader({ project }: { project: Project }) {
               try {
                 await renameProject(project.id, next);
               } catch (err) {
+                if (isRedirectError(err)) throw err;
                 toast.error(`Не сохранилось: ${(err as Error).message}`);
               }
             });
@@ -84,6 +86,7 @@ export function ProjectHeader({ project }: { project: Project }) {
                   await setProjectStatus(project.id, "completed");
                   toast.success("Проект перенесён в Завершённые");
                 } catch (err) {
+                  if (isRedirectError(err)) throw err;
                   toast.error(`Не получилось: ${(err as Error).message}`);
                 }
               });
@@ -104,6 +107,7 @@ export function ProjectHeader({ project }: { project: Project }) {
                   await setProjectStatus(project.id, "active");
                   toast.success("Проект снова активен");
                 } catch (err) {
+                  if (isRedirectError(err)) throw err;
                   toast.error(`Не получилось: ${(err as Error).message}`);
                 }
               });
@@ -127,6 +131,7 @@ export function ProjectHeader({ project }: { project: Project }) {
               try {
                 await deleteProject(project.id);
               } catch (err) {
+                if (isRedirectError(err)) throw err;
                 toast.error(`Не удалилось: ${(err as Error).message}`);
               }
             });
