@@ -114,6 +114,7 @@ export const ProjectMember = z.object({
   dev_end_date: ISODate,
   is_active: z.boolean().optional(),
   sort_order: z.number().int().optional(),
+  group_label: z.string().max(80).nullable().optional(),
   created_at: z.string().optional(),
 });
 export type ProjectMember = z.infer<typeof ProjectMember>;

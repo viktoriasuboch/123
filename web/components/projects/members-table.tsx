@@ -39,11 +39,12 @@ export function MembersTable({
         />
       ) : null}
 
-      <table className="w-full text-sm font-mono min-w-[1230px] table-fixed">
+      <table className="w-full text-sm font-mono min-w-[1300px] table-fixed">
         <colgroup>
           <col className="w-[44px]"  /> {/* ↕ move */}
           <col className="w-[150px]" /> {/* Имя */}
           <col className="w-[75px]"  /> {/* Роль */}
+          <col className="w-[80px]"  /> {/* Группа */}
           <col className="w-[95px]"  /> {/* Тип */}
           <col className="w-[80px]"  /> {/* Зарплата */}
           <col className="w-[65px]"  /> {/* Buy */}
@@ -62,6 +63,7 @@ export function MembersTable({
             <th className="p-2"></th>
             <th className="text-left p-2 font-normal">Имя</th>
             <th className="text-left p-2 font-normal">Роль</th>
+            <th className="text-left p-2 font-normal">Группа</th>
             <th className="text-left p-2 font-normal">Тип</th>
             <th className="text-right p-2 font-normal">Зарплата</th>
             <th className="text-right p-2 font-normal">Buy</th>
@@ -77,19 +79,11 @@ export function MembersTable({
           </tr>
         </thead>
         <tbody>
-          {members.map((m, i) => (
-            <MemberRow
-              key={m.id}
-              m={m}
-              projectId={projectId}
-              isFirst={i === 0}
-              isLast={i === members.length - 1}
-            />
-          ))}
+          {renderRows(members, projectId)}
           {members.length === 0 ? (
             <tr>
               <td
-                colSpan={15}
+                colSpan={16}
                 className="p-6 text-center text-muted-foreground text-xs"
               >
                 Команда пуста
@@ -102,16 +96,133 @@ export function MembersTable({
   );
 }
 
+/**
+ * Walk the (already sort_order-sorted) members list and render either
+ * a singleton MemberRow or a Group block (summary + member rows) for
+ * adjacent runs of members sharing a `group_label`.
+ */
+function renderRows(members: ProjectMember[], projectId: string) {
+  type Slot =
+    | { kind: "single"; member: ProjectMember; idx: number }
+    | { kind: "group"; label: string; list: ProjectMember[]; firstIdx: number; lastIdx: number };
+
+  const slots: Slot[] = [];
+  for (let i = 0; i < members.length; i++) {
+    const m = members[i];
+    const label = m.group_label?.trim() || null;
+    const last = slots[slots.length - 1];
+    if (label && last && last.kind === "group" && last.label === label) {
+      last.list.push(m);
+      last.lastIdx = i;
+    } else if (label) {
+      slots.push({ kind: "group", label, list: [m], firstIdx: i, lastIdx: i });
+    } else {
+      slots.push({ kind: "single", member: m, idx: i });
+    }
+  }
+
+  const total = members.length;
+  return slots.flatMap((slot) => {
+    if (slot.kind === "single") {
+      return [
+        <MemberRow
+          key={slot.member.id}
+          m={slot.member}
+          projectId={projectId}
+          isFirst={slot.idx === 0}
+          isLast={slot.idx === total - 1}
+          inGroup={false}
+        />,
+      ];
+    }
+    return [
+      <GroupSummaryRow
+        key={`gs-${slot.label}-${slot.list[0].id}`}
+        label={slot.label}
+        list={slot.list}
+      />,
+      ...slot.list.map((m, j) => (
+        <MemberRow
+          key={m.id}
+          m={m}
+          projectId={projectId}
+          isFirst={slot.firstIdx + j === 0}
+          isLast={slot.firstIdx + j === total - 1}
+          inGroup
+          isLead={j === 0}
+        />
+      )),
+    ];
+  });
+}
+
+function GroupSummaryRow({
+  label,
+  list,
+}: {
+  label: string;
+  list: ProjectMember[];
+}) {
+  const lead = list[0];
+  const sumBuy = list.reduce((s, m) => {
+    const b =
+      m.employment_type === "staff"
+        ? (m.salary || 0) / HOURS_PER_MONTH
+        : m.buy_rate || 0;
+    return s + b;
+  }, 0);
+  const sell = lead.sell_rate || 0;
+  const hours = lead.hours_load || 0;
+  const margin = sell - sumBuy;
+  const marginPct = sell > 0 ? (margin / sell) * 100 : 0;
+  const rev = sell * hours;
+  const hpd = hours / 20;
+  const cls = margin < 20 ? "text-bad" : "text-good";
+
+  return (
+    <tr className="bg-primary/5 border-y border-primary/30 text-[11px]">
+      <td className="p-1.5 text-center text-primary">▾</td>
+      <td className="p-1.5 col-span-1 font-display tracking-wide text-primary truncate">
+        {label}
+      </td>
+      <td className="p-1.5 text-muted-foreground uppercase tracking-[0.15em] text-[9px]">
+        Группа · {list.length} чел
+      </td>
+      <td className="p-1.5"></td>
+      <td className="p-1.5"></td>
+      <td className="p-1.5"></td>
+      <td className="p-1.5 text-right text-muted-foreground">{fmtRate(sumBuy)}</td>
+      <td className="p-1.5 text-right text-muted-foreground">{fmtRate(sell)}</td>
+      <td className={`p-1.5 text-right ${cls}`}>{fmtRate(margin)}</td>
+      <td className={`p-1.5 text-right ${cls}`}>{marginPct.toFixed(1)}%</td>
+      <td className="p-1.5 text-right text-muted-foreground">
+        ${Math.round(rev).toLocaleString()}
+      </td>
+      <td className="p-1.5 text-right text-muted-foreground">
+        {Math.round(hpd * 10) / 10}
+      </td>
+      <td className="p-1.5"></td>
+      <td className="p-1.5"></td>
+      <td className="p-1.5"></td>
+      <td className="p-1.5"></td>
+    </tr>
+  );
+}
+
 function MemberRow({
   m,
   projectId,
   isFirst,
   isLast,
+  inGroup,
+  isLead,
 }: {
   m: ProjectMember;
   projectId: string;
   isFirst: boolean;
   isLast: boolean;
+  inGroup: boolean;
+  isLead?: boolean;
 }) {
   const [pending, start] = useTransition();
 
@@ -171,11 +282,18 @@ function MemberRow({
     });
   };
 
+  // In a group, only the lead row carries the shared sell_rate / hours.
+  // All group rows (lead + followers) hide the per-row margin / rev /
+  // % / hpd cells — those are aggregated in the summary row above.
+  const sellEditable = !inGroup || !!isLead;
+  const hideAggregates = inGroup;
+  const dash = <span className="text-muted-foreground">—</span>;
+
   return (
     <tr
-      className={`border-b border-border/50 hover:bg-muted/20 transition ${pending ? "opacity-50" : ""}`}
+      className={`border-b border-border/50 hover:bg-muted/20 transition ${pending ? "opacity-50" : ""} ${inGroup ? "bg-primary/[0.025]" : ""}`}
     >
-      <td className="p-1.5">
+      <td className={`p-1.5 ${inGroup ? "border-l-2 border-primary/40" : ""}`}>
         <div className="flex flex-col items-center gap-0 leading-none">
           <button
             type="button"
@@ -215,6 +333,15 @@ function MemberRow({
         />
       </td>
       <td className="p-1.5">
+        <input
+          defaultValue={m.group_label ?? ""}
+          onBlur={(e) => save("group_label", e.target.value || null)}
+          className={inputCls}
+          placeholder="—"
+          title="Введите одинаковое название у нескольких разработчиков, чтобы объединить их в группу"
+        />
+      </td>
+      <td className="p-1.5">
         <select
           value={empType}
           onChange={(e) => {
@@ -238,7 +365,7 @@ function MemberRow({
             className={numCls}
           />
         ) : (
-          <span className="text-muted-foreground">—</span>
+          dash
         )}
       </td>
       <td className="p-1.5 text-right">
@@ -256,31 +383,43 @@ function MemberRow({
         )}
       </td>
       <td className="p-1.5 text-right">
-        <input
-          type="number"
-          step="0.01"
-          value={sellRate}
-          onChange={(e) => setSellRate(Number(e.target.value) || 0)}
-          onBlur={(e) => save("sell_rate", Number(e.target.value) || 0)}
-          className={numCls}
-        />
+        {sellEditable ? (
+          <input
+            type="number"
+            step="0.01"
+            value={sellRate}
+            onChange={(e) => setSellRate(Number(e.target.value) || 0)}
+            onBlur={(e) => save("sell_rate", Number(e.target.value) || 0)}
+            className={numCls}
+          />
+        ) : (
+          dash
+        )}
       </td>
-      <td className={`p-1.5 text-right ${marginCls}`}>{fmtRate(margin)}</td>
-      <td className={`p-1.5 text-right ${marginCls}`}>{marginPct.toFixed(1)}%</td>
+      <td className={`p-1.5 text-right ${hideAggregates ? "" : marginCls}`}>
+        {hideAggregates ? dash : fmtRate(margin)}
+      </td>
+      <td className={`p-1.5 text-right ${hideAggregates ? "" : marginCls}`}>
+        {hideAggregates ? dash : `${marginPct.toFixed(1)}%`}
+      </td>
       <td className="p-1.5 text-right text-muted-foreground">
-        ${Math.round(revMonth).toLocaleString()}
+        {hideAggregates ? dash : `$${Math.round(revMonth).toLocaleString()}`}
       </td>
       <td className="p-1.5 text-right">
-        <input
-          type="number"
-          step={0.1}
-          value={hpd}
-          onChange={(e) => setHpd(parseFloat(e.target.value) || 0)}
-          onBlur={(e) =>
-            save("hours_load", (parseFloat(e.target.value) || 0) * 20)
-          }
-          className={numCls}
-        />
+        {sellEditable ? (
+          <input
+            type="number"
+            step={0.1}
+            value={hpd}
+            onChange={(e) => setHpd(parseFloat(e.target.value) || 0)}
+            onBlur={(e) =>
+              save("hours_load", (parseFloat(e.target.value) || 0) * 20)
+            }
+            className={numCls}
+          />
+        ) : (
+          dash
+        )}
       </td>
       <td className="p-1.5">
         <input
@@ -354,6 +493,12 @@ function AddMemberRow({
     >
       <Field name="dev_name" label="Имя" required className="min-w-[180px]" />
       <Field name="role" label="Роль" placeholder="Dev / QA / PM" />
+      <Field
+        name="group_label"
+        label="Группа"
+        placeholder="—"
+        className="min-w-[120px]"
+      />
       <div className="flex flex-col gap-1">
         <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">
           Тип

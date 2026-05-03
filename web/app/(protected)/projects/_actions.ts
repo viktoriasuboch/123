@@ -177,6 +177,9 @@ export async function addMember(projectId: string, formData: FormData) {
   await requireSection("projects");
   Uuid.parse(projectId);
 
+  const groupLabelRaw = (formData.get("group_label") as string | null) ?? null;
+  const groupLabel = groupLabelRaw && groupLabelRaw.trim() ? groupLabelRaw.trim() : null;
+
   const parsed = ProjectMemberInsert.safeParse({
     project_id: projectId,
     dev_name: formData.get("dev_name"),
@@ -189,6 +192,7 @@ export async function addMember(projectId: string, formData: FormData) {
     dev_start_date: formData.get("dev_start_date") || null,
     dev_end_date: formData.get("dev_end_date") || null,
     is_active: true,
+    group_label: groupLabel,
   });
   if (!parsed.success) {
     console.error("addMember invalid", parsed.error);
@@ -231,6 +235,7 @@ const MemberFieldPatch = z.object({
     "dev_start_date",
     "dev_end_date",
     "is_active",
+    "group_label",
   ]),
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
 });
@@ -246,6 +251,7 @@ const MEMBER_FIELD_LABELS: Record<string, string> = {
   dev_start_date: "Старт",
   dev_end_date: "Конец",
   is_active: "Статус",
+  group_label: "Группа",
 };
 
 const fmtMemberFieldValue = (field: string, v: unknown): string => {
@@ -281,7 +287,11 @@ export async function patchMember(
     value = Number(value);
     if (isNaN(value as number)) value = 0;
   }
-  if (value === "" && (field.endsWith("_date") || field === "role")) value = null;
+  if (
+    value === "" &&
+    (field.endsWith("_date") || field === "role" || field === "group_label")
+  )
+    value = null;
 
   const parsed = MemberFieldPatch.parse({ field, value });
 
@@ -301,6 +311,29 @@ export async function patchMember(
     .update({ [parsed.field]: parsed.value })
     .eq("id", memberId);
   if (error) throw error;
+
+  // When a member joins (or moves to) a group, only the lead (smallest
+  // sort_order in the group) keeps a sell_rate — followers' sell_rate
+  // is forced to 0 so KPIs aren't double-counted.
+  if (parsed.field === "group_label" && typeof parsed.value === "string" && parsed.value) {
+    const { data: groupRows } = await sb()
+      .from("project_members")
+      .select("id, sort_order")
+      .eq("project_id", projectId)
+      .eq("group_label", parsed.value)
+      .order("sort_order", { ascending: true });
+    if (groupRows && groupRows.length > 1) {
+      const followerIds = (groupRows as Array<{ id: string }>)
+        .slice(1)
+        .map((r) => r.id);
+      if (followerIds.length > 0) {
+        await sb()
+          .from("project_members")
+          .update({ sell_rate: 0 })
+          .in("id", followerIds);
+      }
+    }
+  }
 
   // Log change to history (skip dev_name renames and no-op writes).
   if (parsed.field !== "dev_name" && oldValue !== parsed.value) {

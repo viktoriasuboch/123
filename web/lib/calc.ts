@@ -22,14 +22,46 @@ export function monthlyMargin(m: ProjectMember) {
   return marginPerHour(m) * (m.hours_load || 0);
 }
 
-/** Aggregate active members of a project. */
+/**
+ * Aggregate active members of a project. Members sharing a `group_label`
+ * count as one "seat": their buy rates sum, but the group's sell rate
+ * and hours come from the lead (smallest sort_order in the group).
+ * Singleton members (no group_label) behave exactly as before.
+ */
 export function aggregateProject(members: ProjectMember[]) {
   const active = members.filter((m) => m.is_active !== false);
-  const totalHours = active.reduce((s, m) => s + (m.hours_load || 0), 0);
-  const totalRev = active.reduce((s, m) => s + monthlyRevenue(m), 0);
-  const totalMargin = active.reduce((s, m) => s + monthlyMargin(m), 0);
+
+  // Bucket by group_label; null/empty go into per-member singleton buckets.
+  const buckets: Record<string, ProjectMember[]> = {};
+  let soloIdx = 0;
+  for (const m of active) {
+    const label = m.group_label?.trim();
+    const key = label ? `g:${label}` : `s:${soloIdx++}`;
+    (buckets[key] ??= []).push(m);
+  }
+
+  let totalHours = 0;
+  let totalRev = 0;
+  let totalMargin = 0;
+  let lowMargin = 0;
+
+  for (const list of Object.values(buckets)) {
+    const sorted = [...list].sort(
+      (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
+    );
+    const lead = sorted[0];
+    const sell = lead.sell_rate || 0;
+    const hours = lead.hours_load || 0;
+    const sumBuy = sorted.reduce((s, m) => s + buyRate(m), 0);
+
+    totalHours += hours;
+    totalRev += sell * hours;
+    totalMargin += (sell - sumBuy) * hours;
+
+    if (sell - sumBuy < 20) lowMargin++;
+  }
+
   const avgMargH = totalHours > 0 ? totalMargin / totalHours : 0;
-  const lowMargin = active.filter((m) => marginPerHour(m) < 20).length;
   return {
     teamSize: members.length,
     activeCount: active.length,
