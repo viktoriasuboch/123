@@ -7,6 +7,7 @@ const TABS = [
   { id: "active",   label: "Активные" },
   { id: "inactive", label: "Завершённые" },
   { id: "devs",     label: "👤 Разработчики" },
+  { id: "bench",    label: "🪑 Bench" },
 ] as const;
 
 const DEV_FILTERS = [
@@ -22,11 +23,13 @@ export function ProjectsFilters({
   activeCount,
   inactiveCount,
   devsCount,
+  benchCount,
   devsByFilter,
 }: {
   activeCount: number;
   inactiveCount: number;
   devsCount: number;
+  benchCount: number;
   devsByFilter: Record<DevFilterId, number>;
 }) {
   const router = useRouter();
@@ -52,6 +55,7 @@ export function ProjectsFilters({
     active: activeCount,
     inactive: inactiveCount,
     devs: devsCount,
+    bench: benchCount,
   };
 
   return (
