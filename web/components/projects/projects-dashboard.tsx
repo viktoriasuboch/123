@@ -42,6 +42,7 @@ export function ProjectsDashboard({
         <LowMarginProjects list={stats.lowMarginProjects} />
       </div>
       <UtilizationSection loadEntries={loadEntries} />
+      <FreelancersSection freelancers={stats.freelancers} />
       <AlertsSection stats={stats} loadEntries={loadEntries} />
     </div>
   );
@@ -231,23 +232,39 @@ function LowMarginProjects({ list }: { list: ProjectStat[] }) {
   );
 }
 
-function Bar({
-  pct,
-  tone,
-}: {
-  pct: number;
-  tone: "good" | "warn" | "bad";
-}) {
+type LoadTone = "good-bright" | "good-light" | "good" | "warn" | "bad";
+
+function toneFromPct(pct: number): LoadTone {
+  if (pct > 100) return "good-bright";
+  if (pct >= 100) return "good-light";
+  if (pct >= BENCH_THRESHOLD * 100) return "warn";
+  return "bad";
+}
+
+const TONE_TEXT: Record<LoadTone, string> = {
+  "good-bright": "text-good",
+  "good-light": "text-good/60",
+  good: "text-good",
+  warn: "text-warn",
+  bad: "text-bad",
+};
+
+const TONE_BG: Record<LoadTone, string> = {
+  "good-bright": "bg-good",
+  "good-light": "bg-good/35",
+  good: "bg-good/60",
+  warn: "bg-warn/60",
+  bad: "bg-bad/60",
+};
+
+function Bar({ pct, tone }: { pct: number; tone: LoadTone }) {
   const clamped = Math.max(0, Math.min(100, pct));
-  const bg =
-    tone === "good"
-      ? "bg-good/60"
-      : tone === "warn"
-        ? "bg-warn/60"
-        : "bg-bad/60";
   return (
     <div className="flex-1 h-2 rounded bg-muted/40 overflow-hidden">
-      <div className={`h-full ${bg}`} style={{ width: `${clamped}%` }} />
+      <div
+        className={`h-full ${TONE_BG[tone]}`}
+        style={{ width: `${clamped}%` }}
+      />
     </div>
   );
 }
@@ -265,41 +282,136 @@ function UtilizationSection({ loadEntries }: { loadEntries: LoadEntry[] }) {
   const sorted = [...loadEntries].sort(
     (a, b) => b.hoursPerDay - a.hoursPerDay,
   );
+
+  // Bucket summary
+  let cBench = 0;
+  let cMid = 0;
+  let cFull = 0;
+  let cOver = 0;
+  for (const e of loadEntries) {
+    const pct = (e.hoursPerDay / FULL_DAY_HOURS) * 100;
+    if (pct < BENCH_THRESHOLD * 100) cBench++;
+    else if (pct < 100) cMid++;
+    else if (pct <= 100) cFull++;
+    else cOver++;
+  }
+
   return (
-    <DashCard title="Загрузка штатных">
-      <ul className="space-y-1.5 font-mono text-xs">
+    <DashCard title={`Загрузка штата · ${loadEntries.length} чел`}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 font-mono text-[11px]">
+        <span className="text-bad">🪑 {cBench} на бенче</span>
+        <span className="text-warn">🟡 {cMid} {"<"} 100%</span>
+        <span className="text-good/60">🟢 {cFull} ровно 100%</span>
+        <span className="text-good font-semibold">🔥 {cOver} перегруз</span>
+      </div>
+      <div className="grid gap-x-4 gap-y-1.5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 font-mono text-xs">
         {sorted.map((e) => {
           const pct = (e.hoursPerDay / FULL_DAY_HOURS) * 100;
-          const tone: "good" | "warn" | "bad" =
-            pct >= 100
-              ? "good"
-              : pct >= BENCH_THRESHOLD * 100
-                ? "warn"
-                : "bad";
-          const toneText =
-            tone === "good"
-              ? "text-good"
-              : tone === "warn"
-                ? "text-warn"
-                : "text-bad";
+          const tone = toneFromPct(pct);
           return (
-            <li key={e.name} className="flex items-center gap-2">
+            <div key={e.name} className="flex items-center gap-2 min-w-0">
               <Link
                 href={`/projects/devs/${encodeURIComponent(e.name)}`}
-                className="truncate w-[28%] hover:text-primary"
+                className="truncate flex-1 min-w-0 hover:text-primary"
+                title={e.name}
               >
                 {e.name}
               </Link>
               <Bar pct={Math.min(150, pct)} tone={tone} />
               <span
-                className={`shrink-0 w-[140px] text-right ${toneText}`}
+                className={`shrink-0 w-[44px] text-right ${TONE_TEXT[tone]}`}
               >
-                {fmtHours(e.hoursPerDay)} ч/день · {pct.toFixed(0)}%
+                {pct.toFixed(0)}%
               </span>
-            </li>
+            </div>
           );
         })}
-      </ul>
+      </div>
+    </DashCard>
+  );
+}
+
+/* ─── freelancers ───────────────────────────────────────────────────── */
+
+function FreelancersSection({
+  freelancers,
+}: {
+  freelancers: FreelancerStat[];
+}) {
+  if (freelancers.length === 0) {
+    return (
+      <DashCard title="Фрилансеры">
+        <EmptyHint>Активных фрилансеров нет</EmptyHint>
+      </DashCard>
+    );
+  }
+
+  // Aggregate stats for the strip
+  const avgMargin =
+    freelancers.reduce((s, f) => s + f.avgMarginHourly, 0) /
+    freelancers.length;
+  let cBench = 0;
+  let cMid = 0;
+  let cFull = 0;
+  let cOver = 0;
+  for (const f of freelancers) {
+    const pct = (f.hoursPerDay / FULL_DAY_HOURS) * 100;
+    if (pct < BENCH_THRESHOLD * 100) cBench++;
+    else if (pct < 100) cMid++;
+    else if (pct <= 100) cFull++;
+    else cOver++;
+  }
+
+  return (
+    <DashCard title={`Фрилансеры · ${freelancers.length} чел`}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 font-mono text-[11px]">
+        <span className="text-muted-foreground">
+          ср. маржа{" "}
+          <span className={avgMargin < 20 ? "text-bad" : "text-good"}>
+            {fmtRate(avgMargin)}/h
+          </span>
+        </span>
+        <span className="text-bad">🪑 {cBench}</span>
+        <span className="text-warn">🟡 {cMid}</span>
+        <span className="text-good/60">🟢 {cFull}</span>
+        <span className="text-good font-semibold">🔥 {cOver}</span>
+      </div>
+      <div className="grid gap-x-4 gap-y-1.5 grid-cols-1 lg:grid-cols-2 font-mono text-xs">
+        {freelancers.map((f) => {
+          const pct = (f.hoursPerDay / FULL_DAY_HOURS) * 100;
+          const loadTone = toneFromPct(pct);
+          const marginTone: LoadTone =
+            f.avgMarginHourly < 20
+              ? "bad"
+              : f.avgMarginHourly < 30
+                ? "warn"
+                : "good";
+          return (
+            <div key={f.name} className="flex items-center gap-2 min-w-0">
+              <Link
+                href={`/projects/devs/${encodeURIComponent(f.name)}`}
+                className="truncate flex-1 min-w-0 hover:text-primary"
+                title={f.name}
+              >
+                {f.name}
+              </Link>
+              <Bar pct={Math.min(150, pct)} tone={loadTone} />
+              <span
+                className={`shrink-0 w-[44px] text-right ${TONE_TEXT[loadTone]}`}
+                title={`${fmtHours(f.hoursPerDay)} ч/день`}
+              >
+                {pct.toFixed(0)}%
+              </span>
+              <span
+                className={`shrink-0 w-[68px] text-right ${TONE_TEXT[marginTone]}`}
+                title={`маржа ${f.avgMarginPct.toFixed(0)}%`}
+              >
+                {fmtRate(f.avgMarginHourly)}/h
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </DashCard>
   );
 }
@@ -326,8 +438,8 @@ function AlertsSection({
         {stats.lowMarginMembers.length === 0 ? (
           <EmptyHint>Все позиции выше порога</EmptyHint>
         ) : (
-          <ul className="space-y-1.5 font-mono text-xs">
-            {stats.lowMarginMembers.slice(0, 8).map((row) => (
+          <ul className="space-y-1.5 font-mono text-xs max-h-[320px] overflow-y-auto pr-1">
+            {stats.lowMarginMembers.map((row) => (
               <li
                 key={row.member.id}
                 className="flex items-center justify-between gap-2"
@@ -390,7 +502,7 @@ function AlertsSection({
         {overload.length === 0 ? (
           <EmptyHint>Никто не перегружен</EmptyHint>
         ) : (
-          <ul className="space-y-1.5 font-mono text-xs">
+          <ul className="space-y-1.5 font-mono text-xs max-h-[320px] overflow-y-auto pr-1">
             {overload.map((e) => {
               const pct = (e.hoursPerDay / FULL_DAY_HOURS) * 100;
               return (
@@ -404,7 +516,7 @@ function AlertsSection({
                   >
                     {e.name}
                   </Link>
-                  <span className="shrink-0 text-warn">
+                  <span className="shrink-0 text-good">
                     {fmtHours(e.hoursPerDay)} ч/день · {pct.toFixed(0)}%
                   </span>
                 </li>
@@ -519,6 +631,21 @@ type EndingSoonRow = {
   daysLeft: number;
 };
 
+type FreelancerStat = {
+  name: string;
+  monthHours: number;
+  hoursPerDay: number;
+  /** Weighted-by-hours margin per hour ($/h). */
+  avgMarginHourly: number;
+  /** Margin as % of revenue across all this freelancer's rows. */
+  avgMarginPct: number;
+  projects: Array<{
+    project: Project;
+    hoursPerDay: number;
+    marginHourly: number;
+  }>;
+};
+
 type Stats = {
   totalRev: number;
   totalCost: number;
@@ -534,6 +661,7 @@ type Stats = {
   lowMarginMembers: LowMarginRow[];
   endingSoon: EndingSoonRow[];
   noRevProjects: ProjectStat[];
+  freelancers: FreelancerStat[];
 };
 
 function computeStats(
@@ -681,6 +809,45 @@ function computeStats(
   }
   endingSoon.sort((a, b) => a.daysLeft - b.daysLeft);
 
+  // Freelancers per dev_name: load + weighted margin.
+  const freelancerRowsByDev = new Map<string, ProjectMember[]>();
+  for (const m of active) {
+    if (m.employment_type === "staff") continue;
+    if (devStatuses[m.dev_name]?.status === "inactive") continue;
+    const list = freelancerRowsByDev.get(m.dev_name) ?? [];
+    list.push(m);
+    freelancerRowsByDev.set(m.dev_name, list);
+  }
+  const freelancers: FreelancerStat[] = [];
+  for (const [name, rows] of freelancerRowsByDev) {
+    const monthHours = rows.reduce((s, m) => s + (m.hours_load ?? 0), 0);
+    const hoursPerDay = monthHours / 20;
+    let marginHrs = 0;
+    let revHrs = 0;
+    for (const m of rows) {
+      const sell = m.sell_rate ?? 0;
+      const buy = m.buy_rate ?? 0;
+      const hrs = m.hours_load ?? 0;
+      marginHrs += (sell - buy) * hrs;
+      revHrs += sell * hrs;
+    }
+    const avgMarginHourly = monthHours > 0 ? marginHrs / monthHours : 0;
+    const avgMarginPct = revHrs > 0 ? (marginHrs / revHrs) * 100 : 0;
+    freelancers.push({
+      name,
+      monthHours,
+      hoursPerDay,
+      avgMarginHourly,
+      avgMarginPct,
+      projects: rows.map((m) => ({
+        project: projById.get(m.project_id)!,
+        hoursPerDay: (m.hours_load ?? 0) / 20,
+        marginHourly: marginPerHour(m),
+      })),
+    });
+  }
+  freelancers.sort((a, b) => b.avgMarginHourly - a.avgMarginHourly);
+
   return {
     totalRev,
     totalCost,
@@ -695,6 +862,7 @@ function computeStats(
     lowMarginProjects,
     lowMarginMembers,
     endingSoon,
+    freelancers,
     noRevProjects,
   };
 }
