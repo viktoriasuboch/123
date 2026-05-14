@@ -15,10 +15,12 @@ export type DevCardEntry = {
 export function DevCard({ entry }: { entry: DevCardEntry }) {
   const { name, empType, rows, fired } = entry;
   const projCount = new Set(rows.map((r) => r.member.project_id)).size;
-  const totalMargin = rows.reduce(
-    (s, r) => s + marginPerHour(r.member) * (r.member.hours_load || 0),
-    0,
-  );
+  // TM members contribute 0 to total margin — their hours and revenue
+  // are unpredictable, so we don't add them to forecast-style totals.
+  const totalMargin = rows.reduce((s, r) => {
+    if ((r.member.billing_mode ?? "fixed") === "tm") return s;
+    return s + marginPerHour(r.member) * (r.member.hours_load || 0);
+  }, 0);
 
   return (
     <Link
@@ -62,18 +64,29 @@ export function DevCard({ entry }: { entry: DevCardEntry }) {
           const margin = marginPerHour(m);
           const marginClass =
             margin >= 20 ? "text-good" : margin > 0 ? "text-warn" : "text-bad";
+          const isSupport =
+            (r.project?.status ?? "active") === "support";
+          const isTm = (m.billing_mode ?? "fixed") === "tm";
           return (
             <div key={m.id} className="space-y-1">
               {/* project name + status */}
               <div className="flex items-baseline justify-between gap-2 text-[11px] font-mono min-w-0">
                 <span className="truncate text-foreground/90">
                   {r.project?.name ?? "—"}
+                  {isSupport ? (
+                    <span className="text-[9px] text-info ml-1.5">
+                      ({isTm ? "≈ TM" : "support"})
+                    </span>
+                  ) : null}
                   {m.is_active === false ? (
                     <span className="text-[9px] text-muted-foreground ml-1.5">(end)</span>
                   ) : null}
                 </span>
                 <span className="text-muted-foreground text-[10px] shrink-0 whitespace-nowrap">
-                  {(Math.round(((m.hours_load || 0) / 20) * 10) / 10).toString()} ч/день
+                  {isTm
+                    ? "—"
+                    : (Math.round(((m.hours_load || 0) / 20) * 10) / 10).toString() +
+                      " ч/день"}
                 </span>
               </div>
               {/* rates row */}

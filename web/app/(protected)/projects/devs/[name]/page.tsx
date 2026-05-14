@@ -42,7 +42,11 @@ export default async function DevProfilePage({ params }: { params: Params }) {
     .toUpperCase();
   const roles = [...new Set(rows.map((r) => r.role).filter(Boolean))].join(", ") || "—";
 
-  const activeRows = rows.filter((r) => r.is_active !== false);
+  // Exclude TM members from monthly totals — their hours are
+  // unpredictable and shouldn't show up as confirmed revenue/cost.
+  const activeRows = rows.filter(
+    (r) => r.is_active !== false && (r.billing_mode ?? "fixed") !== "tm",
+  );
   const monthlyRev = activeRows.reduce(
     (s, m) => s + (m.sell_rate || 0) * (m.hours_load || 0),
     0,
@@ -135,12 +139,17 @@ export default async function DevProfilePage({ params }: { params: Params }) {
               .map((m) => {
                 const buy = buyRate(m);
                 const margin = marginPerHour(m);
-                const revMonth = (m.sell_rate || 0) * (m.hours_load || 0);
+                const isTm = (m.billing_mode ?? "fixed") === "tm";
+                const revMonth = isTm
+                  ? 0
+                  : (m.sell_rate || 0) * (m.hours_load || 0);
                 const hpd =
                   Math.round(((m.hours_load || 0) / 20) * 10) / 10;
                 const isStaff = m.employment_type === "staff";
                 const inactive = m.is_active === false;
                 const project = projectsById.get(m.project_id);
+                const isSupport =
+                  (project?.status ?? "active") === "support";
                 const margClass =
                   margin >= 20
                     ? "text-good"
@@ -150,7 +159,7 @@ export default async function DevProfilePage({ params }: { params: Params }) {
                 return (
                   <tr
                     key={m.id}
-                    className={`border-b border-border/50 ${inactive ? "opacity-60" : ""}`}
+                    className={`border-b border-border/50 ${inactive ? "opacity-60" : ""} ${isTm ? "text-muted-foreground/80" : ""}`}
                   >
                     <td className="p-3">
                       <Link
@@ -159,6 +168,11 @@ export default async function DevProfilePage({ params }: { params: Params }) {
                       >
                         {project?.name ?? "—"}
                       </Link>
+                      {isSupport ? (
+                        <span className="ml-2 text-[9px] uppercase tracking-[0.15em] text-info">
+                          {isTm ? "≈ TM" : "support"}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="p-3 text-muted-foreground">{m.role ?? "—"}</td>
                     <td className="p-3 text-right">
@@ -175,10 +189,10 @@ export default async function DevProfilePage({ params }: { params: Params }) {
                       {fmtRate(margin)}/h
                     </td>
                     <td className="p-3 text-right text-muted-foreground">
-                      {hpd} ч/д
+                      {isTm ? "—" : `${hpd} ч/д`}
                     </td>
                     <td className="p-3 text-right text-good">
-                      ${Math.round(revMonth).toLocaleString()}
+                      {isTm ? "—" : `$${Math.round(revMonth).toLocaleString()}`}
                     </td>
                     <td className="p-3">
                       <span

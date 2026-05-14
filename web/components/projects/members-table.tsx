@@ -29,10 +29,13 @@ import { toast } from "sonner";
 export function MembersTable({
   projectId,
   members,
+  projectStatus = "active",
 }: {
   projectId: string;
   members: ProjectMember[];
+  projectStatus?: string;
 }) {
+  const showBilling = projectStatus === "support";
   const [showAdd, setShowAdd] = useState(false);
 
   return (
@@ -59,12 +62,15 @@ export function MembersTable({
         />
       ) : null}
 
-      <table className="w-full text-sm font-mono min-w-[1290px] table-fixed">
+      <table
+        className={`w-full text-sm font-mono ${showBilling ? "min-w-[1380px]" : "min-w-[1290px]"} table-fixed`}
+      >
         <colgroup>
           <col className="w-[44px]"  /> {/* ↕ move */}
           <col className="w-[210px]" /> {/* Имя */}
           <col className="w-[85px]"  /> {/* Роль */}
           <col className="w-[105px]" /> {/* Тип */}
+          {showBilling ? <col className="w-[90px]" /> : null}
           <col className="w-[85px]"  /> {/* Зарплата */}
           <col className="w-[70px]"  /> {/* Buy */}
           <col className="w-[60px]"  /> {/* Sell */}
@@ -83,6 +89,9 @@ export function MembersTable({
             <th className="text-center p-2 font-normal">Имя</th>
             <th className="text-center p-2 font-normal">Роль</th>
             <th className="text-center p-2 font-normal">Тип</th>
+            {showBilling ? (
+              <th className="text-center p-2 font-normal">Режим</th>
+            ) : null}
             <th className="text-center p-2 font-normal">Зарплата</th>
             <th className="text-center p-2 font-normal">Buy</th>
             <th className="text-center p-2 font-normal">Sell</th>
@@ -97,11 +106,11 @@ export function MembersTable({
           </tr>
         </thead>
         <tbody>
-          {renderRows(members, projectId)}
+          {renderRows(members, projectId, showBilling)}
           {members.length === 0 ? (
             <tr>
               <td
-                colSpan={15}
+                colSpan={showBilling ? 16 : 15}
                 className="p-6 text-center text-muted-foreground text-xs"
               >
                 Команда пуста
@@ -128,7 +137,11 @@ function isProxyPair(list: ProjectMember[]): boolean {
  * or a legacy Group block (summary + member rows) for adjacent runs of
  * members sharing a `group_label`.
  */
-function renderRows(members: ProjectMember[], projectId: string) {
+function renderRows(
+  members: ProjectMember[],
+  projectId: string,
+  showBilling: boolean,
+) {
   type Slot =
     | { kind: "single"; member: ProjectMember; idx: number }
     | { kind: "group"; label: string; list: ProjectMember[]; firstIdx: number; lastIdx: number };
@@ -159,6 +172,7 @@ function renderRows(members: ProjectMember[], projectId: string) {
           isFirst={slot.idx === 0}
           isLast={slot.idx === total - 1}
           inGroup={false}
+          showBilling={showBilling}
         />,
       ];
     }
@@ -166,7 +180,6 @@ function renderRows(members: ProjectMember[], projectId: string) {
       const face = slot.list.find((m) => m.proxy_role === "face")!;
       const worker = slot.list.find((m) => m.proxy_role === "worker")!;
       const bonusPerHour = (face.proxy_bonus ?? 0) / HOURS_PER_MONTH;
-      // figure out original indices so move ↑/↓ flags are right
       const faceIdx = slot.firstIdx + slot.list.indexOf(face);
       const workerIdx = slot.firstIdx + slot.list.indexOf(worker);
       return [
@@ -175,6 +188,7 @@ function renderRows(members: ProjectMember[], projectId: string) {
           face={face}
           worker={worker}
           projectId={projectId}
+          showBilling={showBilling}
         />,
         <ProxyFaceRow
           key={face.id}
@@ -182,6 +196,7 @@ function renderRows(members: ProjectMember[], projectId: string) {
           projectId={projectId}
           isFirst={faceIdx === 0}
           isLast={faceIdx === total - 1}
+          showBilling={showBilling}
         />,
         <MemberRow
           key={worker.id}
@@ -192,6 +207,7 @@ function renderRows(members: ProjectMember[], projectId: string) {
           inGroup={false}
           letter="✋"
           extraBuyPerHour={bonusPerHour}
+          showBilling={showBilling}
         />,
       ];
     }
@@ -201,6 +217,7 @@ function renderRows(members: ProjectMember[], projectId: string) {
         label={slot.label}
         list={slot.list}
         projectId={projectId}
+        showBilling={showBilling}
       />,
       ...slot.list.map((m, j) => (
         <MemberRow
@@ -212,6 +229,7 @@ function renderRows(members: ProjectMember[], projectId: string) {
           inGroup
           isLead={j === 0}
           letter={String.fromCharCode(65 + j)}
+          showBilling={showBilling}
         />
       )),
     ];
@@ -222,10 +240,12 @@ function GroupSummaryRow({
   label,
   list,
   projectId,
+  showBilling,
 }: {
   label: string;
   list: ProjectMember[];
   projectId: string;
+  showBilling: boolean;
 }) {
   const lead = list[0];
   const sumBuy = list.reduce((s, m) => {
@@ -271,6 +291,7 @@ function GroupSummaryRow({
       <td className="p-1.5 truncate">{label}</td>
       <td className="p-1.5 text-muted-foreground">{list.length} чел</td>
       <td className="p-1.5"></td>
+      {showBilling ? <td className="p-1.5"></td> : null}
       <td className="p-1.5"></td>
       <td className="p-1.5 text-center text-muted-foreground">{fmtRate(sumBuy)}</td>
       <td className="p-1.5 text-center text-muted-foreground">{fmtRate(sell)}</td>
@@ -307,10 +328,12 @@ function ProxySummaryRow({
   face,
   worker,
   projectId,
+  showBilling,
 }: {
   face: ProjectMember;
   worker: ProjectMember;
   projectId: string;
+  showBilling: boolean;
 }) {
   const workerBuyPerHour =
     worker.employment_type === "staff"
@@ -352,6 +375,7 @@ function ProxySummaryRow({
       </td>
       <td className="p-1.5 text-muted-foreground">проксирование</td>
       <td className="p-1.5"></td>
+      {showBilling ? <td className="p-1.5"></td> : null}
       <td className="p-1.5"></td>
       <td
         className="p-1.5 text-center text-muted-foreground"
@@ -396,11 +420,13 @@ function ProxyFaceRow({
   projectId,
   isFirst,
   isLast,
+  showBilling,
 }: {
   m: ProjectMember;
   projectId: string;
   isFirst: boolean;
   isLast: boolean;
+  showBilling: boolean;
 }) {
   const isStaff = m.employment_type === "staff";
   const [pending, start] = useTransition();
@@ -483,6 +509,7 @@ function ProxyFaceRow({
           <option value="staff">Штатный</option>
         </select>
       </td>
+      {showBilling ? <td className="p-1.5 text-center">{dash}</td> : null}
       <td className="p-1.5 text-center">
         {isStaff ? (
           <input
@@ -498,7 +525,7 @@ function ProxyFaceRow({
       </td>
       <td
         className="p-1.5 text-center text-muted-foreground"
-        colSpan={5}
+        colSpan={6}
         title="Бонус лица за проксирование"
       >
         бонус&nbsp;
@@ -553,6 +580,7 @@ function MemberRow({
   isLead,
   letter,
   extraBuyPerHour = 0,
+  showBilling = false,
 }: {
   m: ProjectMember;
   projectId: string;
@@ -563,7 +591,10 @@ function MemberRow({
   letter?: string;
   /** Added to per-hour buy when computing margin (e.g. amortised proxy bonus). */
   extraBuyPerHour?: number;
+  /** When true the row renders an extra Режим cell (Fixed / TM). */
+  showBilling?: boolean;
 }) {
+  const isTm = (m.billing_mode ?? "fixed") === "tm";
   const [pending, start] = useTransition();
 
   // Local state for fields that affect computed values (margin / rev / buy).
@@ -634,7 +665,8 @@ function MemberRow({
 
   return (
     <tr
-      className={`border-b border-border/50 hover:bg-muted/20 transition ${pending ? "opacity-50" : ""}`}
+      className={`border-b border-border/50 hover:bg-muted/20 transition ${pending ? "opacity-50" : ""} ${isTm ? "text-muted-foreground/80" : ""}`}
+      title={isTm ? "TM: часы не идут в нагрузку, цифры ориентировочные" : undefined}
     >
       <td className="p-1.5">
         <div className="flex flex-col items-center gap-0 leading-none">
@@ -695,6 +727,19 @@ function MemberRow({
           <option value="staff">Штатный</option>
         </select>
       </td>
+      {showBilling ? (
+        <td className="p-1.5">
+          <select
+            defaultValue={m.billing_mode ?? "fixed"}
+            onChange={(e) => save("billing_mode", e.target.value)}
+            className={inputCls}
+            title="TM = Time & Material; в этом случае часы не учитываются в нагрузке"
+          >
+            <option value="fixed">Fixed</option>
+            <option value="tm">TM</option>
+          </select>
+        </td>
+      ) : null}
       <td className="p-1.5 text-center">
         {isStaff ? (
           <input

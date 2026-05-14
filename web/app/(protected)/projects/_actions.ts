@@ -162,13 +162,23 @@ export async function deleteProject(id: string) {
 }
 
 const StatusPatch = z.object({
-  status: z.enum(["active", "completed", "paused"]),
+  status: z.enum(["active", "support", "paused", "completed"]),
 });
 
-export async function setProjectStatus(
-  id: string,
-  status: "active" | "completed" | "paused",
-) {
+export type ProjectStatusValue =
+  | "active"
+  | "support"
+  | "paused"
+  | "completed";
+
+const STATUS_EVENT_DESCRIPTION: Record<ProjectStatusValue, string> = {
+  active: "Проект возобновлён",
+  support: "Проект переведён на саппорт",
+  paused: "Проект приостановлен",
+  completed: "Проект завершён",
+};
+
+export async function setProjectStatus(id: string, status: ProjectStatusValue) {
   await requireSection("projects");
   Uuid.parse(id);
   const parsed = StatusPatch.parse({ status });
@@ -182,12 +192,7 @@ export async function setProjectStatus(
   await sb().from("project_events").insert({
     project_id: id,
     event_type: "status_change",
-    description:
-      status === "completed"
-        ? "Проект завершён"
-        : status === "active"
-          ? "Проект возобновлён"
-          : "Проект приостановлен",
+    description: STATUS_EVENT_DESCRIPTION[status],
   });
 
   revalidatePath(`/projects/${id}`);
@@ -261,6 +266,7 @@ const MemberFieldPatch = z.object({
     "group_label",
     "proxy_role",
     "proxy_bonus",
+    "billing_mode",
   ]),
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
 });
@@ -279,6 +285,7 @@ const MEMBER_FIELD_LABELS: Record<string, string> = {
   group_label: "Группа",
   proxy_role: "Роль в проксировании",
   proxy_bonus: "Бонус лица",
+  billing_mode: "Режим",
 };
 
 const fmtMemberFieldValue = (field: string, v: unknown): string => {

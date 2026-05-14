@@ -15,9 +15,23 @@ import { toast } from "sonner";
 
 const STATUS_LABEL: Record<string, string> = {
   active: "Активный",
+  support: "Суппорт",
   completed: "Завершён",
   paused: "Пауза",
 };
+
+function statusPillClass(status: string) {
+  switch (status) {
+    case "active":
+      return "border-good/40 text-good bg-good/10";
+    case "support":
+      return "border-info/40 text-info bg-info/10";
+    case "paused":
+      return "border-warn/40 text-warn bg-warn/10";
+    default:
+      return "border-muted-foreground/40 text-muted-foreground bg-muted/30";
+  }
+}
 
 export function ProjectHeader({ project }: { project: Project }) {
   const [pending, start] = useTransition();
@@ -47,15 +61,9 @@ export function ProjectHeader({ project }: { project: Project }) {
         </h1>
         <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 items-center font-mono text-[10px] text-muted-foreground">
           <span
-            className={`px-2 py-0.5 rounded border text-[9px] uppercase tracking-[0.15em] ${
-              status === "active"
-                ? "border-good/40 text-good bg-good/10"
-                : status === "paused"
-                ? "border-warn/40 text-warn bg-warn/10"
-                : "border-muted-foreground/40 text-muted-foreground bg-muted/30"
-            }`}
+            className={`px-2 py-0.5 rounded border text-[9px] uppercase tracking-[0.15em] ${statusPillClass(status)}`}
           >
-            {STATUS_LABEL[status]}
+            {STATUS_LABEL[status] ?? status}
           </span>
           <span>
             Старт: <b className="text-foreground">{fmtDate(project.start_date)}</b>
@@ -74,9 +82,54 @@ export function ProjectHeader({ project }: { project: Project }) {
         ) : null}
       </div>
 
-      <div className="flex gap-2 items-start">
+      <div className="flex gap-2 items-start flex-wrap">
         <EditProjectButton project={project} />
+
         {status === "active" ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (!confirm(`Перевести «${project.name}» на саппорт?`)) return;
+              start(async () => {
+                try {
+                  await setProjectStatus(project.id, "support");
+                  toast.success("Проект переведён на саппорт");
+                } catch (err) {
+                  reportActionError(err, "Не получилось");
+                }
+              });
+            }}
+            className="font-mono text-[10px] uppercase tracking-[0.15em] border-info/50 text-info hover:bg-info/10 hover:border-info"
+            disabled={pending}
+          >
+            🛟 На суппорт
+          </Button>
+        ) : null}
+
+        {status === "support" ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (!confirm(`Вернуть «${project.name}» в активные?`)) return;
+              start(async () => {
+                try {
+                  await setProjectStatus(project.id, "active");
+                  toast.success("Проект снова активен");
+                } catch (err) {
+                  reportActionError(err, "Не получилось");
+                }
+              });
+            }}
+            className="font-mono text-[10px] uppercase tracking-[0.15em] border-good/50 text-good hover:bg-good/10 hover:border-good"
+            disabled={pending}
+          >
+            ↻ В активные
+          </Button>
+        ) : null}
+
+        {status === "active" || status === "support" ? (
           <Button
             variant="outline"
             size="sm"

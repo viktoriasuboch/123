@@ -45,6 +45,7 @@ export default async function ProjectsPage({
   const sp = await searchParams;
   const tab = (sp.tab ?? "active") as
     | "active"
+    | "support"
     | "inactive"
     | "devs"
     | "load"
@@ -75,9 +76,13 @@ export default async function ProjectsPage({
   const activeProjects = projects.filter(
     (p) => (p.status ?? "active") === "active",
   );
-  const inactiveProjects = projects.filter(
-    (p) => (p.status ?? "active") !== "active",
+  const supportProjects = projects.filter(
+    (p) => (p.status ?? "active") === "support",
   );
+  const inactiveProjects = projects.filter((p) => {
+    const s = p.status ?? "active";
+    return s !== "active" && s !== "support";
+  });
 
   // HAYS detection — user marks them in the project name as "(HAYS)".
   // Match case-insensitive on the whole substring so "Hays", "hays",
@@ -93,9 +98,14 @@ export default async function ProjectsPage({
   // Build dev entries
   const devEntries = buildDevEntries(projects, members, devStatuses);
 
-  // Load: every active staff with their summed hours over active projects.
-  // Bench = under 50% of the daily norm; everyone else lives in "loaded".
-  const loadEntries = buildLoadEntries(activeProjects, members, devStatuses);
+  // Load: staff hours across both active and support projects.
+  // TM members are filtered out inside buildLoadEntries; they don't
+  // contribute predictable hours.
+  const loadEntries = buildLoadEntries(
+    [...activeProjects, ...supportProjects],
+    members,
+    devStatuses,
+  );
   const benchCutoff = FULL_DAY_HOURS * BENCH_THRESHOLD; // 4 ч/день
   const benchEntries = loadEntries
     .filter((e) => e.hoursPerDay < benchCutoff)
@@ -145,6 +155,7 @@ export default async function ProjectsPage({
 
       <ProjectsFilters
         activeCount={activeProjects.length}
+        supportCount={supportProjects.length}
         inactiveCount={inactiveProjects.length}
         devsCount={devEntries.filter((d) => !d.fired).length}
         loadCount={loadEntries.length}
@@ -162,6 +173,7 @@ export default async function ProjectsPage({
       ) : tab === "dashboard" ? (
         <ProjectsDashboard
           activeProjects={activeProjects}
+          supportProjects={supportProjects}
           members={members}
           devStatuses={devStatuses}
           loadEntries={loadEntries}
@@ -197,16 +209,31 @@ export default async function ProjectsPage({
         </>
       ) : (
         (() => {
-          const visible = (tab === "active" ? activeProjectsFiltered : inactiveProjects).filter(
-            projMatch,
-          );
+          const bucket =
+            tab === "active"
+              ? activeProjectsFiltered
+              : tab === "support"
+                ? supportProjects
+                : inactiveProjects;
+          const visible = bucket.filter(projMatch);
+          const label =
+            tab === "active"
+              ? "Активные"
+              : tab === "support"
+                ? "Суппорт"
+                : "Завершённые";
           return (
             <>
               <ProjectsSummaryBar
                 projects={visible}
                 membersByProject={membersByProject}
-                label={tab === "active" ? "Активные" : "Завершённые"}
+                label={label}
               />
+              {tab === "support" ? (
+                <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground -mt-2 mb-3">
+                  ≈ суммы и часы ориентировочные; TM-участники не идут в нагрузку
+                </p>
+              ) : null}
               <ProjectsList
                 projects={visible}
                 membersByProject={membersByProject}
@@ -298,22 +325,23 @@ function DevsList({
 
 /**
  * Build a load summary for every active staff member across active
- * projects. The caller buckets the result into bench (< 8 ч/день) vs
- * loaded (≥ 8 ч/день). Per-project list inside each entry is sorted
- * by hours descending.
+ * AND support projects. TM (Time & Material) members are excluded
+ * from hours / load — their schedule is unpredictable. Fixed
+ * support-project hours count just like active hours.
  */
 function buildLoadEntries(
-  activeProjects: Project[],
+  countedProjects: Project[],
   members: ProjectMember[],
   devStatuses: Awaited<ReturnType<typeof listDevStatuses>>,
 ): LoadEntry[] {
-  const projectsById = new Map(activeProjects.map((p) => [p.id, p]));
+  const projectsById = new Map(countedProjects.map((p) => [p.id, p]));
 
   const byDev = new Map<string, ProjectMember[]>();
   for (const m of members) {
     if (m.employment_type !== "staff") continue;
     if (m.is_active === false) continue;
     if (!projectsById.has(m.project_id)) continue;
+    if ((m.billing_mode ?? "fixed") === "tm") continue;
     const list = byDev.get(m.dev_name) ?? [];
     list.push(m);
     byDev.set(m.dev_name, list);

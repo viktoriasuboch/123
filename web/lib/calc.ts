@@ -12,13 +12,26 @@ export function marginPerHour(m: ProjectMember) {
   return (m.sell_rate || 0) - buyRate(m);
 }
 
-/** $/month revenue: sell_rate * hours_load */
+/**
+ * TM (Time & Material) members don't contribute predictable hours,
+ * so we count them as zero everywhere that wants a forecastable
+ * number — revenue, margin, hours, load. Their per-row marginPerHour
+ * (rate-only) still works through `marginPerHour(m)` because that
+ * call doesn't multiply by hours.
+ */
+function isTm(m: ProjectMember) {
+  return (m.billing_mode ?? "fixed") === "tm";
+}
+
+/** $/month revenue: sell_rate * hours_load (TM contributes 0). */
 export function monthlyRevenue(m: ProjectMember) {
+  if (isTm(m)) return 0;
   return (m.sell_rate || 0) * (m.hours_load || 0);
 }
 
-/** $/month margin */
+/** $/month margin (TM contributes 0). */
 export function monthlyMargin(m: ProjectMember) {
+  if (isTm(m)) return 0;
   return marginPerHour(m) * (m.hours_load || 0);
 }
 
@@ -82,6 +95,10 @@ export function aggregateProject(members: ProjectMember[]) {
 
     // Legacy group OR singleton.
     const lead = sorted[0];
+    // TM singletons don't add hours / revenue / margin to the
+    // aggregate. Multi-member legacy groups keep their existing
+    // behaviour (TM marking on group leads is not expected).
+    if (sorted.length === 1 && isTm(lead)) continue;
     const sell = lead.sell_rate || 0;
     const hours = lead.hours_load || 0;
     const sumBuy = sorted.reduce((s, m) => s + buyRate(m), 0);

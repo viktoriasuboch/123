@@ -81,8 +81,10 @@ export const ProjectRevenueInsert = ProjectRevenue.omit({
 
 /* ─── projects + members + events ────────────────────────────────────── */
 export const ProjectStatus = z
-  .enum(["active", "completed", "paused"])
+  .enum(["active", "support", "paused", "completed"])
   .catch("active");
+
+export const BillingMode = z.enum(["fixed", "tm"]).catch("fixed");
 
 export const Project = z.object({
   id: Uuid,
@@ -117,6 +119,7 @@ export const ProjectMember = z.object({
   group_label: z.string().max(80).nullable().optional(),
   proxy_role: z.enum(["face", "worker"]).nullable().optional(),
   proxy_bonus: z.coerce.number().nullable().optional(),
+  billing_mode: BillingMode.optional(),
   created_at: z.string().optional(),
 });
 export type ProjectMember = z.infer<typeof ProjectMember>;

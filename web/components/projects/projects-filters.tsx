@@ -5,6 +5,7 @@ import { useTransition } from "react";
 
 const TABS = [
   { id: "active",    label: "Активные" },
+  { id: "support",   label: "🛟 Суппорт" },
   { id: "inactive",  label: "Завершённые" },
   { id: "devs",      label: "👤 Разработчики" },
   { id: "load",      label: "📊 Нагрузка" },
@@ -35,6 +36,7 @@ export type ClientFilterId = (typeof CLIENT_FILTERS)[number]["id"];
 
 export function ProjectsFilters({
   activeCount,
+  supportCount,
   inactiveCount,
   devsCount,
   loadCount,
@@ -43,6 +45,7 @@ export function ProjectsFilters({
   clientByFilter,
 }: {
   activeCount: number;
+  supportCount: number;
   inactiveCount: number;
   devsCount: number;
   loadCount: number;
@@ -73,6 +76,7 @@ export function ProjectsFilters({
 
   const counts: Record<string, number> = {
     active: activeCount,
+    support: supportCount,
     inactive: inactiveCount,
     devs: devsCount,
     load: loadCount,

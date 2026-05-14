@@ -36,7 +36,11 @@ export default async function ProjectDetailPage({ params }: { params: Params }) 
       <KpiRow members={members} />
 
       <div className="space-y-6">
-        <MembersTable projectId={project.id} members={members} />
+        <MembersTable
+          projectId={project.id}
+          members={members}
+          projectStatus={project.status ?? "active"}
+        />
         <EventHistory projectId={project.id} events={events} />
       </div>
     </div>

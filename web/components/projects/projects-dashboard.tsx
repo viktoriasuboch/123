@@ -20,6 +20,7 @@ const OVERLOAD_PCT = 120;
 
 type DashboardProps = {
   activeProjects: Project[];
+  supportProjects: Project[];
   members: ProjectMember[];
   devStatuses: Record<string, DevStatus>;
   loadEntries: LoadEntry[];
@@ -27,6 +28,7 @@ type DashboardProps = {
 
 export function ProjectsDashboard({
   activeProjects,
+  supportProjects,
   members,
   devStatuses,
   loadEntries,
@@ -43,8 +45,92 @@ export function ProjectsDashboard({
       </div>
       <UtilizationSection loadEntries={loadEntries} />
       <FreelancersSection freelancers={stats.freelancers} />
+      <SupportSection supportProjects={supportProjects} members={members} />
       <AlertsSection stats={stats} loadEntries={loadEntries} />
     </div>
+  );
+}
+
+/* ─── support projects ────────────────────────────────────────────── */
+
+function SupportSection({
+  supportProjects,
+  members,
+}: {
+  supportProjects: Project[];
+  members: ProjectMember[];
+}) {
+  if (supportProjects.length === 0) return null;
+
+  const membersByProject = new Map<string, ProjectMember[]>();
+  for (const m of members) {
+    const list = membersByProject.get(m.project_id) ?? [];
+    list.push(m);
+    membersByProject.set(m.project_id, list);
+  }
+
+  const rows = supportProjects.map((p) => {
+    const list = (membersByProject.get(p.id) ?? []).filter(
+      (m) => m.is_active !== false,
+    );
+    let fixedRev = 0;
+    let fixedHours = 0;
+    let tmHeads = 0;
+    let fixedHeads = 0;
+    for (const m of list) {
+      if ((m.billing_mode ?? "fixed") === "tm") {
+        tmHeads++;
+      } else {
+        fixedHeads++;
+        fixedRev += (m.sell_rate || 0) * (m.hours_load || 0);
+        fixedHours += m.hours_load || 0;
+      }
+    }
+    return { project: p, fixedRev, fixedHours, fixedHeads, tmHeads };
+  });
+  rows.sort((a, b) => b.fixedRev - a.fixedRev);
+
+  const totalFixedRev = rows.reduce((s, r) => s + r.fixedRev, 0);
+
+  return (
+    <DashCard
+      title={`🛟 Суппорт · ${supportProjects.length}`}
+    >
+      <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mb-3">
+        ≈ суммы и часы по fixed-членам; TM в выручке не учитывается
+      </p>
+      <ul className="space-y-2 font-mono text-xs">
+        {rows.map((r) => (
+          <li key={r.project.id} className="flex items-center gap-2">
+            <Link
+              href={`/projects/${r.project.id}`}
+              className="truncate w-[38%] hover:text-primary"
+            >
+              {r.project.name}
+            </Link>
+            <span className="text-muted-foreground w-[120px] text-right shrink-0">
+              {r.fixedHeads ? `${r.fixedHeads} fixed` : ""}
+              {r.fixedHeads && r.tmHeads ? " · " : ""}
+              {r.tmHeads ? `${r.tmHeads} TM` : ""}
+            </span>
+            <span className="text-muted-foreground w-[110px] text-right shrink-0">
+              {Math.round((r.fixedHours / 20) * 10) / 10} ч/день
+            </span>
+            <span className="w-[110px] text-right shrink-0 text-info">
+              ≈ <MoneyValue value={`$${fmtMoney(r.fixedRev)}`} />
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 pt-3 border-t border-border flex items-center justify-between font-mono text-xs">
+        <span className="text-muted-foreground uppercase tracking-[0.15em] text-[10px]">
+          Σ Суппорт (ориентировочно)
+        </span>
+        <span className="text-info font-semibold">
+          ≈ <MoneyValue value={`$${fmtMoney(totalFixedRev)}`} />
+        </span>
+      </div>
+    </DashCard>
   );
 }
 
