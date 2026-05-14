@@ -61,9 +61,7 @@ export default async function ProjectsPage({
     sp.load && ["bench", "loaded"].includes(sp.load) ? sp.load : "bench"
   ) as LoadFilterId;
   const clientFilter = (
-    sp.client && ["all", "hays", "other"].includes(sp.client)
-      ? sp.client
-      : "all"
+    sp.client && ["all", "hays"].includes(sp.client) ? sp.client : "all"
   ) as ClientFilterId;
 
   const [projects, members, devStatuses, revenues] = await Promise.all([
@@ -88,14 +86,9 @@ export default async function ProjectsPage({
   const clientByFilter: Record<ClientFilterId, number> = {
     all: activeProjects.length,
     hays: activeProjects.filter(isHays).length,
-    other: activeProjects.filter((p) => !isHays(p)).length,
   };
   const activeProjectsFiltered =
-    clientFilter === "hays"
-      ? activeProjects.filter(isHays)
-      : clientFilter === "other"
-        ? activeProjects.filter((p) => !isHays(p))
-        : activeProjects;
+    clientFilter === "hays" ? activeProjects.filter(isHays) : activeProjects;
 
   // Build dev entries
   const devEntries = buildDevEntries(projects, members, devStatuses);

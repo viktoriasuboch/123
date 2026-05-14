@@ -25,9 +25,8 @@ const LOAD_FILTERS = [
 ] as const;
 
 const CLIENT_FILTERS = [
-  { id: "all",   label: "Все" },
-  { id: "hays",  label: "HAYS" },
-  { id: "other", label: "Не HAYS" },
+  { id: "all",  label: "Все" },
+  { id: "hays", label: "HAYS" },
 ] as const;
 
 export type DevFilterId = (typeof DEV_FILTERS)[number]["id"];
