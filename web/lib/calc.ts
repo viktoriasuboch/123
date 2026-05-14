@@ -23,10 +23,20 @@ export function monthlyMargin(m: ProjectMember) {
 }
 
 /**
- * Aggregate active members of a project. Members sharing a `group_label`
- * count as one "seat": their buy rates sum, but the group's sell rate
- * and hours come from the lead (smallest sort_order in the group).
- * Singleton members (no group_label) behave exactly as before.
+ * Aggregate active members of a project, with two special cases:
+ *
+ * 1. Proxy pair (`group_label` set on exactly two members where one
+ *    has `proxy_role='face'` and the other `'worker'`): hours and
+ *    revenue come from the worker only. Cost = worker buy/h × hours
+ *    + (face.proxy_bonus / 160) × hours — the bonus is amortised per
+ *    worker-hour, so a half-loaded worker only triggers half the
+ *    bonus payout.
+ *
+ * 2. Legacy group (≥2 members with same `group_label`, no proxy_role):
+ *    seat behaviour as before — sell + hours from the smallest
+ *    sort_order member, buy is the sum across the group.
+ *
+ * Singletons (no label) keep the original per-member math.
  */
 export function aggregateProject(members: ProjectMember[]) {
   const active = members.filter((m) => m.is_active !== false);
@@ -49,6 +59,28 @@ export function aggregateProject(members: ProjectMember[]) {
     const sorted = [...list].sort(
       (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
     );
+
+    // Proxy pair?
+    if (
+      sorted.length === 2 &&
+      sorted.some((m) => m.proxy_role === "face") &&
+      sorted.some((m) => m.proxy_role === "worker")
+    ) {
+      const face = sorted.find((m) => m.proxy_role === "face")!;
+      const worker = sorted.find((m) => m.proxy_role === "worker")!;
+      const sell = worker.sell_rate || 0;
+      const hours = worker.hours_load || 0;
+      const workerBuy = buyRate(worker);
+      const bonusPerH = (face.proxy_bonus || 0) / HOURS_PER_MONTH;
+      const effBuy = workerBuy + bonusPerH;
+      totalHours += hours;
+      totalRev += sell * hours;
+      totalMargin += (sell - effBuy) * hours;
+      if (sell - effBuy < 20) lowMargin++;
+      continue;
+    }
+
+    // Legacy group OR singleton.
     const lead = sorted[0];
     const sell = lead.sell_rate || 0;
     const hours = lead.hours_load || 0;

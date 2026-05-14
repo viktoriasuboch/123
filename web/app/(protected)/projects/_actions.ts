@@ -236,6 +236,8 @@ const MemberFieldPatch = z.object({
     "dev_end_date",
     "is_active",
     "group_label",
+    "proxy_role",
+    "proxy_bonus",
   ]),
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
 });
@@ -252,6 +254,8 @@ const MEMBER_FIELD_LABELS: Record<string, string> = {
   dev_end_date: "Конец",
   is_active: "Статус",
   group_label: "Группа",
+  proxy_role: "Роль в проксировании",
+  proxy_bonus: "Бонус лица",
 };
 
 const fmtMemberFieldValue = (field: string, v: unknown): string => {
@@ -282,14 +286,18 @@ export async function patchMember(
     field === "buy_rate" ||
     field === "sell_rate" ||
     field === "salary" ||
-    field === "hours_load"
+    field === "hours_load" ||
+    field === "proxy_bonus"
   ) {
     value = Number(value);
     if (isNaN(value as number)) value = 0;
   }
   if (
     value === "" &&
-    (field.endsWith("_date") || field === "role" || field === "group_label")
+    (field.endsWith("_date") ||
+      field === "role" ||
+      field === "group_label" ||
+      field === "proxy_role")
   )
     value = null;
 
@@ -457,6 +465,127 @@ export async function createMemberGroup(input: {
     project_id: parsed.projectId,
     event_type: "rate_change",
     description: `Создана группа «${label}» (${parsed.followerIds.length + 1} чел, sell ${parsed.sellRate}$/h)`,
+  });
+
+  revalidatePath(`/projects/${parsed.projectId}`);
+}
+
+const CreateProxyInput = z.object({
+  projectId: Uuid,
+  faceId: Uuid,
+  workerId: Uuid,
+  sellRate: z.coerce.number().min(0),
+  hoursLoad: z.coerce.number().min(0).default(160),
+  bonus: z.coerce.number().min(0).default(0),
+});
+
+/**
+ * Create a "proxy" pair: a face known to the client + a worker who
+ * actually does the job. The face's row stores the bonus and is
+ * zeroed for sell / hours / load — they're not "working" on the
+ * project. The worker's row carries the shared sell_rate, hours, and
+ * their own buy/salary. Both rows share `group_label = <face_name>`
+ * so they're rendered together.
+ *
+ * Effective cost per hour = worker.buy + (face_bonus / 160) — so
+ * the bonus scales proportionally with how many hours the worker
+ * actually puts in. A 50%-loaded worker means the company pays out
+ * half the bonus.
+ */
+export async function createProxy(input: unknown) {
+  await requireSection("projects");
+  const parsed = CreateProxyInput.parse(input);
+  if (parsed.faceId === parsed.workerId) {
+    throw new Error("Лицо и исполнитель не могут быть одним и тем же");
+  }
+
+  const { data: rows, error: fetchErr } = await sb()
+    .from("project_members")
+    .select("id, dev_name, sort_order, project_id")
+    .in("id", [parsed.faceId, parsed.workerId]);
+  if (fetchErr) throw fetchErr;
+  const list = (rows ?? []) as Array<{
+    id: string;
+    dev_name: string;
+    sort_order: number;
+    project_id: string;
+  }>;
+  const face = list.find((r) => r.id === parsed.faceId);
+  const worker = list.find((r) => r.id === parsed.workerId);
+  if (!face || !worker) throw new Error("Лицо или исполнитель не найдены");
+  if (
+    face.project_id !== parsed.projectId ||
+    worker.project_id !== parsed.projectId
+  ) {
+    throw new Error("Оба должны быть в этом проекте");
+  }
+  const label = face.dev_name;
+
+  // Face: zero sell + zero hours, holds the bonus and the label.
+  {
+    const { error } = await sb()
+      .from("project_members")
+      .update({
+        group_label: label,
+        proxy_role: "face",
+        proxy_bonus: parsed.bonus,
+        sell_rate: 0,
+        hours_load: 0,
+      })
+      .eq("id", parsed.faceId);
+    if (error) throw error;
+  }
+
+  // Worker: holds sell + hours, no bonus.
+  {
+    const { error } = await sb()
+      .from("project_members")
+      .update({
+        group_label: label,
+        proxy_role: "worker",
+        proxy_bonus: 0,
+        sell_rate: parsed.sellRate,
+        hours_load: parsed.hoursLoad,
+      })
+      .eq("id", parsed.workerId);
+    if (error) throw error;
+  }
+
+  // Reorder: worker right after face. Push everything after the face
+  // down by 1 to keep ordering stable.
+  const { data: laterRows } = await sb()
+    .from("project_members")
+    .select("id, sort_order")
+    .eq("project_id", parsed.projectId)
+    .gt("sort_order", face.sort_order)
+    .neq("id", parsed.workerId)
+    .order("sort_order", { ascending: true });
+
+  if (laterRows && laterRows.length > 0) {
+    let scratch = -20000;
+    for (const r of laterRows as Array<{ id: string; sort_order: number }>) {
+      await sb()
+        .from("project_members")
+        .update({ sort_order: scratch-- })
+        .eq("id", r.id);
+    }
+    let cursor = face.sort_order + 2;
+    for (const r of laterRows as Array<{ id: string; sort_order: number }>) {
+      await sb()
+        .from("project_members")
+        .update({ sort_order: cursor++ })
+        .eq("id", r.id);
+    }
+  }
+  await sb()
+    .from("project_members")
+    .update({ sort_order: face.sort_order + 1 })
+    .eq("id", parsed.workerId);
+
+  await sb().from("project_events").insert({
+    project_id: parsed.projectId,
+    event_type: "rate_change",
+    description: `Проксирование: ${face.dev_name} (лицо, бонус ${parsed.bonus}$/мес) ← ${worker.dev_name} (исполнитель, sell ${parsed.sellRate}$/h × ${parsed.hoursLoad} ч/мес)`,
   });
 
   revalidatePath(`/projects/${parsed.projectId}`);

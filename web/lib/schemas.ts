@@ -115,6 +115,8 @@ export const ProjectMember = z.object({
   is_active: z.boolean().optional(),
   sort_order: z.number().int().optional(),
   group_label: z.string().max(80).nullable().optional(),
+  proxy_role: z.enum(["face", "worker"]).nullable().optional(),
+  proxy_bonus: z.coerce.number().nullable().optional(),
   created_at: z.string().optional(),
 });
 export type ProjectMember = z.infer<typeof ProjectMember>;

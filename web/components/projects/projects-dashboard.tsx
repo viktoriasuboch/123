@@ -677,12 +677,36 @@ function computeStats(
   // Revenue / margin per member uses existing per-row calc (followers
   // in groups have sell_rate = 0, so they contribute 0 to revenue,
   // which is correct).
+  // Proxy face members: bonus is amortised per worker-hour, so the
+  // monthly bonus payout = (bonus / 160) × worker_hours. We collect
+  // them up-front and subtract from margin / add to cost below.
+  let proxyBonusCost = 0;
+  for (const m of active) {
+    if (m.proxy_role !== "face") continue;
+    const label = m.group_label?.trim();
+    if (!label) continue;
+    const worker = active.find(
+      (x) =>
+        x.proxy_role === "worker" &&
+        x.project_id === m.project_id &&
+        x.group_label?.trim() === label,
+    );
+    if (!worker) continue;
+    const workerHours = worker.hours_load ?? 0;
+    const bonus = m.proxy_bonus ?? 0;
+    proxyBonusCost += (bonus / HOURS_PER_MONTH) * workerHours;
+  }
+
   let totalRev = 0;
   let totalMargin = 0;
   for (const m of active) {
     totalRev += monthlyRevenue(m);
     totalMargin += monthlyMargin(m);
   }
+  // Subtract amortised proxy bonus from margin (it isn't reflected
+  // by per-member monthlyMargin since the bonus lives on a separate
+  // row whose sell/hours are zero).
+  totalMargin -= proxyBonusCost;
 
   // Cost: staff cost is the dev's salary (one per dev, even if they
   // appear on multiple projects); freelance cost is buy × hours per
@@ -703,7 +727,7 @@ function computeStats(
     (s, x) => s + x,
     0,
   );
-  const totalCost = staffCost + freelanceCost;
+  const totalCost = staffCost + freelanceCost + proxyBonusCost;
 
   const avgMarginPct = totalRev > 0 ? (totalMargin / totalRev) * 100 : 0;
 
@@ -750,6 +774,26 @@ function computeStats(
     cur.n++;
     projAgg.set(m.project_id, cur);
   }
+  // Apply amortised proxy bonus per-project (cost up, margin down).
+  for (const m of active) {
+    if (m.proxy_role !== "face") continue;
+    const label = m.group_label?.trim();
+    if (!label) continue;
+    const worker = active.find(
+      (x) =>
+        x.proxy_role === "worker" &&
+        x.project_id === m.project_id &&
+        x.group_label?.trim() === label,
+    );
+    if (!worker) continue;
+    const bonusPart =
+      ((m.proxy_bonus ?? 0) / HOURS_PER_MONTH) * (worker.hours_load ?? 0);
+    const a = projAgg.get(m.project_id);
+    if (!a) continue;
+    a.cost += bonusPart;
+    a.margin -= bonusPart;
+  }
+
   const projectStats: ProjectStat[] = activeProjects.map((p) => {
     const a = projAgg.get(p.id) ?? { rev: 0, margin: 0, cost: 0, n: 0 };
     return {
@@ -776,11 +820,25 @@ function computeStats(
   const noRevProjects = projectStats.filter((p) => p.rev === 0);
 
   // Low-margin members ($/h): margin per hour < 20, members that
-  // actually sell something (sell > 0 — followers don't show up).
+  // actually sell something (sell > 0 — group followers / proxy faces
+  // don't show up). For proxy workers the face's bonus is amortised
+  // into their per-hour cost.
   const lowMarginMembers: LowMarginRow[] = [];
   for (const m of active) {
     if ((m.sell_rate || 0) <= 0) continue;
-    const mh = marginPerHour(m);
+    let mh = marginPerHour(m);
+    if (m.proxy_role === "worker") {
+      const label = m.group_label?.trim();
+      const face = label
+        ? active.find(
+            (x) =>
+              x.proxy_role === "face" &&
+              x.project_id === m.project_id &&
+              x.group_label?.trim() === label,
+          )
+        : null;
+      if (face) mh -= (face.proxy_bonus ?? 0) / HOURS_PER_MONTH;
+    }
     if (mh >= 20) continue;
     const project = projById.get(m.project_id)!;
     lowMarginMembers.push({ member: m, project, marginHourly: mh });

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import type { ProjectMember } from "@/lib/schemas";
 import { reportActionError } from "@/lib/client-errors";
-import { createMemberGroup } from "../../app/(protected)/projects/_actions";
+import { createProxy } from "../../app/(protected)/projects/_actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function NewGroupButton({
+export function NewProxyButton({
   projectId,
   members,
 }: {
@@ -25,42 +25,43 @@ export function NewGroupButton({
 }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
-  const [leaderId, setLeaderId] = useState<string>("");
+  const [faceId, setFaceId] = useState<string>("");
+  const [workerId, setWorkerId] = useState<string>("");
   const [sellRate, setSellRate] = useState<string>("");
   const [hoursLoad, setHoursLoad] = useState<string>("160");
-  const [followerIds, setFollowerIds] = useState<Set<string>>(new Set());
+  const [bonus, setBonus] = useState<string>("");
 
-  // Only members of THIS project, not already inside someone else's
-  // shared seat (they may already be a leader of an empty group, that's
-  // fine — picking them simply re-uses their row as the new leader).
   const candidates = useMemo(
     () => members.filter((m) => m.is_active !== false),
     [members],
   );
 
   const reset = () => {
-    setLeaderId("");
+    setFaceId("");
+    setWorkerId("");
     setSellRate("");
     setHoursLoad("160");
-    setFollowerIds(new Set());
+    setBonus("");
   };
 
   const submit = () => {
-    if (!leaderId) return;
-    const sell = Number(sellRate);
-    const hours = Number(hoursLoad);
+    if (!faceId || !workerId || faceId === workerId) return;
+    const sell = Number(sellRate.replace(",", "."));
+    const hours = Number(hoursLoad.replace(",", "."));
+    const bonusNum = Number(bonus.replace(",", "."));
     if (!Number.isFinite(sell) || sell < 0) return;
     if (!Number.isFinite(hours) || hours < 0) return;
-    const fids = Array.from(followerIds).filter((id) => id !== leaderId);
+    if (!Number.isFinite(bonusNum) || bonusNum < 0) return;
 
     start(async () => {
       try {
-        await createMemberGroup({
+        await createProxy({
           projectId,
-          leaderId,
+          faceId,
+          workerId,
           sellRate: sell,
           hoursLoad: hours,
-          followerIds: fids,
+          bonus: bonusNum,
         });
         setOpen(false);
         reset();
@@ -87,31 +88,32 @@ export function NewGroupButton({
           />
         }
       >
-        🔗 Группа
+        🎭 Проксирование
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl tracking-wide">
-            Новая группа
+            Новое проксирование
           </DialogTitle>
         </DialogHeader>
+
+        <p className="text-xs text-muted-foreground -mt-2">
+          Лицо известно клиенту, но не работает. Исполнитель реально
+          выполняет работу. Бонус лица распределяется на час пропорционально
+          часам исполнителя (бонус/160).
+        </p>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label className="text-xs uppercase tracking-widest text-muted-foreground">
-              Ведущий разработчик *
+              Лицо для клиента *
             </Label>
             <select
-              value={leaderId}
+              value={faceId}
               onChange={(e) => {
                 const next = e.target.value;
-                setLeaderId(next);
-                // Make sure leader isn't also in followers.
-                setFollowerIds((s) => {
-                  const n = new Set(s);
-                  n.delete(next);
-                  return n;
-                });
+                setFaceId(next);
+                if (workerId === next) setWorkerId("");
               }}
               className="w-full h-10 px-3 rounded border bg-background text-sm font-mono"
             >
@@ -122,9 +124,26 @@ export function NewGroupButton({
                 </option>
               ))}
             </select>
-            <p className="text-[10px] text-muted-foreground">
-              Имя ведущего станет названием группы.
-            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-widest text-muted-foreground">
+              Исполнитель *
+            </Label>
+            <select
+              value={workerId}
+              onChange={(e) => setWorkerId(e.target.value)}
+              className="w-full h-10 px-3 rounded border bg-background text-sm font-mono"
+            >
+              <option value="">— выбери —</option>
+              {candidates
+                .filter((m) => m.id !== faceId)
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.dev_name}
+                  </option>
+                ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -133,8 +152,8 @@ export function NewGroupButton({
                 Sell ($/h) *
               </Label>
               <Input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={sellRate}
                 onChange={(e) => setSellRate(e.target.value)}
                 placeholder="50"
@@ -145,8 +164,8 @@ export function NewGroupButton({
                 Часов / мес
               </Label>
               <Input
-                type="number"
-                step="1"
+                type="text"
+                inputMode="decimal"
                 value={hoursLoad}
                 onChange={(e) => setHoursLoad(e.target.value)}
                 placeholder="160"
@@ -156,49 +175,17 @@ export function NewGroupButton({
 
           <div className="space-y-1.5">
             <Label className="text-xs uppercase tracking-widest text-muted-foreground">
-              Подчинённые
+              Бонус лица ($/мес) *
             </Label>
-            <div className="rounded border bg-background max-h-[240px] overflow-y-auto divide-y divide-border">
-              {candidates.length === 0 ? (
-                <div className="p-3 text-xs text-muted-foreground text-center">
-                  В проекте нет членов команды
-                </div>
-              ) : (
-                candidates
-                  .filter((m) => m.id !== leaderId)
-                  .map((m) => {
-                    const checked = followerIds.has(m.id);
-                    return (
-                      <label
-                        key={m.id}
-                        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/30"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            setFollowerIds((s) => {
-                              const n = new Set(s);
-                              if (e.target.checked) n.add(m.id);
-                              else n.delete(m.id);
-                              return n;
-                            });
-                          }}
-                        />
-                        <span className="font-mono text-sm flex-1">
-                          {m.dev_name}
-                        </span>
-                        <span className="font-mono text-[10px] text-muted-foreground">
-                          {m.role ?? "—"} ·{" "}
-                          {m.employment_type === "staff" ? "штат" : "фриланс"}
-                        </span>
-                      </label>
-                    );
-                  })
-              )}
-            </div>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={bonus}
+              onChange={(e) => setBonus(e.target.value)}
+              placeholder="500"
+            />
             <p className="text-[10px] text-muted-foreground">
-              У них sell обнулится — клиент платит один общий sell ведущему.
+              На час: {bonusPreviewPerHour(bonus)}/h при 160 часах в месяце.
             </p>
           </div>
         </div>
@@ -215,12 +202,27 @@ export function NewGroupButton({
           <Button
             type="button"
             onClick={submit}
-            disabled={pending || !leaderId || sellRate === ""}
+            disabled={
+              pending ||
+              !faceId ||
+              !workerId ||
+              faceId === workerId ||
+              sellRate === "" ||
+              bonus === ""
+            }
           >
-            {pending ? "Создаю…" : "Создать группу"}
+            {pending ? "Создаю…" : "Создать проксирование"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
+}
+
+function bonusPreviewPerHour(raw: string): string {
+  const n = Number(raw.replace(",", "."));
+  if (!Number.isFinite(n) || n <= 0) return "$0";
+  const perH = n / 160;
+  const rounded = Math.round(perH * 100) / 100;
+  return `$${Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(2).replace(/\.?0+$/, "")}`;
 }

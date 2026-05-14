@@ -23,7 +23,7 @@ import { reportActionError } from "@/lib/client-errors";
 import { patchMember, removeMember, addMember, moveMember } from "../../app/(protected)/projects/_actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { NewGroupButton } from "./new-group-button";
+import { NewProxyButton } from "./new-proxy-button";
 import { toast } from "sonner";
 
 export function MembersTable({
@@ -40,7 +40,7 @@ export function MembersTable({
       <header className="flex items-center justify-between p-4 border-b">
         <h2 className="font-display text-xl tracking-wide">Команда</h2>
         <div className="flex items-center gap-2">
-          <NewGroupButton projectId={projectId} members={members} />
+          <NewProxyButton projectId={projectId} members={members} />
           <Button
             size="sm"
             variant={showAdd ? "ghost" : "default"}
@@ -114,10 +114,19 @@ export function MembersTable({
   );
 }
 
+function isProxyPair(list: ProjectMember[]): boolean {
+  return (
+    list.length === 2 &&
+    list.some((m) => m.proxy_role === "face") &&
+    list.some((m) => m.proxy_role === "worker")
+  );
+}
+
 /**
  * Walk the (already sort_order-sorted) members list and render either
- * a singleton MemberRow or a Group block (summary + member rows) for
- * adjacent runs of members sharing a `group_label`.
+ * a singleton MemberRow, a Proxy pair (summary + face + worker rows),
+ * or a legacy Group block (summary + member rows) for adjacent runs of
+ * members sharing a `group_label`.
  */
 function renderRows(members: ProjectMember[], projectId: string) {
   type Slot =
@@ -150,6 +159,39 @@ function renderRows(members: ProjectMember[], projectId: string) {
           isFirst={slot.idx === 0}
           isLast={slot.idx === total - 1}
           inGroup={false}
+        />,
+      ];
+    }
+    if (isProxyPair(slot.list)) {
+      const face = slot.list.find((m) => m.proxy_role === "face")!;
+      const worker = slot.list.find((m) => m.proxy_role === "worker")!;
+      const bonusPerHour = (face.proxy_bonus ?? 0) / HOURS_PER_MONTH;
+      // figure out original indices so move ↑/↓ flags are right
+      const faceIdx = slot.firstIdx + slot.list.indexOf(face);
+      const workerIdx = slot.firstIdx + slot.list.indexOf(worker);
+      return [
+        <ProxySummaryRow
+          key={`proxy-${face.id}-${worker.id}`}
+          face={face}
+          worker={worker}
+          projectId={projectId}
+        />,
+        <ProxyFaceRow
+          key={face.id}
+          m={face}
+          projectId={projectId}
+          isFirst={faceIdx === 0}
+          isLast={faceIdx === total - 1}
+        />,
+        <MemberRow
+          key={worker.id}
+          m={worker}
+          projectId={projectId}
+          isFirst={workerIdx === 0}
+          isLast={workerIdx === total - 1}
+          inGroup={false}
+          letter="✋"
+          extraBuyPerHour={bonusPerHour}
         />,
       ];
     }
@@ -259,6 +301,249 @@ function GroupSummaryRow({
   );
 }
 
+/* ─── proxy pair rows ─────────────────────────────────────────────── */
+
+function ProxySummaryRow({
+  face,
+  worker,
+  projectId,
+}: {
+  face: ProjectMember;
+  worker: ProjectMember;
+  projectId: string;
+}) {
+  const workerBuyPerHour =
+    worker.employment_type === "staff"
+      ? (worker.salary ?? 0) / HOURS_PER_MONTH
+      : worker.buy_rate ?? 0;
+  const bonusPerHour = (face.proxy_bonus ?? 0) / HOURS_PER_MONTH;
+  const effBuy = workerBuyPerHour + bonusPerHour;
+  const sell = worker.sell_rate ?? 0;
+  const hours = worker.hours_load ?? 0;
+  const margin = sell - effBuy;
+  const marginPct = sell > 0 ? (margin / sell) * 100 : 0;
+  const rev = sell * hours;
+  const hpd = hours / 20;
+  const cls = margin < 20 ? "text-bad" : "text-good";
+
+  const [pending, start] = useTransition();
+  const dissolve = () => {
+    if (!confirm("Расформировать проксирование?")) return;
+    start(async () => {
+      try {
+        for (const m of [face, worker]) {
+          await patchMember(projectId, m.id, "proxy_role", null);
+          await patchMember(projectId, m.id, "proxy_bonus", 0);
+          await patchMember(projectId, m.id, "group_label", null);
+        }
+      } catch (e) {
+        reportActionError(e, "Не сохранилось");
+      }
+    });
+  };
+
+  return (
+    <tr
+      className={`border-b border-border/50 ${pending ? "opacity-50" : ""}`}
+    >
+      <td className="p-1.5"></td>
+      <td className="p-1.5 truncate" title={`Лицо: ${face.dev_name}`}>
+        🎭 {face.dev_name}
+      </td>
+      <td className="p-1.5 text-muted-foreground">проксирование</td>
+      <td className="p-1.5"></td>
+      <td className="p-1.5"></td>
+      <td
+        className="p-1.5 text-center text-muted-foreground"
+        title={`${fmtRate(workerBuyPerHour)}/h исполнитель + ${fmtRate(bonusPerHour)}/h бонус`}
+      >
+        {fmtRate(effBuy)}
+      </td>
+      <td className="p-1.5 text-center text-muted-foreground">
+        {fmtRate(sell)}
+      </td>
+      <td className={`p-1.5 text-center ${cls}`}>{fmtRate(margin)}</td>
+      <td className={`p-1.5 text-center ${cls}`}>
+        {marginPct.toFixed(1)}%
+      </td>
+      <td className="p-1.5 text-center text-muted-foreground">
+        ${Math.round(rev).toLocaleString()}
+      </td>
+      <td className="p-1.5 text-center text-muted-foreground">
+        {Math.round(hpd * 10) / 10}
+      </td>
+      <td className="p-1.5"></td>
+      <td className="p-1.5"></td>
+      <td className="p-1.5"></td>
+      <td className="p-1.5 text-center">
+        <button
+          type="button"
+          onClick={dissolve}
+          disabled={pending}
+          className="text-muted-foreground hover:text-bad px-1"
+          title="Расформировать проксирование"
+          aria-label="Расформировать"
+        >
+          ✕
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function ProxyFaceRow({
+  m,
+  projectId,
+  isFirst,
+  isLast,
+}: {
+  m: ProjectMember;
+  projectId: string;
+  isFirst: boolean;
+  isLast: boolean;
+}) {
+  const isStaff = m.employment_type === "staff";
+  const [pending, start] = useTransition();
+  const save = (field: string, value: string | number | boolean | null) => {
+    start(async () => {
+      try {
+        await patchMember(projectId, m.id, field, value);
+      } catch (e) {
+        reportActionError(e, "Не сохранилось");
+      }
+    });
+  };
+  const move = (direction: "up" | "down") => {
+    start(async () => {
+      try {
+        await moveMember(projectId, m.id, direction);
+      } catch (e) {
+        reportActionError(e, "Не получилось");
+      }
+    });
+  };
+
+  const inputCls =
+    "w-full bg-transparent rounded px-1 py-0.5 hover:bg-muted/40 focus:bg-muted/60 focus:outline-none focus:ring-1 focus:ring-primary text-center";
+  const dash = <span className="text-muted-foreground">—</span>;
+
+  return (
+    <tr
+      className={`border-b border-border/50 hover:bg-muted/20 transition ${pending ? "opacity-50" : ""}`}
+    >
+      <td className="p-1.5">
+        <div className="flex flex-col items-center gap-0 leading-none">
+          <button
+            type="button"
+            onClick={() => move("up")}
+            disabled={isFirst || pending}
+            className="text-muted-foreground hover:text-primary disabled:opacity-25 text-[10px] leading-none px-1"
+            title="Выше"
+          >
+            ▲
+          </button>
+          <button
+            type="button"
+            onClick={() => move("down")}
+            disabled={isLast || pending}
+            className="text-muted-foreground hover:text-primary disabled:opacity-25 text-[10px] leading-none px-1"
+            title="Ниже"
+          >
+            ▼
+          </button>
+        </div>
+      </td>
+      <td className="p-1.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-mono text-muted-foreground/70 shrink-0 text-[11px]">
+            └─ 🎭
+          </span>
+          <input
+            defaultValue={m.dev_name}
+            onBlur={(e) => save("dev_name", e.target.value)}
+            className={`${inputCls} flex-1 min-w-0`}
+          />
+        </div>
+      </td>
+      <td className="p-1.5">
+        <input
+          defaultValue={m.role ?? ""}
+          onBlur={(e) => save("role", e.target.value)}
+          className={inputCls}
+          placeholder="—"
+        />
+      </td>
+      <td className="p-1.5">
+        <select
+          defaultValue={m.employment_type ?? "freelancer"}
+          onChange={(e) => save("employment_type", e.target.value)}
+          className={inputCls}
+        >
+          <option value="freelancer">Фрилансер</option>
+          <option value="staff">Штатный</option>
+        </select>
+      </td>
+      <td className="p-1.5 text-center">
+        {isStaff ? (
+          <input
+            type="text"
+            inputMode="decimal"
+            defaultValue={fmtNumInput(m.salary ?? 0)}
+            onBlur={(e) => save("salary", parseDecimal(e.target.value))}
+            className={inputCls}
+          />
+        ) : (
+          dash
+        )}
+      </td>
+      <td
+        className="p-1.5 text-center text-muted-foreground"
+        colSpan={5}
+        title="Бонус лица за проксирование"
+      >
+        бонус&nbsp;
+        <input
+          type="text"
+          inputMode="decimal"
+          defaultValue={fmtNumInput(m.proxy_bonus ?? 0)}
+          onBlur={(e) => save("proxy_bonus", parseDecimal(e.target.value))}
+          className={`${inputCls} inline-block w-[80px]`}
+        />
+        &nbsp;$/мес
+      </td>
+      <td className="p-1.5">
+        <input
+          type="date"
+          defaultValue={m.dev_start_date ?? ""}
+          onBlur={(e) => save("dev_start_date", e.target.value || null)}
+          className={inputCls}
+        />
+      </td>
+      <td className="p-1.5">
+        <input
+          type="date"
+          defaultValue={m.dev_end_date ?? ""}
+          onBlur={(e) => save("dev_end_date", e.target.value || null)}
+          className={inputCls}
+        />
+      </td>
+      <td className="p-1.5">
+        <select
+          defaultValue={m.is_active === false ? "false" : "true"}
+          onChange={(e) => save("is_active", e.target.value === "true")}
+          className={inputCls}
+        >
+          <option value="true">Активен</option>
+          <option value="false">Завершён</option>
+        </select>
+      </td>
+      <td className="p-1.5 text-center"></td>
+    </tr>
+  );
+}
+
+/* ─── normal member row ───────────────────────────────────────────── */
+
 function MemberRow({
   m,
   projectId,
@@ -267,6 +552,7 @@ function MemberRow({
   inGroup,
   isLead,
   letter,
+  extraBuyPerHour = 0,
 }: {
   m: ProjectMember;
   projectId: string;
@@ -275,6 +561,8 @@ function MemberRow({
   inGroup: boolean;
   isLead?: boolean;
   letter?: string;
+  /** Added to per-hour buy when computing margin (e.g. amortised proxy bonus). */
+  extraBuyPerHour?: number;
 }) {
   const [pending, start] = useTransition();
 
@@ -302,7 +590,10 @@ function MemberRow({
   );
 
   const isStaff = empType === "staff";
-  const buy = isStaff ? salary / HOURS_PER_MONTH : buyRateLocal;
+  const ownBuy = isStaff ? salary / HOURS_PER_MONTH : buyRateLocal;
+  // For a proxy worker, the row also bears the face's bonus amortised
+  // per hour, so margin accurately reflects the company's true cost.
+  const buy = ownBuy + extraBuyPerHour;
   const margin = sellRate - buy;
   const marginPct = sellRate > 0 ? (margin / sellRate) * 100 : 0;
   const hoursLoad = hpd * 20;
@@ -371,7 +662,7 @@ function MemberRow({
       </td>
       <td className="p-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
-          {inGroup && letter ? (
+          {letter ? (
             <span className="font-mono text-muted-foreground/70 shrink-0 text-[11px] tracking-wider">
               └─ <span className="text-muted-foreground">{letter}</span>
             </span>
