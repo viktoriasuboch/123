@@ -19,6 +19,7 @@ import {
   BENCH_THRESHOLD,
   type LoadEntry,
 } from "@/components/projects/load-list";
+import { ProjectsDashboard } from "@/components/projects/projects-dashboard";
 import type { Project, ProjectMember } from "@/lib/schemas";
 
 type SP = Promise<{
@@ -41,7 +42,8 @@ export default async function ProjectsPage({
     | "active"
     | "inactive"
     | "devs"
-    | "load";
+    | "load"
+    | "dashboard";
   const q = (sp.q ?? "").trim().toLowerCase();
   const view = (sp.view === "grid" ? "grid" : "list") as "list" | "grid";
   const devFilter = (
@@ -129,7 +131,14 @@ export default async function ProjectsPage({
         loadByFilter={loadByFilter}
       />
 
-      {tab === "load" ? (
+      {tab === "dashboard" ? (
+        <ProjectsDashboard
+          activeProjects={activeProjects}
+          members={members}
+          devStatuses={devStatuses}
+          loadEntries={loadEntries}
+        />
+      ) : tab === "load" ? (
         (() => {
           const list = loadFilter === "bench" ? benchEntries : loadedEntries;
           return (

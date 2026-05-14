@@ -4,10 +4,11 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
 const TABS = [
-  { id: "active",   label: "Активные" },
-  { id: "inactive", label: "Завершённые" },
-  { id: "devs",     label: "👤 Разработчики" },
-  { id: "load",     label: "📊 Нагрузка" },
+  { id: "active",    label: "Активные" },
+  { id: "inactive",  label: "Завершённые" },
+  { id: "devs",      label: "👤 Разработчики" },
+  { id: "load",      label: "📊 Нагрузка" },
+  { id: "dashboard", label: "📈 Дашборд" },
 ] as const;
 
 const DEV_FILTERS = [
