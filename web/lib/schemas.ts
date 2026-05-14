@@ -151,6 +151,10 @@ export const ProjectEventInsert = ProjectEvent.omit({
 export const DevStatus = z.object({
   dev_name: z.string().max(120),
   status: z.enum(["active", "inactive"]).default("active"),
+  role: z.string().max(80).nullable().optional(),
+  employment_type: EmploymentType.optional().nullable(),
+  salary: z.coerce.number().nullable().optional(),
+  default_hours_load: z.coerce.number().nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
   updated_at: z.string().optional(),
 });

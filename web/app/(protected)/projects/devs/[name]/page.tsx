@@ -23,11 +23,17 @@ export default async function DevProfilePage({ params }: { params: Params }) {
   ]);
 
   const rows = allMembers.filter((m) => m.dev_name === name);
-  if (rows.length === 0) notFound();
+  const registry = statuses[name];
+  // The dev page is reachable as long as the person is either on a
+  // project OR in the master developer_status registry (e.g. just
+  // hired, not assigned yet).
+  if (rows.length === 0 && !registry) notFound();
 
   const projectsById = new Map(projects.map((p) => [p.id, p]));
-  const empType = rows[0].employment_type ?? "freelancer";
-  const fired = statuses[name]?.status === "inactive";
+  const empType =
+    rows[0]?.employment_type ??
+    (registry?.employment_type ?? "staff");
+  const fired = registry?.status === "inactive";
   const initials = name
     .split(" ")
     .map((w) => w[0] ?? "")

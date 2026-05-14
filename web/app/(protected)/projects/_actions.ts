@@ -614,3 +614,57 @@ export async function setDevStatus(
   revalidatePath("/projects");
   revalidatePath(`/projects/devs/${encodeURIComponent(devName)}`);
 }
+
+const CreateDeveloperInput = z.object({
+  dev_name: z.string().trim().min(1).max(120),
+  role: z.string().trim().max(80).nullable().optional(),
+  employment_type: z.enum(["staff", "freelancer"]).default("staff"),
+  salary: z.coerce.number().min(0).default(0),
+  default_hours_load: z.coerce.number().min(0).default(160),
+  notes: z.string().max(1000).nullable().optional(),
+});
+
+/**
+ * Register a developer in the master registry (developer_status table).
+ * They will be visible on the Devs tab and counted in load tracking even
+ * if not currently assigned to any project. Re-running with the same
+ * dev_name updates the existing record (upsert by name).
+ */
+export async function createDeveloper(input: unknown) {
+  await requireSection("projects");
+  const parsed = CreateDeveloperInput.parse(input);
+
+  const { error } = await sb()
+    .from("developer_status")
+    .upsert(
+      {
+        dev_name: parsed.dev_name,
+        status: "active",
+        role: parsed.role ?? null,
+        employment_type: parsed.employment_type,
+        salary: parsed.salary,
+        default_hours_load: parsed.default_hours_load,
+        notes: parsed.notes ?? null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "dev_name" },
+    );
+  if (error) throw error;
+
+  revalidatePath("/projects");
+}
+
+/**
+ * Permanently remove a developer from the registry. Project members
+ * referencing the same dev_name aren't affected (no FK).
+ */
+export async function deleteDeveloper(devName: string) {
+  await requireSection("projects");
+  z.string().min(1).max(120).parse(devName);
+  const { error } = await sb()
+    .from("developer_status")
+    .delete()
+    .eq("dev_name", devName);
+  if (error) throw error;
+  revalidatePath("/projects");
+}

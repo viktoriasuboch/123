@@ -22,6 +22,7 @@ import {
 } from "@/components/projects/load-list";
 import { ProjectsDashboard } from "@/components/projects/projects-dashboard";
 import { ForecastTable } from "@/components/projects/forecast-table";
+import { NewDeveloperButton } from "@/components/projects/new-developer-button";
 import type { Project, ProjectMember } from "@/lib/schemas";
 
 type SP = Promise<{
@@ -162,6 +163,9 @@ export default async function ProjectsPage({
         })()
       ) : tab === "devs" ? (
         <>
+          <div className="flex items-center justify-end mb-3">
+            <NewDeveloperButton />
+          </div>
           <DevsSummaryBar
             projects={projects}
             members={members}
@@ -298,6 +302,15 @@ function buildLoadEntries(
     byDev.set(m.dev_name, list);
   }
 
+  // Registry-only staff who aren't on any active project right now —
+  // still count them, with 0 hours, so they appear on the bench list.
+  for (const [name, status] of Object.entries(devStatuses)) {
+    if (byDev.has(name)) continue;
+    if (status.status === "inactive") continue;
+    if ((status.employment_type ?? "staff") !== "staff") continue;
+    byDev.set(name, []);
+  }
+
   const entries: LoadEntry[] = [];
   for (const [name, ms] of byDev) {
     if (devStatuses[name]?.status === "inactive") continue;
@@ -336,6 +349,17 @@ function buildDevEntries(
       empType,
       fired,
       rows: ms.map((m) => ({ member: m, project: projectsById.get(m.project_id) })),
+    });
+  }
+  // Devs in the registry who currently aren't on any project — still
+  // show them so we can track bench load even when they're idle.
+  for (const [name, status] of Object.entries(devStatuses)) {
+    if (groupedByName.has(name)) continue;
+    entries.push({
+      name,
+      empType: (status.employment_type ?? "staff") as "staff" | "freelancer",
+      fired: status.status === "inactive",
+      rows: [],
     });
   }
   return entries.sort((a, b) => a.name.localeCompare(b.name, "ru"));
