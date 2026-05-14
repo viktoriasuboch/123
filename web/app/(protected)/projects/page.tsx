@@ -5,18 +5,29 @@ import {
 } from "@/lib/data/projects";
 import { ProjectCard } from "@/components/projects/project-card";
 import { DevCard, type DevCardEntry } from "@/components/projects/dev-card";
-import { ProjectsFilters, type DevFilterId } from "@/components/projects/projects-filters";
+import {
+  ProjectsFilters,
+  type DevFilterId,
+  type LoadFilterId,
+} from "@/components/projects/projects-filters";
 import { DevsSummaryBar } from "@/components/projects/devs-summary-bar";
 import { ProjectsSummaryBar } from "@/components/projects/projects-summary-bar";
 import { NewProjectButton } from "@/components/projects/new-project-button";
 import {
-  BenchList,
-  BENCH_FULL_DAY,
-  type BenchEntry,
-} from "@/components/projects/bench-list";
+  LoadList,
+  FULL_DAY_HOURS,
+  BENCH_THRESHOLD,
+  type LoadEntry,
+} from "@/components/projects/load-list";
 import type { Project, ProjectMember } from "@/lib/schemas";
 
-type SP = Promise<{ tab?: string; q?: string; view?: string; dev?: string }>;
+type SP = Promise<{
+  tab?: string;
+  q?: string;
+  view?: string;
+  dev?: string;
+  load?: string;
+}>;
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +41,7 @@ export default async function ProjectsPage({
     | "active"
     | "inactive"
     | "devs"
-    | "bench";
+    | "load";
   const q = (sp.q ?? "").trim().toLowerCase();
   const view = (sp.view === "grid" ? "grid" : "list") as "list" | "grid";
   const devFilter = (
@@ -38,6 +49,9 @@ export default async function ProjectsPage({
       ? sp.dev
       : "all"
   ) as DevFilterId;
+  const loadFilter = (
+    sp.load && ["bench", "loaded"].includes(sp.load) ? sp.load : "bench"
+  ) as LoadFilterId;
 
   const [projects, members, devStatuses] = await Promise.all([
     listProjects(),
@@ -56,8 +70,20 @@ export default async function ProjectsPage({
   // Build dev entries
   const devEntries = buildDevEntries(projects, members, devStatuses);
 
-  // Bench: active staff whose total active-project load is < 8 h/day.
-  const benchEntries = buildBenchEntries(activeProjects, members, devStatuses);
+  // Load: every active staff with their summed hours over active projects.
+  // Bench = under 50% of the daily norm; everyone else lives in "loaded".
+  const loadEntries = buildLoadEntries(activeProjects, members, devStatuses);
+  const benchCutoff = FULL_DAY_HOURS * BENCH_THRESHOLD; // 4 ч/день
+  const benchEntries = loadEntries
+    .filter((e) => e.hoursPerDay < benchCutoff)
+    .sort((a, b) => a.hoursPerDay - b.hoursPerDay);
+  const loadedEntries = loadEntries
+    .filter((e) => e.hoursPerDay >= benchCutoff)
+    .sort((a, b) => b.hoursPerDay - a.hoursPerDay);
+  const loadByFilter: Record<LoadFilterId, number> = {
+    bench: benchEntries.length,
+    loaded: loadedEntries.length,
+  };
 
   // Counts for dev sub-filter buttons (search-independent, no double-filtering)
   const devsByFilter: Record<DevFilterId, number> = {
@@ -98,16 +124,23 @@ export default async function ProjectsPage({
         activeCount={activeProjects.length}
         inactiveCount={inactiveProjects.length}
         devsCount={devEntries.filter((d) => !d.fired).length}
-        benchCount={benchEntries.length}
+        loadCount={loadEntries.length}
         devsByFilter={devsByFilter}
+        loadByFilter={loadByFilter}
       />
 
-      {tab === "bench" ? (
-        <BenchList
-          entries={benchEntries.filter(
-            (e) => !q || e.name.toLowerCase().includes(q),
-          )}
-        />
+      {tab === "load" ? (
+        (() => {
+          const list = loadFilter === "bench" ? benchEntries : loadedEntries;
+          return (
+            <LoadList
+              entries={list.filter(
+                (e) => !q || e.name.toLowerCase().includes(q),
+              )}
+              variant={loadFilter}
+            />
+          );
+        })()
       ) : tab === "devs" ? (
         <>
           <DevsSummaryBar
@@ -224,15 +257,16 @@ function DevsList({
 }
 
 /**
- * Bench = active staff whose summed hours over active projects work
- * out to less than the full-day bar (8 h/день). Sorted ascending by
- * load so the most-free people surface first.
+ * Build a load summary for every active staff member across active
+ * projects. The caller buckets the result into bench (< 8 ч/день) vs
+ * loaded (≥ 8 ч/день). Per-project list inside each entry is sorted
+ * by hours descending.
  */
-function buildBenchEntries(
+function buildLoadEntries(
   activeProjects: Project[],
   members: ProjectMember[],
   devStatuses: Awaited<ReturnType<typeof listDevStatuses>>,
-): BenchEntry[] {
+): LoadEntry[] {
   const projectsById = new Map(activeProjects.map((p) => [p.id, p]));
 
   const byDev = new Map<string, ProjectMember[]>();
@@ -245,12 +279,11 @@ function buildBenchEntries(
     byDev.set(m.dev_name, list);
   }
 
-  const entries: BenchEntry[] = [];
+  const entries: LoadEntry[] = [];
   for (const [name, ms] of byDev) {
     if (devStatuses[name]?.status === "inactive") continue;
     const monthHours = ms.reduce((s, m) => s + (m.hours_load ?? 0), 0);
     const hoursPerDay = monthHours / 20;
-    if (hoursPerDay >= BENCH_FULL_DAY) continue;
     entries.push({
       name,
       monthHours,
@@ -264,7 +297,7 @@ function buildBenchEntries(
         .sort((a, b) => b.hoursPerDay - a.hoursPerDay),
     });
   }
-  return entries.sort((a, b) => a.hoursPerDay - b.hoursPerDay);
+  return entries;
 }
 
 function buildDevEntries(

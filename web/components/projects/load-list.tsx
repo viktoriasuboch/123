@@ -1,11 +1,13 @@
 import Link from "next/link";
 import type { Project } from "@/lib/schemas";
 
-export const BENCH_FULL_DAY = 8;
+export const FULL_DAY_HOURS = 8;
 const MONTH_DAYS = 20;
-export const BENCH_FULL_MONTH = BENCH_FULL_DAY * MONTH_DAYS; // 160h/month
+export const FULL_MONTH_HOURS = FULL_DAY_HOURS * MONTH_DAYS; // 160h/mo
+/** < this fraction of a full day → person is considered bench (red). */
+export const BENCH_THRESHOLD = 0.5; // 50% = 4 ч/день
 
-export type BenchEntry = {
+export type LoadEntry = {
   name: string;
   monthHours: number;
   hoursPerDay: number;
@@ -16,26 +18,51 @@ export type BenchEntry = {
   }>;
 };
 
-export function BenchList({ entries }: { entries: BenchEntry[] }) {
+export type LoadVariant = "bench" | "loaded";
+
+export function LoadList({
+  entries,
+  variant,
+}: {
+  entries: LoadEntry[];
+  variant: LoadVariant;
+}) {
   if (entries.length === 0) {
     return (
       <p className="font-mono text-xs text-muted-foreground py-12 text-center">
-        На бенче никого нет — все штатные загружены на 8+ ч/день
+        {variant === "bench"
+          ? "На бенче никого нет — все штатные загружены на 8+ ч/день"
+          : "Никто не загружен на 100% или больше"}
       </p>
     );
   }
   return (
     <div className="space-y-3">
       {entries.map((e) => (
-        <BenchCard key={e.name} entry={e} />
+        <LoadCard key={e.name} entry={e} variant={variant} />
       ))}
     </div>
   );
 }
 
-function BenchCard({ entry }: { entry: BenchEntry }) {
-  const loadPct = (entry.hoursPerDay / BENCH_FULL_DAY) * 100;
-  const deficit = BENCH_FULL_DAY - entry.hoursPerDay;
+function LoadCard({
+  entry,
+  variant,
+}: {
+  entry: LoadEntry;
+  variant: LoadVariant;
+}) {
+  const loadPct = (entry.hoursPerDay / FULL_DAY_HOURS) * 100;
+  const deficit = Math.max(0, FULL_DAY_HOURS - entry.hoursPerDay);
+  const isBench = variant === "bench";
+  // Bench = <50% red; 50-99% yellow; 100%+ green.
+  const colorCls =
+    loadPct < BENCH_THRESHOLD * 100
+      ? "text-bad"
+      : loadPct < 100
+        ? "text-warn"
+        : "text-good";
+
   return (
     <div className="rounded-md border bg-card p-4">
       <div className="flex items-center justify-between gap-4 mb-3 flex-wrap">
@@ -46,11 +73,16 @@ function BenchCard({ entry }: { entry: BenchEntry }) {
           {entry.name}
         </Link>
         <div className="text-right">
-          <div className="font-mono text-sm text-bad">
-            {fmtHours(entry.hoursPerDay)} / {BENCH_FULL_DAY} ч/день
+          <div className={`font-mono text-sm ${colorCls}`}>
+            {fmtHours(entry.hoursPerDay)} / {FULL_DAY_HOURS} ч/день ·{" "}
+            {loadPct.toFixed(0)}%
           </div>
           <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-0.5">
-            загрузка {loadPct.toFixed(0)}% · свободно {fmtHours(deficit)} ч/день
+            {isBench
+              ? `свободно ${fmtHours(deficit)} ч/день`
+              : loadPct >= 100
+                ? "полная загрузка"
+                : "средняя загрузка"}
           </div>
         </div>
       </div>
@@ -84,7 +116,6 @@ function BenchCard({ entry }: { entry: BenchEntry }) {
 }
 
 function fmtHours(v: number) {
-  // 8.0 → "8", 2.5 → "2.5"
   const rounded = Math.round(v * 10) / 10;
   return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1);
 }
