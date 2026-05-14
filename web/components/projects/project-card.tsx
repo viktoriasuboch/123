@@ -18,8 +18,8 @@ export function ProjectCard({
   // Compact (grid) view: stack cells in 2 cols, fewer KPIs
   // List view (default): full-width row with 6 columns
   const gridCls = compact
-    ? "grid grid-cols-2 gap-x-3 gap-y-2 text-[11px] font-mono"
-    : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-2 text-[11px] font-mono";
+    ? "grid grid-cols-2 gap-x-3 gap-y-2 font-mono"
+    : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-2 font-mono";
 
   return (
     <Link
@@ -95,10 +95,12 @@ function Cell({
             : "text-foreground";
   return (
     <div className="min-w-0">
-      <div className="text-muted-foreground uppercase tracking-[0.08em] text-[10px] mb-0.5 truncate">
+      <div className="text-muted-foreground uppercase tracking-[0.08em] text-[10px] mb-1 truncate">
         {label}
       </div>
-      <div className={`font-semibold truncate ${colorClass}`}>{value}</div>
+      <div className={`font-semibold text-base truncate ${colorClass}`}>
+        {value}
+      </div>
     </div>
   );
 }
