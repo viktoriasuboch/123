@@ -3,6 +3,22 @@
 import { useEffect, useState, useTransition } from "react";
 import type { ProjectMember } from "@/lib/schemas";
 import { HOURS_PER_MONTH, fmtRate } from "@/lib/calc";
+
+/** Accepts both "40.9" and "40,9"; returns 0 for non-numeric. */
+function parseDecimal(s: string): number {
+  if (typeof s !== "string") return 0;
+  const n = parseFloat(s.replace(",", ".").trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Render a number for a controlled text input — integer stays "50",
+ *  fraction uses "." and drops trailing zeros (40.9, not 40,9 / 40.90). */
+function fmtNumInput(v: number): string {
+  if (!Number.isFinite(v)) return "0";
+  if (Number.isInteger(v)) return v.toString();
+  return (Math.round(v * 100) / 100).toString();
+}
+
 import { reportActionError } from "@/lib/client-errors";
 import { patchMember, removeMember, addMember, moveMember } from "../../app/(protected)/projects/_actions";
 import { Button } from "@/components/ui/button";
@@ -43,40 +59,40 @@ export function MembersTable({
         />
       ) : null}
 
-      <table className="w-full text-sm font-mono min-w-[1230px] table-fixed">
+      <table className="w-full text-sm font-mono min-w-[1290px] table-fixed">
         <colgroup>
           <col className="w-[44px]"  /> {/* ↕ move */}
-          <col className="w-[170px]" /> {/* Имя */}
-          <col className="w-[75px]"  /> {/* Роль */}
-          <col className="w-[95px]"  /> {/* Тип */}
-          <col className="w-[80px]"  /> {/* Зарплата */}
-          <col className="w-[65px]"  /> {/* Buy */}
-          <col className="w-[55px]"  /> {/* Sell */}
-          <col className="w-[70px]"  /> {/* Маржа $ */}
-          <col className="w-[60px]"  /> {/* Маржа % */}
-          <col className="w-[80px]"  /> {/* Rev/мес */}
-          <col className="w-[50px]"  /> {/* ч/день */}
-          <col className="w-[130px]" /> {/* Старт */}
-          <col className="w-[130px]" /> {/* Конец */}
-          <col className="w-[95px]"  /> {/* Статус */}
+          <col className="w-[210px]" /> {/* Имя */}
+          <col className="w-[85px]"  /> {/* Роль */}
+          <col className="w-[105px]" /> {/* Тип */}
+          <col className="w-[85px]"  /> {/* Зарплата */}
+          <col className="w-[70px]"  /> {/* Buy */}
+          <col className="w-[60px]"  /> {/* Sell */}
+          <col className="w-[75px]"  /> {/* Маржа $ */}
+          <col className="w-[65px]"  /> {/* Маржа % */}
+          <col className="w-[85px]"  /> {/* Rev/мес */}
+          <col className="w-[55px]"  /> {/* ч/день */}
+          <col className="w-[135px]" /> {/* Старт */}
+          <col className="w-[135px]" /> {/* Конец */}
+          <col className="w-[105px]" /> {/* Статус */}
           <col className="w-[35px]"  /> {/* ✕ */}
         </colgroup>
         <thead>
           <tr className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground border-b">
             <th className="p-2"></th>
-            <th className="text-left p-2 font-normal">Имя</th>
-            <th className="text-left p-2 font-normal">Роль</th>
-            <th className="text-left p-2 font-normal">Тип</th>
-            <th className="text-right p-2 font-normal">Зарплата</th>
-            <th className="text-right p-2 font-normal">Buy</th>
-            <th className="text-right p-2 font-normal">Sell</th>
-            <th className="text-right p-2 font-normal">Маржа $</th>
-            <th className="text-right p-2 font-normal">Маржа %</th>
-            <th className="text-right p-2 font-normal">Rev/мес</th>
-            <th className="text-right p-2 font-normal">ч/день</th>
-            <th className="text-left p-2 font-normal">Старт</th>
-            <th className="text-left p-2 font-normal">Конец</th>
-            <th className="text-left p-2 font-normal">Статус</th>
+            <th className="text-center p-2 font-normal">Имя</th>
+            <th className="text-center p-2 font-normal">Роль</th>
+            <th className="text-center p-2 font-normal">Тип</th>
+            <th className="text-center p-2 font-normal">Зарплата</th>
+            <th className="text-center p-2 font-normal">Buy</th>
+            <th className="text-center p-2 font-normal">Sell</th>
+            <th className="text-center p-2 font-normal">Маржа $</th>
+            <th className="text-center p-2 font-normal">Маржа %</th>
+            <th className="text-center p-2 font-normal">Rev/мес</th>
+            <th className="text-center p-2 font-normal">ч/день</th>
+            <th className="text-center p-2 font-normal">Старт</th>
+            <th className="text-center p-2 font-normal">Конец</th>
+            <th className="text-center p-2 font-normal">Статус</th>
             <th className="p-2"></th>
           </tr>
         </thead>
@@ -214,14 +230,14 @@ function GroupSummaryRow({
       <td className="p-1.5 text-muted-foreground">{list.length} чел</td>
       <td className="p-1.5"></td>
       <td className="p-1.5"></td>
-      <td className="p-1.5 text-right text-muted-foreground">{fmtRate(sumBuy)}</td>
-      <td className="p-1.5 text-right text-muted-foreground">{fmtRate(sell)}</td>
-      <td className={`p-1.5 text-right ${cls}`}>{fmtRate(margin)}</td>
-      <td className={`p-1.5 text-right ${cls}`}>{marginPct.toFixed(1)}%</td>
-      <td className="p-1.5 text-right text-muted-foreground">
+      <td className="p-1.5 text-center text-muted-foreground">{fmtRate(sumBuy)}</td>
+      <td className="p-1.5 text-center text-muted-foreground">{fmtRate(sell)}</td>
+      <td className={`p-1.5 text-center ${cls}`}>{fmtRate(margin)}</td>
+      <td className={`p-1.5 text-center ${cls}`}>{marginPct.toFixed(1)}%</td>
+      <td className="p-1.5 text-center text-muted-foreground">
         ${Math.round(rev).toLocaleString()}
       </td>
-      <td className="p-1.5 text-right text-muted-foreground">
+      <td className="p-1.5 text-center text-muted-foreground">
         {Math.round(hpd * 10) / 10}
       </td>
       <td className="p-1.5"></td>
@@ -305,7 +321,7 @@ function MemberRow({
 
   const inputCls =
     "w-full bg-transparent rounded px-1 py-0.5 hover:bg-muted/40 focus:bg-muted/60 focus:outline-none focus:ring-1 focus:ring-primary";
-  const numCls = `${inputCls} text-right`;
+  const numCls = `${inputCls} text-center`;
   const marginCls = low ? "text-bad" : "text-good";
 
   const move = (direction: "up" | "down") => {
@@ -388,66 +404,66 @@ function MemberRow({
           <option value="staff">Штатный</option>
         </select>
       </td>
-      <td className="p-1.5 text-right">
+      <td className="p-1.5 text-center">
         {isStaff ? (
           <input
-            type="number"
-            step="0.01"
-            value={salary}
-            onChange={(e) => setSalary(Number(e.target.value) || 0)}
-            onBlur={(e) => save("salary", Number(e.target.value) || 0)}
+            type="text"
+            inputMode="decimal"
+            value={fmtNumInput(salary)}
+            onChange={(e) => setSalary(parseDecimal(e.target.value))}
+            onBlur={(e) => save("salary", parseDecimal(e.target.value))}
             className={numCls}
           />
         ) : (
           dash
         )}
       </td>
-      <td className="p-1.5 text-right">
+      <td className="p-1.5 text-center">
         {isStaff ? (
           <span className="text-muted-foreground">{fmtRate(buy)}</span>
         ) : (
           <input
-            type="number"
-            step="0.01"
-            value={buyRateLocal}
-            onChange={(e) => setBuyRateLocal(Number(e.target.value) || 0)}
-            onBlur={(e) => save("buy_rate", Number(e.target.value) || 0)}
+            type="text"
+            inputMode="decimal"
+            value={fmtNumInput(buyRateLocal)}
+            onChange={(e) => setBuyRateLocal(parseDecimal(e.target.value))}
+            onBlur={(e) => save("buy_rate", parseDecimal(e.target.value))}
             className={numCls}
           />
         )}
       </td>
-      <td className="p-1.5 text-right">
+      <td className="p-1.5 text-center">
         {sellEditable ? (
           <input
-            type="number"
-            step="0.01"
-            value={sellRate}
-            onChange={(e) => setSellRate(Number(e.target.value) || 0)}
-            onBlur={(e) => save("sell_rate", Number(e.target.value) || 0)}
+            type="text"
+            inputMode="decimal"
+            value={fmtNumInput(sellRate)}
+            onChange={(e) => setSellRate(parseDecimal(e.target.value))}
+            onBlur={(e) => save("sell_rate", parseDecimal(e.target.value))}
             className={numCls}
           />
         ) : (
           dash
         )}
       </td>
-      <td className={`p-1.5 text-right ${hideAggregates ? "" : marginCls}`}>
+      <td className={`p-1.5 text-center ${hideAggregates ? "" : marginCls}`}>
         {hideAggregates ? dash : fmtRate(margin)}
       </td>
-      <td className={`p-1.5 text-right ${hideAggregates ? "" : marginCls}`}>
+      <td className={`p-1.5 text-center ${hideAggregates ? "" : marginCls}`}>
         {hideAggregates ? dash : `${marginPct.toFixed(1)}%`}
       </td>
-      <td className="p-1.5 text-right text-muted-foreground">
+      <td className="p-1.5 text-center text-muted-foreground">
         {hideAggregates ? dash : `$${Math.round(revMonth).toLocaleString()}`}
       </td>
-      <td className="p-1.5 text-right">
+      <td className="p-1.5 text-center">
         {sellEditable ? (
           <input
-            type="number"
-            step={0.1}
-            value={hpd}
-            onChange={(e) => setHpd(parseFloat(e.target.value) || 0)}
+            type="text"
+            inputMode="decimal"
+            value={fmtNumInput(hpd)}
+            onChange={(e) => setHpd(parseDecimal(e.target.value))}
             onBlur={(e) =>
-              save("hours_load", (parseFloat(e.target.value) || 0) * 20)
+              save("hours_load", parseDecimal(e.target.value) * 20)
             }
             className={numCls}
           />
