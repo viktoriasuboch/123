@@ -592,7 +592,7 @@ function DashCard({
 }) {
   return (
     <section className="rounded-md border bg-card p-4">
-      <h3 className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-3">
+      <h3 className="font-display text-lg tracking-wide text-foreground mb-3 leading-none">
         {title}
       </h3>
       {children}
