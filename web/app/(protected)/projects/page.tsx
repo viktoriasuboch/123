@@ -3,6 +3,7 @@ import {
   listProjectMembers,
   listDevStatuses,
 } from "@/lib/data/projects";
+import { listProjectRevenues } from "@/lib/data/leadgen";
 import { ProjectCard } from "@/components/projects/project-card";
 import { DevCard, type DevCardEntry } from "@/components/projects/dev-card";
 import {
@@ -20,6 +21,7 @@ import {
   type LoadEntry,
 } from "@/components/projects/load-list";
 import { ProjectsDashboard } from "@/components/projects/projects-dashboard";
+import { ForecastTable } from "@/components/projects/forecast-table";
 import type { Project, ProjectMember } from "@/lib/schemas";
 
 type SP = Promise<{
@@ -43,7 +45,8 @@ export default async function ProjectsPage({
     | "inactive"
     | "devs"
     | "load"
-    | "dashboard";
+    | "dashboard"
+    | "forecast";
   const q = (sp.q ?? "").trim().toLowerCase();
   const view = (sp.view === "grid" ? "grid" : "list") as "list" | "grid";
   const devFilter = (
@@ -55,10 +58,11 @@ export default async function ProjectsPage({
     sp.load && ["bench", "loaded"].includes(sp.load) ? sp.load : "bench"
   ) as LoadFilterId;
 
-  const [projects, members, devStatuses] = await Promise.all([
+  const [projects, members, devStatuses, revenues] = await Promise.all([
     listProjects(),
     listProjectMembers(),
     listDevStatuses(),
+    listProjectRevenues(),
   ]);
 
   const membersByProject = groupBy(members, (m) => m.project_id);
@@ -131,7 +135,13 @@ export default async function ProjectsPage({
         loadByFilter={loadByFilter}
       />
 
-      {tab === "dashboard" ? (
+      {tab === "forecast" ? (
+        <ForecastTable
+          activeProjects={activeProjects}
+          membersByProject={membersByProject}
+          revenues={revenues}
+        />
+      ) : tab === "dashboard" ? (
         <ProjectsDashboard
           activeProjects={activeProjects}
           members={members}

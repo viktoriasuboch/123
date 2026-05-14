@@ -205,7 +205,7 @@ function TopByMargin({ list }: { list: ProjectStat[] }) {
 
 function LowMarginProjects({ list }: { list: ProjectStat[] }) {
   return (
-    <DashCard title="🚨 Маржа < 20%">
+    <DashCard title="🚨 Маржа < 50%">
       {list.length === 0 ? (
         <EmptyHint>Всё в порядке</EmptyHint>
       ) : (
@@ -771,7 +771,7 @@ function computeStats(
     .sort((a, b) => b.marginPct - a.marginPct)
     .slice(0, 7);
   const lowMarginProjects = projectStats
-    .filter((p) => p.rev > 0 && p.marginPct < 20)
+    .filter((p) => p.rev > 0 && p.marginPct < 50)
     .sort((a, b) => a.marginPct - b.marginPct);
   const noRevProjects = projectStats.filter((p) => p.rev === 0);
 

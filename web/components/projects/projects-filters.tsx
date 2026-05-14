@@ -9,6 +9,7 @@ const TABS = [
   { id: "devs",      label: "👤 Разработчики" },
   { id: "load",      label: "📊 Нагрузка" },
   { id: "dashboard", label: "📈 Дашборд" },
+  { id: "forecast",  label: "🔮 Forecast" },
 ] as const;
 
 const DEV_FILTERS = [
