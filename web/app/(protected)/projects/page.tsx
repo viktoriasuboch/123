@@ -10,6 +10,7 @@ import {
   ProjectsFilters,
   type DevFilterId,
   type LoadFilterId,
+  type ClientFilterId,
 } from "@/components/projects/projects-filters";
 import { DevsSummaryBar } from "@/components/projects/devs-summary-bar";
 import { ProjectsSummaryBar } from "@/components/projects/projects-summary-bar";
@@ -31,6 +32,7 @@ type SP = Promise<{
   view?: string;
   dev?: string;
   load?: string;
+  client?: string;
 }>;
 
 export const dynamic = "force-dynamic";
@@ -58,6 +60,11 @@ export default async function ProjectsPage({
   const loadFilter = (
     sp.load && ["bench", "loaded"].includes(sp.load) ? sp.load : "bench"
   ) as LoadFilterId;
+  const clientFilter = (
+    sp.client && ["all", "hays", "other"].includes(sp.client)
+      ? sp.client
+      : "all"
+  ) as ClientFilterId;
 
   const [projects, members, devStatuses, revenues] = await Promise.all([
     listProjects(),
@@ -73,6 +80,22 @@ export default async function ProjectsPage({
   const inactiveProjects = projects.filter(
     (p) => (p.status ?? "active") !== "active",
   );
+
+  // HAYS detection — user marks them in the project name as "(HAYS)".
+  // Match case-insensitive on the whole substring so "Hays", "hays",
+  // "(HAYS)" all qualify.
+  const isHays = (p: Project) => /hays/i.test(p.name);
+  const clientByFilter: Record<ClientFilterId, number> = {
+    all: activeProjects.length,
+    hays: activeProjects.filter(isHays).length,
+    other: activeProjects.filter((p) => !isHays(p)).length,
+  };
+  const activeProjectsFiltered =
+    clientFilter === "hays"
+      ? activeProjects.filter(isHays)
+      : clientFilter === "other"
+        ? activeProjects.filter((p) => !isHays(p))
+        : activeProjects;
 
   // Build dev entries
   const devEntries = buildDevEntries(projects, members, devStatuses);
@@ -134,6 +157,7 @@ export default async function ProjectsPage({
         loadCount={loadEntries.length}
         devsByFilter={devsByFilter}
         loadByFilter={loadByFilter}
+        clientByFilter={clientByFilter}
       />
 
       {tab === "forecast" ? (
@@ -180,7 +204,7 @@ export default async function ProjectsPage({
         </>
       ) : (
         (() => {
-          const visible = (tab === "active" ? activeProjects : inactiveProjects).filter(
+          const visible = (tab === "active" ? activeProjectsFiltered : inactiveProjects).filter(
             projMatch,
           );
           return (

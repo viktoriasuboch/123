@@ -10,6 +10,7 @@ import {
 } from "../../app/(protected)/projects/_actions";
 import { fmtDate } from "@/lib/calc";
 import { Button } from "@/components/ui/button";
+import { EditProjectButton } from "./edit-project-button";
 import { toast } from "sonner";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -74,6 +75,7 @@ export function ProjectHeader({ project }: { project: Project }) {
       </div>
 
       <div className="flex gap-2 items-start">
+        <EditProjectButton project={project} />
         {status === "active" ? (
           <Button
             variant="outline"

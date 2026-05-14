@@ -24,8 +24,15 @@ const LOAD_FILTERS = [
   { id: "loaded", label: "✅ Загружены" },
 ] as const;
 
+const CLIENT_FILTERS = [
+  { id: "all",   label: "Все" },
+  { id: "hays",  label: "HAYS" },
+  { id: "other", label: "Не HAYS" },
+] as const;
+
 export type DevFilterId = (typeof DEV_FILTERS)[number]["id"];
 export type LoadFilterId = (typeof LOAD_FILTERS)[number]["id"];
+export type ClientFilterId = (typeof CLIENT_FILTERS)[number]["id"];
 
 export function ProjectsFilters({
   activeCount,
@@ -34,6 +41,7 @@ export function ProjectsFilters({
   loadCount,
   devsByFilter,
   loadByFilter,
+  clientByFilter,
 }: {
   activeCount: number;
   inactiveCount: number;
@@ -41,6 +49,7 @@ export function ProjectsFilters({
   loadCount: number;
   devsByFilter: Record<DevFilterId, number>;
   loadByFilter: Record<LoadFilterId, number>;
+  clientByFilter: Record<ClientFilterId, number>;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -50,6 +59,7 @@ export function ProjectsFilters({
   const tab = (params.get("tab") ?? "active") as (typeof TABS)[number]["id"];
   const devFilter = (params.get("dev") ?? "all") as DevFilterId;
   const loadFilter = (params.get("load") ?? "bench") as LoadFilterId;
+  const clientFilter = (params.get("client") ?? "all") as ClientFilterId;
   const q = params.get("q") ?? "";
   const view = (params.get("view") ?? "list") as "list" | "grid";
 
@@ -147,6 +157,34 @@ export function ProjectsFilters({
                 {f.label}
                 <span className="ml-1.5 text-[9px] opacity-70">
                   {devsByFilter[f.id] ?? 0}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {/* Row 2: client sub-filter (only on active tab) */}
+      {tab === "active" ? (
+        <div className="flex flex-wrap gap-1.5">
+          {CLIENT_FILTERS.map((f) => {
+            const sel = clientFilter === f.id;
+            return (
+              <button
+                key={f.id}
+                onClick={() =>
+                  setParam("client", f.id === "all" ? null : f.id)
+                }
+                disabled={pending}
+                className={`h-8 px-3 rounded border font-mono text-[10px] uppercase tracking-[0.12em] transition ${
+                  sel
+                    ? "border-primary text-primary bg-primary/10"
+                    : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
+                }`}
+              >
+                {f.label}
+                <span className="ml-1.5 text-[9px] opacity-70">
+                  {clientByFilter[f.id] ?? 0}
                 </span>
               </button>
             );

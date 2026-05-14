@@ -74,17 +74,39 @@ export async function updateProject(id: string, formData: FormData) {
   const parsed = ProjectUpdate.safeParse({
     name: formData.get("name") ?? undefined,
     status: formData.get("status") ?? undefined,
-    start_date: formData.get("start_date") || null,
-    expected_duration: formData.get("expected_duration") || null,
-    notes: formData.get("notes") ?? undefined,
+    start_date: (formData.get("start_date") as string | null) || null,
+    expected_duration:
+      ((formData.get("expected_duration") as string | null) ?? "").trim() ||
+      null,
+    notes:
+      ((formData.get("notes") as string | null) ?? "").trim() || null,
   });
   if (!parsed.success) throw new Error("Invalid project update");
+
+  // Read previous name so we can mirror a rename across deals.
+  const { data: prev } = await sb()
+    .from("projects")
+    .select("name")
+    .eq("id", id)
+    .maybeSingle();
 
   const { error } = await sb()
     .from("projects")
     .update(parsed.data)
     .eq("id", id);
   if (error) throw error;
+
+  if (
+    prev?.name &&
+    parsed.data.name &&
+    prev.name !== parsed.data.name
+  ) {
+    const { error: dealErr } = await sb()
+      .from("deals")
+      .update({ project: parsed.data.name })
+      .ilike("project", prev.name);
+    if (dealErr) console.error("Failed to rename deals", dealErr);
+  }
 
   await sb().from("project_events").insert({
     project_id: id,
@@ -94,6 +116,7 @@ export async function updateProject(id: string, formData: FormData) {
 
   revalidatePath(`/projects/${id}`);
   revalidatePath("/projects");
+  revalidatePath("/leadgen/deals");
 }
 
 const ProjectNamePatch = z.object({ name: z.string().min(1).max(200) });
