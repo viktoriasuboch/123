@@ -8,7 +8,6 @@ const TABS = [
   { id: "support",   label: "🛟 Суппорт" },
   { id: "inactive",  label: "Завершённые" },
   { id: "devs",      label: "👤 Разработчики" },
-  { id: "load",      label: "📊 Нагрузка" },
   { id: "dashboard", label: "📈 Дашборд" },
   { id: "forecast",  label: "🔮 Forecast" },
 ] as const;
@@ -20,18 +19,12 @@ const DEV_FILTERS = [
   { id: "fired",      label: "Уволенные" },
 ] as const;
 
-const LOAD_FILTERS = [
-  { id: "bench",  label: "🪑 На бенче" },
-  { id: "loaded", label: "✅ Загружены" },
-] as const;
-
 const CLIENT_FILTERS = [
   { id: "all",  label: "Все" },
   { id: "hays", label: "HAYS" },
 ] as const;
 
 export type DevFilterId = (typeof DEV_FILTERS)[number]["id"];
-export type LoadFilterId = (typeof LOAD_FILTERS)[number]["id"];
 export type ClientFilterId = (typeof CLIENT_FILTERS)[number]["id"];
 
 export function ProjectsFilters({
@@ -39,18 +32,14 @@ export function ProjectsFilters({
   supportCount,
   inactiveCount,
   devsCount,
-  loadCount,
   devsByFilter,
-  loadByFilter,
   clientByFilter,
 }: {
   activeCount: number;
   supportCount: number;
   inactiveCount: number;
   devsCount: number;
-  loadCount: number;
   devsByFilter: Record<DevFilterId, number>;
-  loadByFilter: Record<LoadFilterId, number>;
   clientByFilter: Record<ClientFilterId, number>;
 }) {
   const router = useRouter();
@@ -60,7 +49,6 @@ export function ProjectsFilters({
 
   const tab = (params.get("tab") ?? "active") as (typeof TABS)[number]["id"];
   const devFilter = (params.get("dev") ?? "all") as DevFilterId;
-  const loadFilter = (params.get("load") ?? "bench") as LoadFilterId;
   const clientFilter = (params.get("client") ?? "all") as ClientFilterId;
   const q = params.get("q") ?? "";
   const view = (params.get("view") ?? "list") as "list" | "grid";
@@ -79,7 +67,6 @@ export function ProjectsFilters({
     support: supportCount,
     inactive: inactiveCount,
     devs: devsCount,
-    load: loadCount,
   };
 
   return (
@@ -188,34 +175,6 @@ export function ProjectsFilters({
                 {f.label}
                 <span className="ml-1.5 text-[9px] opacity-70">
                   {clientByFilter[f.id] ?? 0}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-
-      {/* Row 2: load sub-filter (only on load tab) */}
-      {tab === "load" ? (
-        <div className="flex flex-wrap gap-1.5">
-          {LOAD_FILTERS.map((f) => {
-            const sel = loadFilter === f.id;
-            return (
-              <button
-                key={f.id}
-                onClick={() =>
-                  setParam("load", f.id === "bench" ? null : f.id)
-                }
-                disabled={pending}
-                className={`h-8 px-3 rounded border font-mono text-[10px] uppercase tracking-[0.12em] transition ${
-                  sel
-                    ? "border-primary text-primary bg-primary/10"
-                    : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
-                }`}
-              >
-                {f.label}
-                <span className="ml-1.5 text-[9px] opacity-70">
-                  {loadByFilter[f.id] ?? 0}
                 </span>
               </button>
             );

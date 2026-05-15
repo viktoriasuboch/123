@@ -9,18 +9,12 @@ import { DevCard, type DevCardEntry } from "@/components/projects/dev-card";
 import {
   ProjectsFilters,
   type DevFilterId,
-  type LoadFilterId,
   type ClientFilterId,
 } from "@/components/projects/projects-filters";
 import { DevsSummaryBar } from "@/components/projects/devs-summary-bar";
 import { ProjectsSummaryBar } from "@/components/projects/projects-summary-bar";
 import { NewProjectButton } from "@/components/projects/new-project-button";
-import {
-  LoadList,
-  FULL_DAY_HOURS,
-  BENCH_THRESHOLD,
-  type LoadEntry,
-} from "@/components/projects/load-list";
+import type { LoadEntry } from "@/components/projects/load-list";
 import { ProjectsDashboard } from "@/components/projects/projects-dashboard";
 import { ForecastTable } from "@/components/projects/forecast-table";
 import { NewDeveloperButton } from "@/components/projects/new-developer-button";
@@ -31,7 +25,6 @@ type SP = Promise<{
   q?: string;
   view?: string;
   dev?: string;
-  load?: string;
   client?: string;
 }>;
 
@@ -48,7 +41,6 @@ export default async function ProjectsPage({
     | "support"
     | "inactive"
     | "devs"
-    | "load"
     | "dashboard"
     | "forecast";
   const q = (sp.q ?? "").trim().toLowerCase();
@@ -58,9 +50,6 @@ export default async function ProjectsPage({
       ? sp.dev
       : "all"
   ) as DevFilterId;
-  const loadFilter = (
-    sp.load && ["bench", "loaded"].includes(sp.load) ? sp.load : "bench"
-  ) as LoadFilterId;
   const clientFilter = (
     sp.client && ["all", "hays"].includes(sp.client) ? sp.client : "all"
   ) as ClientFilterId;
@@ -98,25 +87,14 @@ export default async function ProjectsPage({
   // Build dev entries
   const devEntries = buildDevEntries(projects, members, devStatuses);
 
-  // Load: staff hours across both active and support projects.
-  // TM members are filtered out inside buildLoadEntries; they don't
-  // contribute predictable hours.
+  // loadEntries: still computed for the Dashboard's Utilization /
+  // Alerts sections. TM members are filtered out inside
+  // buildLoadEntries (their hours aren't predictable).
   const loadEntries = buildLoadEntries(
     [...activeProjects, ...supportProjects],
     members,
     devStatuses,
   );
-  const benchCutoff = FULL_DAY_HOURS * BENCH_THRESHOLD; // 4 ч/день
-  const benchEntries = loadEntries
-    .filter((e) => e.hoursPerDay < benchCutoff)
-    .sort((a, b) => a.hoursPerDay - b.hoursPerDay);
-  const loadedEntries = loadEntries
-    .filter((e) => e.hoursPerDay >= benchCutoff)
-    .sort((a, b) => b.hoursPerDay - a.hoursPerDay);
-  const loadByFilter: Record<LoadFilterId, number> = {
-    bench: benchEntries.length,
-    loaded: loadedEntries.length,
-  };
 
   // Counts for dev sub-filter buttons (search-independent, no double-filtering)
   const devsByFilter: Record<DevFilterId, number> = {
@@ -158,9 +136,7 @@ export default async function ProjectsPage({
         supportCount={supportProjects.length}
         inactiveCount={inactiveProjects.length}
         devsCount={devEntries.filter((d) => !d.fired).length}
-        loadCount={loadEntries.length}
         devsByFilter={devsByFilter}
-        loadByFilter={loadByFilter}
         clientByFilter={clientByFilter}
       />
 
@@ -178,18 +154,6 @@ export default async function ProjectsPage({
           devStatuses={devStatuses}
           loadEntries={loadEntries}
         />
-      ) : tab === "load" ? (
-        (() => {
-          const list = loadFilter === "bench" ? benchEntries : loadedEntries;
-          return (
-            <LoadList
-              entries={list.filter(
-                (e) => !q || e.name.toLowerCase().includes(q),
-              )}
-              variant={loadFilter}
-            />
-          );
-        })()
       ) : tab === "devs" ? (
         <>
           <div className="flex items-center justify-end mb-3">
