@@ -524,19 +524,21 @@ function ProxyFaceRow({
         )}
       </td>
       <td
-        className="p-1.5 text-center text-muted-foreground"
+        className="p-1.5 text-muted-foreground"
         colSpan={6}
         title="Бонус лица за проксирование"
       >
-        бонус&nbsp;
-        <input
-          type="text"
-          inputMode="decimal"
-          defaultValue={fmtNumInput(m.proxy_bonus ?? 0)}
-          onBlur={(e) => save("proxy_bonus", parseDecimal(e.target.value))}
-          className={`${inputCls} inline-block w-[80px]`}
-        />
-        &nbsp;$/мес
+        <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+          <span>бонус</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            defaultValue={fmtNumInput(m.proxy_bonus ?? 0)}
+            onBlur={(e) => save("proxy_bonus", parseDecimal(e.target.value))}
+            className={`${inputCls} w-[90px]`}
+          />
+          <span>$/мес</span>
+        </div>
       </td>
       <td className="p-1.5">
         <input
