@@ -98,7 +98,9 @@ export function MembersTable({
             <th className="text-center p-2 font-normal">Маржа $</th>
             <th className="text-center p-2 font-normal">Маржа %</th>
             <th className="text-center p-2 font-normal">Rev/мес</th>
-            <th className="text-center p-2 font-normal">ч/день</th>
+            <th className="text-center p-2 font-normal">
+              {showBilling ? "Часов/мес" : "ч/день"}
+            </th>
             <th className="text-center p-2 font-normal">Старт</th>
             <th className="text-center p-2 font-normal">Конец</th>
             <th className="text-center p-2 font-normal">Статус</th>
@@ -301,7 +303,7 @@ function GroupSummaryRow({
         ${Math.round(rev).toLocaleString()}
       </td>
       <td className="p-1.5 text-center text-muted-foreground">
-        {Math.round(hpd * 10) / 10}
+        {showBilling ? hours : Math.round(hpd * 10) / 10}
       </td>
       <td className="p-1.5"></td>
       <td className="p-1.5"></td>
@@ -394,7 +396,7 @@ function ProxySummaryRow({
         ${Math.round(rev).toLocaleString()}
       </td>
       <td className="p-1.5 text-center text-muted-foreground">
-        {Math.round(hpd * 10) / 10}
+        {showBilling ? hours : Math.round(hpd * 10) / 10}
       </td>
       <td className="p-1.5"></td>
       <td className="p-1.5"></td>
@@ -608,8 +610,12 @@ function MemberRow({
   const [salary, setSalary] = useState<number>(m.salary ?? 0);
   const [buyRateLocal, setBuyRateLocal] = useState<number>(m.buy_rate ?? 0);
   const [sellRate, setSellRate] = useState<number>(m.sell_rate ?? 0);
-  const [hpd, setHpd] = useState<number>(
-    Math.round(((m.hours_load ?? 0) / 20) * 10) / 10,
+  // On support projects we input hours/month directly (40, 80, 160…).
+  // On regular active projects we keep the ч/день UX (hours_load / 20).
+  const [hoursInput, setHoursInput] = useState<number>(
+    showBilling
+      ? m.hours_load ?? 0
+      : Math.round(((m.hours_load ?? 0) / 20) * 10) / 10,
   );
 
   // Re-sync state when fresh data arrives from the server (revalidate / realtime).
@@ -617,10 +623,13 @@ function MemberRow({
   useEffect(() => setSalary(m.salary ?? 0), [m.salary]);
   useEffect(() => setBuyRateLocal(m.buy_rate ?? 0), [m.buy_rate]);
   useEffect(() => setSellRate(m.sell_rate ?? 0), [m.sell_rate]);
-  useEffect(
-    () => setHpd(Math.round(((m.hours_load ?? 0) / 20) * 10) / 10),
-    [m.hours_load],
-  );
+  useEffect(() => {
+    setHoursInput(
+      showBilling
+        ? m.hours_load ?? 0
+        : Math.round(((m.hours_load ?? 0) / 20) * 10) / 10,
+    );
+  }, [m.hours_load, showBilling]);
 
   const isStaff = empType === "staff";
   const ownBuy = isStaff ? salary / HOURS_PER_MONTH : buyRateLocal;
@@ -629,7 +638,7 @@ function MemberRow({
   const buy = ownBuy + extraBuyPerHour;
   const margin = sellRate - buy;
   const marginPct = sellRate > 0 ? (margin / sellRate) * 100 : 0;
-  const hoursLoad = hpd * 20;
+  const hoursLoad = showBilling ? hoursInput : hoursInput * 20;
   const revMonth = sellRate * hoursLoad;
   const low = margin < 20;
 
@@ -798,11 +807,12 @@ function MemberRow({
           <input
             type="text"
             inputMode="decimal"
-            value={fmtNumInput(hpd)}
-            onChange={(e) => setHpd(parseDecimal(e.target.value))}
-            onBlur={(e) =>
-              save("hours_load", parseDecimal(e.target.value) * 20)
-            }
+            value={fmtNumInput(hoursInput)}
+            onChange={(e) => setHoursInput(parseDecimal(e.target.value))}
+            onBlur={(e) => {
+              const n = parseDecimal(e.target.value);
+              save("hours_load", showBilling ? n : n * 20);
+            }}
             className={numCls}
           />
         ) : (
