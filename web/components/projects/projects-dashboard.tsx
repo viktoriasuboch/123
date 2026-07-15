@@ -9,21 +9,15 @@ import {
   fmtRate,
 } from "@/lib/calc";
 import { MoneyValue, MoneyToggle } from "./money-value";
-import {
-  FULL_DAY_HOURS,
-  BENCH_THRESHOLD,
-  type LoadEntry,
-} from "./load-list";
+import { BENCH_THRESHOLD } from "./load-list";
 
 const ENDING_SOON_DAYS = 30;
-const OVERLOAD_PCT = 120;
 
 type DashboardProps = {
   activeProjects: Project[];
   supportProjects: Project[];
   members: ProjectMember[];
   devStatuses: Record<string, DevStatus>;
-  loadEntries: LoadEntry[];
 };
 
 export function ProjectsDashboard({
@@ -31,7 +25,6 @@ export function ProjectsDashboard({
   supportProjects,
   members,
   devStatuses,
-  loadEntries,
 }: DashboardProps) {
   const stats = computeStats(activeProjects, members, devStatuses);
 
@@ -43,10 +36,8 @@ export function ProjectsDashboard({
         <TopByMargin list={stats.topByMargin} />
         <LowMarginProjects list={stats.lowMarginProjects} />
       </div>
-      <UtilizationSection loadEntries={loadEntries} />
-      <FreelancersSection freelancers={stats.freelancers} />
       <SupportSection supportProjects={supportProjects} members={members} />
-      <AlertsSection stats={stats} loadEntries={loadEntries} />
+      <AlertsSection stats={stats} />
     </div>
   );
 }
@@ -355,169 +346,9 @@ function Bar({ pct, tone }: { pct: number; tone: LoadTone }) {
   );
 }
 
-/* ─── utilization ───────────────────────────────────────────────────── */
-
-function UtilizationSection({ loadEntries }: { loadEntries: LoadEntry[] }) {
-  if (loadEntries.length === 0) {
-    return (
-      <DashCard title="Загрузка штатных">
-        <EmptyHint>Нет активных штатных</EmptyHint>
-      </DashCard>
-    );
-  }
-  const sorted = [...loadEntries].sort(
-    (a, b) => b.hoursPerDay - a.hoursPerDay,
-  );
-
-  // Bucket summary
-  let cBench = 0;
-  let cMid = 0;
-  let cFull = 0;
-  let cOver = 0;
-  for (const e of loadEntries) {
-    const pct = (e.hoursPerDay / FULL_DAY_HOURS) * 100;
-    if (pct < BENCH_THRESHOLD * 100) cBench++;
-    else if (pct < 100) cMid++;
-    else if (pct <= 100) cFull++;
-    else cOver++;
-  }
-
-  return (
-    <DashCard title={`Загрузка штата · ${loadEntries.length} чел`}>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 font-mono text-[11px]">
-        <span className="text-bad">🪑 {cBench} на бенче</span>
-        <span className="text-warn">🟡 {cMid} {"<"} 100%</span>
-        <span className="text-good/60">🟢 {cFull} ровно 100%</span>
-        <span className="text-good font-semibold">🔥 {cOver} перегруз</span>
-      </div>
-      <div className="grid gap-x-4 gap-y-1.5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 font-mono text-xs">
-        {sorted.map((e) => {
-          const pct = (e.hoursPerDay / FULL_DAY_HOURS) * 100;
-          const tone = toneFromPct(pct);
-          return (
-            <div key={e.name} className="flex items-center gap-2 min-w-0">
-              <Link
-                href={`/projects/devs/${encodeURIComponent(e.name)}`}
-                className="truncate flex-1 min-w-0 hover:text-primary"
-                title={e.name}
-              >
-                {e.name}
-              </Link>
-              <Bar pct={Math.min(150, pct)} tone={tone} />
-              <span
-                className={`shrink-0 w-[44px] text-right ${TONE_TEXT[tone]}`}
-              >
-                {pct.toFixed(0)}%
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </DashCard>
-  );
-}
-
-/* ─── freelancers ───────────────────────────────────────────────────── */
-
-function FreelancersSection({
-  freelancers,
-}: {
-  freelancers: FreelancerStat[];
-}) {
-  if (freelancers.length === 0) {
-    return (
-      <DashCard title="Фрилансеры">
-        <EmptyHint>Активных фрилансеров нет</EmptyHint>
-      </DashCard>
-    );
-  }
-
-  // Aggregate stats for the strip
-  const avgMargin =
-    freelancers.reduce((s, f) => s + f.avgMarginHourly, 0) /
-    freelancers.length;
-  let cBench = 0;
-  let cMid = 0;
-  let cFull = 0;
-  let cOver = 0;
-  for (const f of freelancers) {
-    const pct = (f.hoursPerDay / FULL_DAY_HOURS) * 100;
-    if (pct < BENCH_THRESHOLD * 100) cBench++;
-    else if (pct < 100) cMid++;
-    else if (pct <= 100) cFull++;
-    else cOver++;
-  }
-
-  return (
-    <DashCard title={`Фрилансеры · ${freelancers.length} чел`}>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 font-mono text-[11px]">
-        <span className="text-muted-foreground">
-          ср. маржа{" "}
-          <span className={avgMargin < 20 ? "text-bad" : "text-good"}>
-            {fmtRate(avgMargin)}/h
-          </span>
-        </span>
-        <span className="text-bad">🪑 {cBench}</span>
-        <span className="text-warn">🟡 {cMid}</span>
-        <span className="text-good/60">🟢 {cFull}</span>
-        <span className="text-good font-semibold">🔥 {cOver}</span>
-      </div>
-      <div className="grid gap-x-4 gap-y-1.5 grid-cols-1 lg:grid-cols-2 font-mono text-xs">
-        {freelancers.map((f) => {
-          const pct = (f.hoursPerDay / FULL_DAY_HOURS) * 100;
-          const loadTone = toneFromPct(pct);
-          const marginTone: LoadTone =
-            f.avgMarginHourly < 20
-              ? "bad"
-              : f.avgMarginHourly < 30
-                ? "warn"
-                : "good";
-          return (
-            <div key={f.name} className="flex items-center gap-2 min-w-0">
-              <Link
-                href={`/projects/devs/${encodeURIComponent(f.name)}`}
-                className="truncate flex-1 min-w-0 hover:text-primary"
-                title={f.name}
-              >
-                {f.name}
-              </Link>
-              <Bar pct={Math.min(150, pct)} tone={loadTone} />
-              <span
-                className={`shrink-0 w-[44px] text-right ${TONE_TEXT[loadTone]}`}
-                title={`${fmtHours(f.hoursPerDay)} ч/день`}
-              >
-                {pct.toFixed(0)}%
-              </span>
-              <span
-                className={`shrink-0 w-[68px] text-right ${TONE_TEXT[marginTone]}`}
-                title={`маржа ${f.avgMarginPct.toFixed(0)}%`}
-              >
-                {fmtRate(f.avgMarginHourly)}/h
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </DashCard>
-  );
-}
-
 /* ─── alerts ────────────────────────────────────────────────────────── */
 
-function AlertsSection({
-  stats,
-  loadEntries,
-}: {
-  stats: Stats;
-  loadEntries: LoadEntry[];
-}) {
-  const bench = loadEntries.filter(
-    (e) => e.hoursPerDay < FULL_DAY_HOURS * BENCH_THRESHOLD,
-  );
-  const overload = loadEntries.filter(
-    (e) => (e.hoursPerDay / FULL_DAY_HOURS) * 100 >= OVERLOAD_PCT,
-  );
-
+function AlertsSection({ stats }: { stats: Stats }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <DashCard title={`🟥 Низкая маржа · ${stats.lowMarginMembers.length}`}>
@@ -549,77 +380,14 @@ function AlertsSection({
         )}
       </DashCard>
 
-      <DashCard title={`🪑 На бенче · ${bench.length}`}>
-        {bench.length === 0 ? (
-          <EmptyHint>Все загружены 50%+</EmptyHint>
-        ) : (
-          <ul className="space-y-1.5 font-mono text-xs">
-            {bench.slice(0, 8).map((e) => {
-              const pct = (e.hoursPerDay / FULL_DAY_HOURS) * 100;
-              return (
-                <li
-                  key={e.name}
-                  className="flex items-center justify-between gap-2"
-                >
-                  <Link
-                    href={`/projects/devs/${encodeURIComponent(e.name)}`}
-                    className="truncate hover:text-primary flex-1 min-w-0"
-                  >
-                    {e.name}
-                  </Link>
-                  <span className="shrink-0 text-bad">
-                    {fmtHours(e.hoursPerDay)} ч/день · {pct.toFixed(0)}%
-                  </span>
-                </li>
-              );
-            })}
-            {bench.length > 8 ? (
-              <li className="text-muted-foreground italic">
-                <Link href="/projects?tab=load&load=bench" className="hover:text-primary">
-                  …и ещё {bench.length - 8} →
-                </Link>
-              </li>
-            ) : null}
-          </ul>
-        )}
-      </DashCard>
-
-      <DashCard title={`🔥 Перегруз · ${overload.length}`}>
-        {overload.length === 0 ? (
-          <EmptyHint>Никто не перегружен</EmptyHint>
-        ) : (
-          <ul className="space-y-1.5 font-mono text-xs max-h-[320px] overflow-y-auto pr-1">
-            {overload.map((e) => {
-              const pct = (e.hoursPerDay / FULL_DAY_HOURS) * 100;
-              return (
-                <li
-                  key={e.name}
-                  className="flex items-center justify-between gap-2"
-                >
-                  <Link
-                    href={`/projects/devs/${encodeURIComponent(e.name)}`}
-                    className="truncate hover:text-primary flex-1 min-w-0"
-                  >
-                    {e.name}
-                  </Link>
-                  <span className="shrink-0 text-good">
-                    {fmtHours(e.hoursPerDay)} ч/день · {pct.toFixed(0)}%
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </DashCard>
-
       <DashCard
         title={`⏰ Скоро заканчиваются · ${stats.endingSoon.length}`}
       >
         {stats.endingSoon.length === 0 ? (
           <EmptyHint>Никто не уходит в ближайшие 30 дней</EmptyHint>
         ) : (
-          <ul className="space-y-1.5 font-mono text-xs">
-            {stats.endingSoon.slice(0, 8).map((row) => (
+          <ul className="space-y-1.5 font-mono text-xs max-h-[320px] overflow-y-auto pr-1">
+            {stats.endingSoon.map((row) => (
               <li
                 key={row.member.id}
                 className="flex items-center justify-between gap-2"
@@ -637,27 +405,6 @@ function AlertsSection({
                 <span className="shrink-0 text-warn">
                   {row.daysLeft} дн · {fmtDate(row.member.dev_end_date!)}
                 </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </DashCard>
-
-      <DashCard
-        title={`📊 Проекты без выручки · ${stats.noRevProjects.length}`}
-      >
-        {stats.noRevProjects.length === 0 ? (
-          <EmptyHint>У всех активных есть выручка</EmptyHint>
-        ) : (
-          <ul className="space-y-1.5 font-mono text-xs">
-            {stats.noRevProjects.map((p) => (
-              <li key={p.project.id}>
-                <Link
-                  href={`/projects/${p.project.id}`}
-                  className="hover:text-primary truncate block"
-                >
-                  {p.project.name}
-                </Link>
               </li>
             ))}
           </ul>

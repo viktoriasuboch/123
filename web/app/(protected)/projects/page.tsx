@@ -3,7 +3,6 @@ import {
   listProjectMembers,
   listDevStatuses,
 } from "@/lib/data/projects";
-import { listProjectRevenues } from "@/lib/data/leadgen";
 import { ProjectCard } from "@/components/projects/project-card";
 import { DevCard, type DevCardEntry } from "@/components/projects/dev-card";
 import {
@@ -14,9 +13,7 @@ import {
 import { DevsSummaryBar } from "@/components/projects/devs-summary-bar";
 import { ProjectsSummaryBar } from "@/components/projects/projects-summary-bar";
 import { NewProjectButton } from "@/components/projects/new-project-button";
-import type { LoadEntry } from "@/components/projects/load-list";
 import { ProjectsDashboard } from "@/components/projects/projects-dashboard";
-import { ForecastTable } from "@/components/projects/forecast-table";
 import { NewDeveloperButton } from "@/components/projects/new-developer-button";
 import type { Project, ProjectMember } from "@/lib/schemas";
 
@@ -41,8 +38,7 @@ export default async function ProjectsPage({
     | "support"
     | "inactive"
     | "devs"
-    | "dashboard"
-    | "forecast";
+    | "dashboard";
   const q = (sp.q ?? "").trim().toLowerCase();
   const view = (sp.view === "grid" ? "grid" : "list") as "list" | "grid";
   const devFilter = (
@@ -54,11 +50,10 @@ export default async function ProjectsPage({
     sp.client && ["all", "hays"].includes(sp.client) ? sp.client : "all"
   ) as ClientFilterId;
 
-  const [projects, members, devStatuses, revenues] = await Promise.all([
+  const [projects, members, devStatuses] = await Promise.all([
     listProjects(),
     listProjectMembers(),
     listDevStatuses(),
-    listProjectRevenues(),
   ]);
 
   const membersByProject = groupBy(members, (m) => m.project_id);
@@ -86,15 +81,6 @@ export default async function ProjectsPage({
 
   // Build dev entries
   const devEntries = buildDevEntries(projects, members, devStatuses);
-
-  // loadEntries: still computed for the Dashboard's Utilization /
-  // Alerts sections. TM members are filtered out inside
-  // buildLoadEntries (their hours aren't predictable).
-  const loadEntries = buildLoadEntries(
-    [...activeProjects, ...supportProjects],
-    members,
-    devStatuses,
-  );
 
   // Counts for dev sub-filter buttons (search-independent, no double-filtering)
   const devsByFilter: Record<DevFilterId, number> = {
@@ -140,19 +126,12 @@ export default async function ProjectsPage({
         clientByFilter={clientByFilter}
       />
 
-      {tab === "forecast" ? (
-        <ForecastTable
-          activeProjects={activeProjects}
-          membersByProject={membersByProject}
-          revenues={revenues}
-        />
-      ) : tab === "dashboard" ? (
+      {tab === "dashboard" ? (
         <ProjectsDashboard
           activeProjects={activeProjects}
           supportProjects={supportProjects}
           members={members}
           devStatuses={devStatuses}
-          loadEntries={loadEntries}
         />
       ) : tab === "devs" ? (
         <>
@@ -285,60 +264,6 @@ function DevsList({
       ))}
     </div>
   );
-}
-
-/**
- * Build a load summary for every active staff member across active
- * AND support projects. TM (Time & Material) members are excluded
- * from hours / load — their schedule is unpredictable. Fixed
- * support-project hours count just like active hours.
- */
-function buildLoadEntries(
-  countedProjects: Project[],
-  members: ProjectMember[],
-  devStatuses: Awaited<ReturnType<typeof listDevStatuses>>,
-): LoadEntry[] {
-  const projectsById = new Map(countedProjects.map((p) => [p.id, p]));
-
-  const byDev = new Map<string, ProjectMember[]>();
-  for (const m of members) {
-    if (m.employment_type !== "staff") continue;
-    if (m.is_active === false) continue;
-    if (!projectsById.has(m.project_id)) continue;
-    if ((m.billing_mode ?? "fixed") === "tm") continue;
-    const list = byDev.get(m.dev_name) ?? [];
-    list.push(m);
-    byDev.set(m.dev_name, list);
-  }
-
-  // Registry-only staff who aren't on any active project right now —
-  // still count them, with 0 hours, so they appear on the bench list.
-  for (const [name, status] of Object.entries(devStatuses)) {
-    if (byDev.has(name)) continue;
-    if (status.status === "inactive") continue;
-    if ((status.employment_type ?? "staff") !== "staff") continue;
-    byDev.set(name, []);
-  }
-
-  const entries: LoadEntry[] = [];
-  for (const [name, ms] of byDev) {
-    if (devStatuses[name]?.status === "inactive") continue;
-    const monthHours = ms.reduce((s, m) => s + (m.hours_load ?? 0), 0);
-    const hoursPerDay = monthHours / 20;
-    entries.push({
-      name,
-      monthHours,
-      hoursPerDay,
-      projects: ms
-        .map((m) => ({
-          project: projectsById.get(m.project_id)!,
-          monthHours: m.hours_load ?? 0,
-          hoursPerDay: (m.hours_load ?? 0) / 20,
-        }))
-        .sort((a, b) => b.hoursPerDay - a.hoursPerDay),
-    });
-  }
-  return entries;
 }
 
 function buildDevEntries(
