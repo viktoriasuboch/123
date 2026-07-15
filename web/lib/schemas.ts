@@ -153,6 +153,68 @@ export const ProjectEventInsert = ProjectEvent.omit({
   created_at: true,
 });
 
+/* ─── invoices ───────────────────────────────────────────────────────── */
+export const InvoiceFrequency = z
+  .enum(["monthly", "quarterly", "once"])
+  .catch("monthly");
+export const InvoiceStatus = z
+  .enum(["to_issue", "issued", "paid", "cancelled"])
+  .catch("to_issue");
+
+export const InvoiceTemplate = z.object({
+  id: Uuid,
+  project_id: Uuid,
+  client_name: z.string().min(1).max(200),
+  description: z.string().max(1000).nullable().optional(),
+  amount: z.coerce.number(),
+  currency: z.string().min(1).max(8).default("USD"),
+  frequency: InvoiceFrequency.optional(),
+  issue_day: z.coerce.number().int().min(1).max(28).nullable().optional(),
+  payment_terms_days: z.coerce.number().int().min(0).default(14),
+  next_issue_date: ISODate,
+  active: z.boolean().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  created_at: z.string().optional(),
+  updated_at: z.string().optional(),
+});
+export type InvoiceTemplate = z.infer<typeof InvoiceTemplate>;
+
+export const InvoiceTemplateInsert = InvoiceTemplate.omit({
+  id: true,
+  created_at: true,
+  updated_at: true,
+});
+export const InvoiceTemplateUpdate = InvoiceTemplateInsert.partial();
+
+export const Invoice = z.object({
+  id: Uuid,
+  template_id: Uuid.nullable().optional(),
+  project_id: Uuid,
+  client_name: z.string().min(1).max(200),
+  invoice_number: z.string().max(80).nullable().optional(),
+  description: z.string().max(1000).nullable().optional(),
+  planned_amount: z.coerce.number().nullable().optional(),
+  amount: z.coerce.number(),
+  currency: z.string().min(1).max(8).default("USD"),
+  status: InvoiceStatus.optional(),
+  scheduled_date: ISODate,
+  issue_date: ISODate,
+  due_date: ISODate,
+  paid_date: ISODate,
+  paid_amount: z.coerce.number().nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  created_at: z.string().optional(),
+  updated_at: z.string().optional(),
+});
+export type Invoice = z.infer<typeof Invoice>;
+
+export const InvoiceInsert = Invoice.omit({
+  id: true,
+  created_at: true,
+  updated_at: true,
+});
+export const InvoiceUpdate = InvoiceInsert.partial();
+
 /* ─── developer_status ───────────────────────────────────────────────── */
 export const DevStatus = z.object({
   dev_name: z.string().max(120),

@@ -47,9 +47,9 @@ export default async function LandingPage() {
             <SectionTile
               icon="🧾"
               title="INVOICES"
-              description={["Инвойс-трекер", "Coming soon"]}
+              description={["Рекуррентные · К выставлению", "Оплаты · Просроченные"]}
               href="/invoices"
-              available={false}
+              available
             />
           </div>
         </div>
