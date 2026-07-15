@@ -26,16 +26,27 @@ import { Input } from "@/components/ui/input";
 import { NewProxyButton } from "./new-proxy-button";
 import { toast } from "sonner";
 
+export type DevDefaults = {
+  role?: string | null;
+  employment_type?: "staff" | "freelancer" | null;
+  salary?: number | null;
+  buy_rate?: number | null;
+  sell_rate?: number | null;
+  hours_load?: number | null;
+};
+
 export function MembersTable({
   projectId,
   members,
   projectStatus = "active",
   knownDevNames = [],
+  devDefaults = {},
 }: {
   projectId: string;
   members: ProjectMember[];
   projectStatus?: string;
   knownDevNames?: string[];
+  devDefaults?: Record<string, DevDefaults>;
 }) {
   const showBilling = projectStatus === "support";
   const [showAdd, setShowAdd] = useState(false);
@@ -62,6 +73,7 @@ export function MembersTable({
           projectId={projectId}
           onDone={() => setShowAdd(false)}
           knownDevNames={knownDevNames}
+          devDefaults={devDefaults}
         />
       ) : null}
 
@@ -874,14 +886,41 @@ function AddMemberRow({
   projectId,
   onDone,
   knownDevNames,
+  devDefaults,
 }: {
   projectId: string;
   onDone: () => void;
   knownDevNames: string[];
+  devDefaults: Record<string, DevDefaults>;
 }) {
+  const [devName, setDevName] = useState("");
+  const [role, setRole] = useState("");
   const [empType, setEmpType] = useState<"staff" | "freelancer">("freelancer");
+  const [salary, setSalary] = useState("");
+  const [buyRate, setBuyRate] = useState("");
+  const [sellRate, setSellRate] = useState("");
+  const [hours, setHours] = useState("160");
+  const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
+
   const isStaff = empType === "staff";
   const listId = "known-devs-list";
+
+  const applyDefaultsFor = (name: string) => {
+    const d = devDefaults[name];
+    if (!d) {
+      setPrefilledFor(null);
+      return;
+    }
+    if (d.role != null) setRole(d.role);
+    if (d.employment_type === "staff" || d.employment_type === "freelancer") {
+      setEmpType(d.employment_type);
+    }
+    if (d.salary != null) setSalary(fmtNumInput(d.salary));
+    if (d.buy_rate != null) setBuyRate(fmtNumInput(d.buy_rate));
+    if (d.sell_rate != null) setSellRate(fmtNumInput(d.sell_rate));
+    if (d.hours_load != null) setHours(fmtNumInput(d.hours_load));
+    setPrefilledFor(name);
+  };
 
   return (
     <form
@@ -895,21 +934,52 @@ function AddMemberRow({
       }}
       className="flex flex-wrap gap-2 p-3 border-b bg-muted/20 items-end"
     >
-      <Field
-        name="dev_name"
-        label="Имя"
-        required
-        className="min-w-[180px]"
-        list={listId}
-        placeholder="Начни печатать…"
-        autoComplete="off"
-      />
+      <div className="flex flex-col gap-1 min-w-[180px]">
+        <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">
+          Имя *
+        </span>
+        <Input
+          name="dev_name"
+          required
+          list={listId}
+          autoComplete="off"
+          placeholder="Начни печатать…"
+          className="h-9"
+          value={devName}
+          onChange={(e) => {
+            const v = e.target.value;
+            setDevName(v);
+            // Fires when the user clicks a datalist suggestion — v
+            // arrives as the full option value. Also runs on every
+            // keystroke; the exact match check below keeps prefill from
+            // firing mid-typing.
+            if (devDefaults[v]) applyDefaultsFor(v);
+            else if (prefilledFor && v !== prefilledFor) setPrefilledFor(null);
+          }}
+        />
+        {prefilledFor ? (
+          <span className="text-[9px] font-mono uppercase tracking-[0.12em] text-good">
+            ✓ подтянуто из прошлого проекта / реестра
+          </span>
+        ) : null}
+      </div>
       <datalist id={listId}>
         {knownDevNames.map((n) => (
           <option key={n} value={n} />
         ))}
       </datalist>
-      <Field name="role" label="Роль" placeholder="Dev / QA / PM" />
+      <div className="flex flex-col gap-1">
+        <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">
+          Роль
+        </span>
+        <Input
+          name="role"
+          placeholder="Dev / QA / PM"
+          className="h-9"
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
+        />
+      </div>
       <div className="flex flex-col gap-1">
         <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">
           Тип
@@ -925,18 +995,63 @@ function AddMemberRow({
         </select>
       </div>
       {isStaff ? (
-        <Field name="salary" label="Salary/мес" type="number" step="0.01" required />
+        <div className="flex flex-col gap-1">
+          <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">
+            Salary/мес *
+          </span>
+          <Input
+            name="salary"
+            type="number"
+            step="0.01"
+            required
+            className="h-9"
+            value={salary}
+            onChange={(e) => setSalary(e.target.value)}
+          />
+        </div>
       ) : (
-        <Field name="buy_rate" label="Buy ($/h)" type="number" step="0.01" required />
+        <div className="flex flex-col gap-1">
+          <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">
+            Buy ($/h) *
+          </span>
+          <Input
+            name="buy_rate"
+            type="number"
+            step="0.01"
+            required
+            className="h-9"
+            value={buyRate}
+            onChange={(e) => setBuyRate(e.target.value)}
+          />
+        </div>
       )}
-      <Field name="sell_rate" label="Sell ($/h)" type="number" step="0.01" required />
-      <Field
-        name="hours_load"
-        label="Часов/мес"
-        type="number"
-        step="0.01"
-        defaultValue="160"
-      />
+      <div className="flex flex-col gap-1">
+        <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">
+          Sell ($/h) *
+        </span>
+        <Input
+          name="sell_rate"
+          type="number"
+          step="0.01"
+          required
+          className="h-9"
+          value={sellRate}
+          onChange={(e) => setSellRate(e.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">
+          Часов/мес
+        </span>
+        <Input
+          name="hours_load"
+          type="number"
+          step="0.01"
+          className="h-9"
+          value={hours}
+          onChange={(e) => setHours(e.target.value)}
+        />
+      </div>
       <Field name="dev_start_date" label="Старт" type="date" />
       <Button type="submit" size="sm">
         Добавить

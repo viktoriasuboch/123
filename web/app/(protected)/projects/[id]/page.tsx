@@ -9,7 +9,7 @@ import {
 } from "@/lib/data/projects";
 import { ProjectHeader } from "@/components/projects/project-header";
 import { KpiRow } from "@/components/projects/kpi-row";
-import { MembersTable } from "@/components/projects/members-table";
+import { MembersTable, type DevDefaults } from "@/components/projects/members-table";
 import { EventHistory } from "@/components/projects/event-history";
 
 function ProjectInfoCard({
@@ -58,6 +58,38 @@ export default async function ProjectDetailPage({ params }: { params: Params }) 
   for (const name of Object.keys(devStatuses)) known.add(name);
   const knownDevNames = [...known].sort((a, b) => a.localeCompare(b, "ru"));
 
+  // Prefill defaults for the add-member form. Priority per field:
+  // most recent `project_members` row for that dev → developer_status
+  // registry → nothing. So the last rate/role wins; registry fills the
+  // salary/employment_type for staff even when they aren't on any
+  // active project yet.
+  const membersByRecency = [...allMembers].sort((a, b) =>
+    (b.created_at ?? "").localeCompare(a.created_at ?? ""),
+  );
+  const devDefaults: Record<string, DevDefaults> = {};
+  for (const m of membersByRecency) {
+    if (devDefaults[m.dev_name]) continue;
+    devDefaults[m.dev_name] = {
+      role: m.role ?? null,
+      employment_type: m.employment_type ?? null,
+      salary: m.salary ?? null,
+      buy_rate: m.buy_rate ?? null,
+      sell_rate: m.sell_rate ?? null,
+      hours_load: m.hours_load ?? null,
+    };
+  }
+  for (const [name, status] of Object.entries(devStatuses)) {
+    const cur = devDefaults[name] ?? {};
+    devDefaults[name] = {
+      role: cur.role ?? status.role ?? null,
+      employment_type: cur.employment_type ?? status.employment_type ?? null,
+      salary: cur.salary ?? status.salary ?? null,
+      buy_rate: cur.buy_rate ?? null,
+      sell_rate: cur.sell_rate ?? null,
+      hours_load: cur.hours_load ?? status.default_hours_load ?? null,
+    };
+  }
+
   return (
     <div>
       <Link
@@ -93,6 +125,7 @@ export default async function ProjectDetailPage({ params }: { params: Params }) 
           members={members}
           projectStatus={project.status ?? "active"}
           knownDevNames={knownDevNames}
+          devDefaults={devDefaults}
         />
         <EventHistory projectId={project.id} events={events} />
       </div>
