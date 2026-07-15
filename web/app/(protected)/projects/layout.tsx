@@ -1,4 +1,4 @@
-import { requireSection } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { ProjectsRealtime } from "@/components/projects/projects-realtime";
 
 export default async function ProjectsSegmentLayout({
@@ -6,7 +6,7 @@ export default async function ProjectsSegmentLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requireSection("projects");
+  await requireUser();
   return (
     <>
       <ProjectsRealtime />

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireSection } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
   ProjectInsert,
@@ -20,7 +20,7 @@ const sb = () => createServerSupabase();
 /* ─── projects ──────────────────────────────────────────────────────── */
 
 export async function createProject(formData: FormData) {
-  await requireSection("projects");
+  await requireUser();
   const parsed = ProjectInsert.safeParse({
     name: formData.get("name"),
     status: formData.get("status") || "active",
@@ -69,7 +69,7 @@ export async function createProject(formData: FormData) {
 }
 
 export async function updateProject(id: string, formData: FormData) {
-  await requireSection("projects");
+  await requireUser();
   Uuid.parse(id);
   const parsed = ProjectUpdate.safeParse({
     name: formData.get("name") ?? undefined,
@@ -124,7 +124,7 @@ export async function updateProject(id: string, formData: FormData) {
 
 const ProjectNamePatch = z.object({ name: z.string().min(1).max(200) });
 export async function renameProject(id: string, name: string) {
-  await requireSection("projects");
+  await requireUser();
   const parsed = ProjectNamePatch.parse({ name });
 
   // Read the old name first so we can rename the deals' project field too
@@ -155,7 +155,7 @@ export async function renameProject(id: string, name: string) {
 }
 
 export async function deleteProject(id: string) {
-  await requireSection("projects");
+  await requireUser();
   Uuid.parse(id);
   // CASCADE removes project_members and project_events
   const { error } = await sb().from("projects").delete().eq("id", id);
@@ -182,7 +182,7 @@ const STATUS_EVENT_DESCRIPTION: Record<ProjectStatusValue, string> = {
 };
 
 export async function setProjectStatus(id: string, status: ProjectStatusValue) {
-  await requireSection("projects");
+  await requireUser();
   Uuid.parse(id);
   const parsed = StatusPatch.parse({ status });
 
@@ -205,7 +205,7 @@ export async function setProjectStatus(id: string, status: ProjectStatusValue) {
 /* ─── members ───────────────────────────────────────────────────────── */
 
 export async function addMember(projectId: string, formData: FormData) {
-  await requireSection("projects");
+  await requireUser();
   Uuid.parse(projectId);
 
   const groupLabelRaw = (formData.get("group_label") as string | null) ?? null;
@@ -306,7 +306,7 @@ export async function patchMember(
   field: string,
   rawValue: unknown,
 ) {
-  await requireSection("projects");
+  await requireUser();
   Uuid.parse(memberId);
   Uuid.parse(projectId);
 
@@ -412,7 +412,7 @@ export async function createMemberGroup(input: {
   hoursLoad: number;
   followerIds: string[];
 }) {
-  await requireSection("projects");
+  await requireUser();
   const parsed = CreateGroupInput.parse(input);
 
   // Look up leader (we need their dev_name for the label and the
@@ -526,7 +526,7 @@ const CreateProxyInput = z.object({
  * half the bonus.
  */
 export async function createProxy(input: unknown) {
-  await requireSection("projects");
+  await requireUser();
   const parsed = CreateProxyInput.parse(input);
   if (parsed.faceId === parsed.workerId) {
     throw new Error("Лицо и исполнитель не могут быть одним и тем же");
@@ -634,7 +634,7 @@ export async function moveMember(
   memberId: string,
   direction: "up" | "down",
 ) {
-  await requireSection("projects");
+  await requireUser();
   Uuid.parse(projectId);
   Uuid.parse(memberId);
 
@@ -678,7 +678,7 @@ export async function moveMember(
 }
 
 export async function removeMember(projectId: string, memberId: string, devName?: string) {
-  await requireSection("projects");
+  await requireUser();
   Uuid.parse(projectId);
   Uuid.parse(memberId);
 
@@ -700,7 +700,7 @@ export async function removeMember(projectId: string, memberId: string, devName?
 /* ─── events ────────────────────────────────────────────────────────── */
 
 export async function addProjectNote(projectId: string, description: string) {
-  await requireSection("projects");
+  await requireUser();
   Uuid.parse(projectId);
 
   const parsed = ProjectEventInsert.parse({
@@ -716,7 +716,7 @@ export async function addProjectNote(projectId: string, description: string) {
 }
 
 export async function deleteProjectEvent(projectId: string, eventId: string) {
-  await requireSection("projects");
+  await requireUser();
   Uuid.parse(projectId);
   Uuid.parse(eventId);
 
@@ -739,7 +739,7 @@ export async function editProjectNote(
   eventId: string,
   description: string,
 ) {
-  await requireSection("projects");
+  await requireUser();
   Uuid.parse(projectId);
   Uuid.parse(eventId);
 
@@ -762,7 +762,7 @@ export async function setDevStatus(
   devName: string,
   status: "active" | "inactive",
 ) {
-  await requireSection("projects");
+  await requireUser();
   z.string().min(1).max(120).parse(devName);
 
   const { error } = await sb()
@@ -793,7 +793,7 @@ const CreateDeveloperInput = z.object({
  * dev_name updates the existing record (upsert by name).
  */
 export async function createDeveloper(input: unknown) {
-  await requireSection("projects");
+  await requireUser();
   const parsed = CreateDeveloperInput.parse(input);
 
   const { error } = await sb()
@@ -821,7 +821,7 @@ export async function createDeveloper(input: unknown) {
  * referencing the same dev_name aren't affected (no FK).
  */
 export async function deleteDeveloper(devName: string) {
-  await requireSection("projects");
+  await requireUser();
   z.string().min(1).max(120).parse(devName);
   const { error } = await sb()
     .from("developer_status")

@@ -1,15 +1,14 @@
 "use client";
 
-import { createBrowserClient, type CookieMethodsBrowser } from "@supabase/ssr";
+import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 let cached: SupabaseClient | null = null;
 
 /**
- * Browser-side Supabase client used only for Realtime subscriptions.
- *
- * Writes must go through Server Actions (which use the service_role
- * key on the server). The anon key here is intentionally public.
+ * Browser-side Supabase client for Auth (session cookie sync) and
+ * Realtime subscriptions. Uses the anon key; writes still go through
+ * Server Actions.
  */
 export function getBrowserSupabase(): SupabaseClient {
   if (cached) return cached;
@@ -18,11 +17,6 @@ export function getBrowserSupabase(): SupabaseClient {
   if (!url || !key) {
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
   }
-  // Realtime-only client — we don't need full auth cookie handling.
-  const cookieMethods: CookieMethodsBrowser = {
-    getAll: () => [],
-    setAll: () => {},
-  };
-  cached = createBrowserClient(url, key, { cookies: cookieMethods });
+  cached = createBrowserClient(url, key);
   return cached;
 }

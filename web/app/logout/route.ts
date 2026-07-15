@@ -1,9 +1,9 @@
-import { destroySession } from "@/lib/session";
+import { createAuthServerSupabase } from "@/lib/supabase/server";
 
 export async function POST() {
-  await destroySession();
-  // Relative Location lets the browser resolve against the public URL it
-  // requested, which works behind reverse proxies (Render) that mask the
-  // origin in request.url.
+  const sb = await createAuthServerSupabase();
+  await sb.auth.signOut();
+  // Relative Location: browser resolves against its own public URL,
+  // which is important behind Render's reverse proxy.
   return new Response(null, { status: 303, headers: { Location: "/" } });
 }
