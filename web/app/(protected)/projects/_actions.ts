@@ -83,6 +83,9 @@ export async function updateProject(id: string, formData: FormData) {
     payment_terms:
       ((formData.get("payment_terms") as string | null) ?? "").trim() ||
       null,
+    manager_emails:
+      ((formData.get("manager_emails") as string | null) ?? "").trim() ||
+      null,
   });
   if (!parsed.success) throw new Error("Invalid project update");
 

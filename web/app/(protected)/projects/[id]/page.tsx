@@ -4,6 +4,8 @@ import {
   getProject,
   getProjectMembers,
   getProjectEvents,
+  listProjectMembers,
+  listDevStatuses,
 } from "@/lib/data/projects";
 import { ProjectHeader } from "@/components/projects/project-header";
 import { KpiRow } from "@/components/projects/kpi-row";
@@ -40,12 +42,21 @@ type Params = Promise<{ id: string }>;
 
 export default async function ProjectDetailPage({ params }: { params: Params }) {
   const { id } = await params;
-  const [project, members, events] = await Promise.all([
+  const [project, members, events, allMembers, devStatuses] = await Promise.all([
     getProject(id),
     getProjectMembers(id),
     getProjectEvents(id),
+    listProjectMembers(),
+    listDevStatuses(),
   ]);
   if (!project) notFound();
+
+  // Union of every dev name we know about, so the autocomplete suggests
+  // people from other projects and the developer registry as you type.
+  const known = new Set<string>();
+  for (const m of allMembers) known.add(m.dev_name);
+  for (const name of Object.keys(devStatuses)) known.add(name);
+  const knownDevNames = [...known].sort((a, b) => a.localeCompare(b, "ru"));
 
   return (
     <div>
@@ -60,7 +71,7 @@ export default async function ProjectDetailPage({ params }: { params: Params }) 
       <KpiRow members={members} />
 
       <div className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
           <ProjectInfoCard
             title="📝 Notes"
             body={project.notes}
@@ -71,11 +82,17 @@ export default async function ProjectDetailPage({ params }: { params: Params }) 
             body={project.payment_terms}
             placeholder="Условия оплаты не заданы — можно добавить через «Редактировать»."
           />
+          <ProjectInfoCard
+            title="📧 Контакты"
+            body={project.manager_emails}
+            placeholder="Emails менеджеров не указаны — можно добавить через «Редактировать»."
+          />
         </div>
         <MembersTable
           projectId={project.id}
           members={members}
           projectStatus={project.status ?? "active"}
+          knownDevNames={knownDevNames}
         />
         <EventHistory projectId={project.id} events={events} />
       </div>

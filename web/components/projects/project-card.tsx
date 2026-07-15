@@ -62,12 +62,6 @@ export function ProjectCard({
           tone={a.avgMargH >= 20 ? "good" : a.avgMargH > 0 ? "warn" : "bad"}
         />
       </div>
-
-      {project.notes ? (
-        <p className="mt-3 text-xs italic text-muted-foreground line-clamp-1">
-          {project.notes}
-        </p>
-      ) : null}
     </Link>
   );
 }

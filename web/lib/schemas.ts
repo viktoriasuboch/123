@@ -94,6 +94,7 @@ export const Project = z.object({
   expected_duration: z.string().max(100).nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
   payment_terms: z.string().max(2000).nullable().optional(),
+  manager_emails: z.string().max(2000).nullable().optional(),
   created_at: z.string().optional(),
 });
 export type Project = z.infer<typeof Project>;

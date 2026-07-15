@@ -30,10 +30,12 @@ export function MembersTable({
   projectId,
   members,
   projectStatus = "active",
+  knownDevNames = [],
 }: {
   projectId: string;
   members: ProjectMember[];
   projectStatus?: string;
+  knownDevNames?: string[];
 }) {
   const showBilling = projectStatus === "support";
   const [showAdd, setShowAdd] = useState(false);
@@ -59,6 +61,7 @@ export function MembersTable({
         <AddMemberRow
           projectId={projectId}
           onDone={() => setShowAdd(false)}
+          knownDevNames={knownDevNames}
         />
       ) : null}
 
@@ -870,12 +873,15 @@ function MemberRow({
 function AddMemberRow({
   projectId,
   onDone,
+  knownDevNames,
 }: {
   projectId: string;
   onDone: () => void;
+  knownDevNames: string[];
 }) {
   const [empType, setEmpType] = useState<"staff" | "freelancer">("freelancer");
   const isStaff = empType === "staff";
+  const listId = "known-devs-list";
 
   return (
     <form
@@ -889,7 +895,20 @@ function AddMemberRow({
       }}
       className="flex flex-wrap gap-2 p-3 border-b bg-muted/20 items-end"
     >
-      <Field name="dev_name" label="Имя" required className="min-w-[180px]" />
+      <Field
+        name="dev_name"
+        label="Имя"
+        required
+        className="min-w-[180px]"
+        list={listId}
+        placeholder="Начни печатать…"
+        autoComplete="off"
+      />
+      <datalist id={listId}>
+        {knownDevNames.map((n) => (
+          <option key={n} value={n} />
+        ))}
+      </datalist>
       <Field name="role" label="Роль" placeholder="Dev / QA / PM" />
       <div className="flex flex-col gap-1">
         <span className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">
@@ -935,6 +954,8 @@ function Field({
   className,
   defaultValue,
   step,
+  list,
+  autoComplete,
 }: {
   name: string;
   label: string;
@@ -944,6 +965,8 @@ function Field({
   className?: string;
   defaultValue?: string;
   step?: string;
+  list?: string;
+  autoComplete?: string;
 }) {
   return (
     <div className={`flex flex-col gap-1 ${className ?? ""}`}>
@@ -958,6 +981,8 @@ function Field({
         placeholder={placeholder}
         defaultValue={defaultValue}
         step={step}
+        list={list}
+        autoComplete={autoComplete}
         className="h-9"
       />
     </div>

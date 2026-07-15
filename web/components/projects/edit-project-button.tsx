@@ -99,6 +99,21 @@ export function EditProjectButton({ project }: { project: Project }) {
               placeholder="Net 30, invoice ежемесячно, ..."
             />
           </div>
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="manager_emails"
+              className="text-xs uppercase tracking-widest text-muted-foreground"
+            >
+              Контакты / Emails
+            </Label>
+            <Textarea
+              id="manager_emails"
+              name="manager_emails"
+              rows={3}
+              defaultValue={project.manager_emails ?? ""}
+              placeholder={"Ivan Ivanov <ivan@company.com>\nAnna PM <anna@company.com>"}
+            />
+          </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Отмена
