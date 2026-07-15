@@ -84,6 +84,21 @@ export function EditProjectButton({ project }: { project: Project }) {
               defaultValue={project.notes ?? ""}
             />
           </div>
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="payment_terms"
+              className="text-xs uppercase tracking-widest text-muted-foreground"
+            >
+              Payment terms
+            </Label>
+            <Textarea
+              id="payment_terms"
+              name="payment_terms"
+              rows={3}
+              defaultValue={project.payment_terms ?? ""}
+              placeholder="Net 30, invoice ежемесячно, ..."
+            />
+          </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Отмена
