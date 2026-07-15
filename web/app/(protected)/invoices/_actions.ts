@@ -9,8 +9,19 @@ import {
   InvoiceTemplateUpdate,
   InvoiceInsert,
   InvoiceUpdate,
+  DocumentReminderInsert,
+  DocumentReminderUpdate,
   Uuid,
 } from "@/lib/schemas";
+import { nextInvoiceNumberForProject } from "@/lib/data/invoices";
+
+export async function suggestNextInvoiceNumber(
+  projectId: string,
+): Promise<string> {
+  await requireUser();
+  Uuid.parse(projectId);
+  return nextInvoiceNumberForProject(projectId);
+}
 
 const sb = () => createServerSupabase();
 
@@ -241,6 +252,79 @@ export async function deleteInvoice(id: string) {
   await requireUser();
   Uuid.parse(id);
   const { error } = await sb().from("invoices").delete().eq("id", id);
+  if (error) throw error;
+  revalidatePath("/invoices");
+}
+
+/* ─── document reminders ────────────────────────────────────────────── */
+
+export async function createDocumentReminder(formData: FormData) {
+  await requireUser();
+  const parsed = DocumentReminderInsert.safeParse({
+    project_id: formData.get("project_id"),
+    name: formData.get("name"),
+    description: optStr(formData.get("description")),
+    expected_day: formData.get("expected_day"),
+    recurring: formData.get("recurring") !== "false",
+    active: formData.get("active") !== "false",
+    notes: optStr(formData.get("notes")),
+  });
+  if (!parsed.success) throw new Error("Invalid reminder data");
+
+  const { error } = await sb().from("document_reminders").insert(parsed.data);
+  if (error) throw error;
+  revalidatePath("/invoices");
+  revalidatePath(`/projects/${parsed.data.project_id}`);
+}
+
+export async function updateDocumentReminder(id: string, formData: FormData) {
+  await requireUser();
+  Uuid.parse(id);
+  const parsed = DocumentReminderUpdate.safeParse({
+    name: formData.get("name") ?? undefined,
+    description: formData.has("description")
+      ? optStr(formData.get("description"))
+      : undefined,
+    expected_day: formData.get("expected_day") ?? undefined,
+    recurring:
+      formData.has("recurring") ? formData.get("recurring") !== "false" : undefined,
+    active:
+      formData.has("active") ? formData.get("active") !== "false" : undefined,
+    notes: formData.has("notes") ? optStr(formData.get("notes")) : undefined,
+  });
+  if (!parsed.success) throw new Error("Invalid reminder update");
+
+  const { error } = await sb()
+    .from("document_reminders")
+    .update(parsed.data)
+    .eq("id", id);
+  if (error) throw error;
+  revalidatePath("/invoices");
+}
+
+/**
+ * Mark a reminder as received. For recurring reminders this bumps
+ * last_received_at to now — the reminder will re-emerge next month.
+ * For one-shot reminders the same field acts as a permanent "done".
+ */
+export async function markDocumentReminderReceived(id: string) {
+  await requireUser();
+  Uuid.parse(id);
+  const { error } = await sb()
+    .from("document_reminders")
+    .update({ last_received_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+  revalidatePath("/invoices");
+}
+
+export async function deleteDocumentReminder(id: string) {
+  await requireUser();
+  Uuid.parse(id);
+  const { error } = await sb()
+    .from("document_reminders")
+    .delete()
+    .eq("id", id);
   if (error) throw error;
   revalidatePath("/invoices");
 }

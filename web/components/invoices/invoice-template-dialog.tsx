@@ -24,6 +24,8 @@ export type ProjectOption = {
   id: string;
   name: string;
   planned_monthly: number;
+  /** Suggested next invoice number for this project (INV-XXX). */
+  next_invoice_number: string;
 };
 
 /**

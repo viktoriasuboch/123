@@ -29,18 +29,28 @@ export function InvoiceDialog({
   projects,
   invoice,
   trigger,
+  defaultProjectId,
 }: {
   projects: ProjectOption[];
   invoice?: Invoice;
   trigger: React.ReactNode;
+  /** When set, opens with this project preselected (used by "Create from template" buttons). */
+  defaultProjectId?: string;
 }) {
   const isEdit = !!invoice;
   const [open, setOpen] = useState(false);
   const [projectId, setProjectId] = useState<string>(
-    invoice?.project_id ?? projects[0]?.id ?? "",
+    invoice?.project_id ?? defaultProjectId ?? projects[0]?.id ?? "",
+  );
+  const [invoiceNumber, setInvoiceNumber] = useState<string>(
+    invoice?.invoice_number ??
+      projects.find((p) => p.id === (invoice?.project_id ?? defaultProjectId ?? projects[0]?.id))
+        ?.next_invoice_number ??
+      "",
   );
 
-  const planned = projects.find((p) => p.id === projectId)?.planned_monthly;
+  const project = projects.find((p) => p.id === projectId);
+  const planned = project?.planned_monthly;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -78,7 +88,22 @@ export function InvoiceDialog({
               name="project_id"
               required
               value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setProjectId(v);
+                // Refresh the number suggestion — each project has its
+                // own counter, so switching Project A → Project B needs
+                // a different INV-XXX. Only auto-swap when the field
+                // still holds the previous project's suggestion
+                // (i.e. the user hasn't typed a custom value).
+                if (!isEdit) {
+                  const prev = projects.find((p) => p.id === projectId)?.next_invoice_number;
+                  const nextSuggestion = projects.find((p) => p.id === v)?.next_invoice_number ?? "";
+                  if (invoiceNumber === "" || invoiceNumber === prev) {
+                    setInvoiceNumber(nextSuggestion);
+                  }
+                }
+              }}
               disabled={isEdit}
               className="w-full h-9 px-3 rounded-md border border-input bg-transparent text-sm dark:bg-input/30"
             >
@@ -141,12 +166,26 @@ export function InvoiceDialog({
               type="date"
               defaultValue={invoice?.scheduled_date ?? ""}
             />
-            <Field
-              name="invoice_number"
-              label="Номер (опц)"
-              defaultValue={invoice?.invoice_number ?? ""}
-              placeholder="INV-2026-001"
-            />
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="invoice_number"
+                className="text-xs uppercase tracking-widest text-muted-foreground"
+              >
+                Номер
+              </Label>
+              <Input
+                id="invoice_number"
+                name="invoice_number"
+                value={invoiceNumber}
+                onChange={(e) => setInvoiceNumber(e.target.value)}
+                placeholder="INV-001"
+              />
+              {!isEdit && project ? (
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  Следующий по проекту: {project.next_invoice_number}
+                </p>
+              ) : null}
+            </div>
           </div>
 
           <div className="space-y-1.5">

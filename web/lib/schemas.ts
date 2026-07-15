@@ -216,6 +216,29 @@ export const InvoiceInsert = Invoice.omit({
 });
 export const InvoiceUpdate = InvoiceInsert.partial();
 
+/* ─── document reminders ─────────────────────────────────────────── */
+export const DocumentReminder = z.object({
+  id: Uuid,
+  project_id: Uuid,
+  name: z.string().min(1).max(200),
+  description: z.string().max(1000).nullable().optional(),
+  expected_day: z.coerce.number().int().min(1).max(28),
+  recurring: z.boolean().optional(),
+  last_received_at: z.string().nullable().optional(),
+  active: z.boolean().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  created_at: z.string().optional(),
+  updated_at: z.string().optional(),
+});
+export type DocumentReminder = z.infer<typeof DocumentReminder>;
+
+export const DocumentReminderInsert = DocumentReminder.omit({
+  id: true,
+  created_at: true,
+  updated_at: true,
+});
+export const DocumentReminderUpdate = DocumentReminderInsert.partial();
+
 /* ─── developer_status ───────────────────────────────────────────────── */
 export const DevStatus = z.object({
   dev_name: z.string().max(120),

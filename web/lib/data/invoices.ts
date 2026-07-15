@@ -56,6 +56,55 @@ export async function getInvoice(id: string): Promise<Invoice | null> {
   return data ? Invoice.parse(data) : null;
 }
 
+/* ── next invoice number, scoped to a single project ─────────────── */
+
+/**
+ * Compute the next suggested invoice number for a project. Numbering
+ * restarts per project — Project A and Project B can both hold
+ * INV-005 for different invoices.
+ *
+ * Extracts the trailing integer from every existing invoice_number on
+ * this project, takes the max, adds 1. The prefix + zero-pad width are
+ * inherited from the latest existing number, so if the user started
+ * with `INV-045` the next one is `INV-046`. If the project has no
+ * numbered invoice yet we fall back to `INV-001`.
+ */
+export async function nextInvoiceNumberForProject(
+  projectId: string,
+): Promise<string> {
+  const { data, error } = await sb()
+    .from("invoices")
+    .select("invoice_number")
+    .eq("project_id", projectId)
+    .not("invoice_number", "is", null);
+  if (error) throw error;
+
+  const numbers = (data ?? [])
+    .map((r) => (r as { invoice_number: string | null }).invoice_number)
+    .filter((s): s is string => !!s);
+
+  if (numbers.length === 0) return "INV-001";
+
+  // Prefer the format of the most-recent-looking entry; use the parse
+  // helper to pull out prefix + numeric part.
+  let bestPrefix = "INV-";
+  let bestPad = 3;
+  let maxN = 0;
+  for (const s of numbers) {
+    const m = s.match(/^(.*?)(\d+)\s*$/);
+    if (!m) continue;
+    const n = parseInt(m[2], 10);
+    if (!Number.isFinite(n)) continue;
+    if (n >= maxN) {
+      maxN = n;
+      bestPrefix = m[1];
+      bestPad = Math.max(m[2].length, 3);
+    }
+  }
+  const next = String(maxN + 1).padStart(bestPad, "0");
+  return `${bestPrefix}${next}`;
+}
+
 /* ── derived: expected monthly billing per project ────────────────── */
 
 /**

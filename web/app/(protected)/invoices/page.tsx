@@ -3,7 +3,12 @@ import {
   listInvoiceTemplates,
   listInvoices,
   plannedMonthlyForProject,
+  nextInvoiceNumberForProject,
 } from "@/lib/data/invoices";
+import {
+  listDocumentReminders,
+  isReminderOutstanding,
+} from "@/lib/data/document-reminders";
 import { listProjects } from "@/lib/data/projects";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +27,19 @@ import { InvoiceRowActions } from "@/components/invoices/invoice-row-actions";
 import { TemplateRowActions } from "@/components/invoices/template-row-actions";
 import { InvoiceTemplateDialog } from "@/components/invoices/invoice-template-dialog";
 import { InvoiceDialog } from "@/components/invoices/invoice-dialog";
-import type { Invoice, InvoiceTemplate } from "@/lib/schemas";
+import { DocumentReminderDialog } from "@/components/invoices/document-reminder-dialog";
+import { DocumentReminderRowActions } from "@/components/invoices/document-reminder-row-actions";
+import {
+  TodayWidget,
+  type TodayIssueItem,
+  type TodayOverdueItem,
+  type TodayDocumentItem,
+} from "@/components/invoices/today-widget";
+import type {
+  Invoice,
+  InvoiceTemplate,
+  DocumentReminder,
+} from "@/lib/schemas";
 
 export const dynamic = "force-dynamic";
 
@@ -34,35 +51,82 @@ const FREQ_LABELS: Record<string, string> = {
   once: "Разово",
 };
 
+const ISSUE_WINDOW_DAYS = 7;
+
 export default async function InvoicesPage({
   searchParams,
 }: {
   searchParams: SP;
 }) {
   const sp = await searchParams;
-  const tab = (sp.tab ?? "all") as "all" | "recurring";
+  const tab = (sp.tab ?? "all") as "all" | "recurring" | "documents";
 
-  const [templates, invoices, projects] = await Promise.all([
+  const [templates, invoices, projects, reminders] = await Promise.all([
     listInvoiceTemplates(),
     listInvoices(),
     listProjects(),
+    listDocumentReminders(),
   ]);
 
   const projectsById = new Map(projects.map((p) => [p.id, p]));
 
-  // Compute planned monthly for every project once (server-side) so
-  // each dialog gets a lookup without needing a client call.
-  const plannedEntries = await Promise.all(
-    projects.map(async (p) => [
-      p.id,
-      await plannedMonthlyForProject(p.id),
-    ] as const),
+  // Preload per-project: planned monthly billing + suggested next number.
+  const projectMeta = await Promise.all(
+    projects.map(async (p) => {
+      const [planned, nextNumber] = await Promise.all([
+        plannedMonthlyForProject(p.id),
+        nextInvoiceNumberForProject(p.id),
+      ]);
+      return {
+        id: p.id,
+        name: p.name,
+        planned_monthly: planned,
+        next_invoice_number: nextNumber,
+      };
+    }),
   );
-  const projectOptions = plannedEntries.map(([id, planned]) => ({
-    id,
-    name: projectsById.get(id)?.name ?? "—",
-    planned_monthly: planned,
-  }));
+  const projectOptions = projectMeta;
+
+  const today = new Date();
+  const todayISO = today.toISOString().slice(0, 10);
+
+  // Build the "today" widget's three sections.
+  const toIssue: TodayIssueItem[] = [];
+  for (const t of templates) {
+    if (t.active === false) continue;
+    const day = t.issue_day ?? null;
+    if (!day) continue;
+    // Days until the next occurrence of `day` in this or next month.
+    // If today >= day: it's this month, already due (daysUntil negative).
+    // If today < day: it's coming up this month.
+    const thisMonth = new Date(today.getFullYear(), today.getMonth(), day);
+    const diffDays = Math.round(
+      (thisMonth.getTime() - today.getTime()) / 86400_000,
+    );
+    if (diffDays <= ISSUE_WINDOW_DAYS && diffDays >= -3) {
+      toIssue.push({ kind: "template" as const, template: t, daysUntil: diffDays });
+    }
+  }
+  toIssue.sort((a, b) => a.daysUntil - b.daysUntil);
+
+  const overdue: TodayOverdueItem[] = invoices
+    .filter((inv) => effectiveStatus(inv, todayISO) === "overdue")
+    .map((inv) => {
+      const due = inv.due_date ? new Date(inv.due_date) : null;
+      const daysLate = due
+        ? Math.max(0, Math.floor((today.getTime() - due.getTime()) / 86400_000))
+        : 0;
+      return { kind: "overdue" as const, invoice: inv, daysLate };
+    })
+    .sort((a, b) => b.daysLate - a.daysLate);
+
+  const documents: TodayDocumentItem[] = reminders
+    .filter((r) => isReminderOutstanding(r, today))
+    .map((r) => {
+      const daysLate = Math.max(0, today.getDate() - r.expected_day);
+      return { kind: "document" as const, reminder: r, daysLate };
+    })
+    .sort((a, b) => b.daysLate - a.daysLate);
 
   return (
     <div className="space-y-6">
@@ -84,7 +148,19 @@ export default async function InvoicesPage({
                   size="sm"
                   className="font-mono text-[10px] uppercase tracking-[0.15em]"
                 >
-                  + Шаблон
+                  + Напоминалка
+                </Button>
+              }
+            />
+          ) : tab === "documents" ? (
+            <DocumentReminderDialog
+              projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+              trigger={
+                <Button
+                  size="sm"
+                  className="font-mono text-[10px] uppercase tracking-[0.15em]"
+                >
+                  + Документ
                 </Button>
               }
             />
@@ -104,13 +180,32 @@ export default async function InvoicesPage({
         </div>
       </div>
 
-      <TabsNav tab={tab} allCount={invoices.length} recCount={templates.length} />
+      <TodayWidget
+        toIssue={toIssue}
+        overdue={overdue}
+        documents={documents}
+        projects={projectsById}
+        projectOptions={projectOptions}
+      />
+
+      <TabsNav
+        tab={tab}
+        allCount={invoices.length}
+        recCount={templates.length}
+        docCount={reminders.length}
+      />
 
       {tab === "recurring" ? (
         <TemplatesTable
           templates={templates}
           projectsById={projectsById}
           projectOptions={projectOptions}
+        />
+      ) : tab === "documents" ? (
+        <DocumentsTable
+          reminders={reminders}
+          projectsById={projectsById}
+          projects={projects.map((p) => ({ id: p.id, name: p.name }))}
         />
       ) : (
         <InvoicesTable
@@ -129,14 +224,21 @@ function TabsNav({
   tab,
   allCount,
   recCount,
+  docCount,
 }: {
-  tab: "all" | "recurring";
+  tab: "all" | "recurring" | "documents";
   allCount: number;
   recCount: number;
+  docCount: number;
 }) {
-  const items: { id: "all" | "recurring"; label: string; count: number }[] = [
+  const items: {
+    id: "all" | "recurring" | "documents";
+    label: string;
+    count: number;
+  }[] = [
     { id: "all", label: "Все инвойсы", count: allCount },
-    { id: "recurring", label: "Рекуррентные", count: recCount },
+    { id: "recurring", label: "Напоминалки", count: recCount },
+    { id: "documents", label: "Документы", count: docCount },
   ];
   return (
     <div className="flex items-center gap-1 border-b border-border">
@@ -176,7 +278,7 @@ function InvoicesTable({
     return (
       <div className="rounded-md border border-border bg-card py-16 text-center">
         <p className="font-mono text-xs text-muted-foreground">
-          Инвойсов пока нет — создай первый через «+ Инвойс» или заведи рекуррентный шаблон.
+          Инвойсов пока нет — создай первый через «+ Инвойс» или заведи напоминалку.
         </p>
       </div>
     );
@@ -188,7 +290,7 @@ function InvoicesTable({
         <TableHeader>
           <TableRow>
             <TableHead className="font-mono text-[10px] uppercase tracking-[0.15em]">
-              Клиент / Проект
+              Номер / Проект
             </TableHead>
             <TableHead className="font-mono text-[10px] uppercase tracking-[0.15em]">
               Сумма
@@ -213,10 +315,14 @@ function InvoicesTable({
               <TableRow key={inv.id}>
                 <TableCell>
                   <div className="flex flex-col">
-                    <span className="font-medium">{inv.client_name}</span>
-                    <span className="font-mono text-[10px] text-muted-foreground">
+                    <span className="font-medium">
+                      <span className="font-mono text-xs text-muted-foreground mr-2">
+                        {inv.invoice_number ?? "—"}
+                      </span>
                       {project?.name ?? "—"}
-                      {inv.invoice_number ? ` · ${inv.invoice_number}` : ""}
+                    </span>
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      {inv.client_name}
                     </span>
                   </div>
                 </TableCell>
@@ -274,7 +380,7 @@ function TemplatesTable({
     return (
       <div className="rounded-md border border-border bg-card py-16 text-center">
         <p className="font-mono text-xs text-muted-foreground">
-          Шаблонов нет. Создай первый — например HAYS Project X, каждое 25-е число.
+          Напоминалок нет. Заведи первую — например HAYS Project X, каждое 25-е число.
         </p>
       </div>
     );
@@ -295,7 +401,7 @@ function TemplatesTable({
               Частота
             </TableHead>
             <TableHead className="font-mono text-[10px] uppercase tracking-[0.15em]">
-              Следующее
+              День
             </TableHead>
             <TableHead className="text-right" />
           </TableRow>
@@ -319,15 +425,94 @@ function TemplatesTable({
                 </TableCell>
                 <TableCell className="font-mono text-xs">
                   {FREQ_LABELS[freq] ?? freq}
-                  {t.issue_day ? ` · ${t.issue_day}-го` : ""}
                 </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">
-                  {t.next_issue_date ?? "—"}
+                  {t.issue_day ? `${t.issue_day}-го числа` : "—"}
                 </TableCell>
                 <TableCell className="text-right">
                   <TemplateRowActions
                     template={t}
                     projects={projectOptions}
+                  />
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+/* ─── documents table ─────────────────────────────────────────────── */
+
+function DocumentsTable({
+  reminders,
+  projectsById,
+  projects,
+}: {
+  reminders: DocumentReminder[];
+  projectsById: Map<string, { id: string; name: string }>;
+  projects: { id: string; name: string }[];
+}) {
+  if (reminders.length === 0) {
+    return (
+      <div className="rounded-md border border-border bg-card py-16 text-center">
+        <p className="font-mono text-xs text-muted-foreground">
+          Напоминалок про документы нет. Пример: «Credit note от HAYS к 10-му числу».
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-card">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="font-mono text-[10px] uppercase tracking-[0.15em]">
+              Что / Проект
+            </TableHead>
+            <TableHead className="font-mono text-[10px] uppercase tracking-[0.15em]">
+              К какому числу
+            </TableHead>
+            <TableHead className="font-mono text-[10px] uppercase tracking-[0.15em]">
+              Повтор
+            </TableHead>
+            <TableHead className="font-mono text-[10px] uppercase tracking-[0.15em]">
+              Последний раз получен
+            </TableHead>
+            <TableHead className="text-right" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {reminders.map((r) => {
+            const project = projectsById.get(r.project_id);
+            return (
+              <TableRow key={r.id}>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{r.name}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      {project?.name ?? "—"}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="font-mono text-xs">
+                  {r.expected_day}-го числа
+                </TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">
+                  {r.recurring === false ? "Разово" : "Каждый месяц"}
+                </TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">
+                  {r.last_received_at
+                    ? new Date(r.last_received_at).toISOString().slice(0, 10)
+                    : "—"}
+                </TableCell>
+                <TableCell className="text-right">
+                  <DocumentReminderRowActions
+                    reminder={r}
+                    projects={projects}
                   />
                 </TableCell>
               </TableRow>
