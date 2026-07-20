@@ -76,7 +76,7 @@ export function DocumentReminderRowActions({
       />
       <form
         action={async () => {
-          if (!confirm("Удалить напоминалку?")) return;
+          if (!confirm("Удалить Credit Note?")) return;
           try {
             await deleteDocumentReminder(reminder.id);
           } catch (err) {

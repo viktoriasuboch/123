@@ -39,15 +39,18 @@ export function InvoiceTemplateDialog({
   projects,
   template,
   trigger,
+  defaultProjectId,
 }: {
   projects: ProjectOption[];
   template?: InvoiceTemplate;
   trigger: React.ReactNode;
+  /** Preselect a project when opening (used by Projects tab rows). */
+  defaultProjectId?: string;
 }) {
   const isEdit = !!template;
   const [open, setOpen] = useState(false);
   const [projectId, setProjectId] = useState<string>(
-    template?.project_id ?? projects[0]?.id ?? "",
+    template?.project_id ?? defaultProjectId ?? projects[0]?.id ?? "",
   );
 
   const planned = projects.find((p) => p.id === projectId)?.planned_monthly;
@@ -58,7 +61,7 @@ export function InvoiceTemplateDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl tracking-wide">
-            {isEdit ? "Редактировать шаблон" : "Новый шаблон инвойса"}
+            {isEdit ? "Редактировать рекуррентный инвойс" : "Новый рекуррентный инвойс"}
           </DialogTitle>
         </DialogHeader>
         <form

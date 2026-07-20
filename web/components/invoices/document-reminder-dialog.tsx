@@ -40,7 +40,7 @@ export function DocumentReminderDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl tracking-wide">
-            {isEdit ? "Редактировать напоминалку" : "Новая напоминалка"}
+            {isEdit ? "Редактировать Credit Note" : "Новый Credit Note"}
           </DialogTitle>
         </DialogHeader>
         <form

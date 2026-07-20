@@ -28,6 +28,7 @@ import { InvoiceRowActions } from "@/components/invoices/invoice-row-actions";
 import { InvoiceDialog } from "@/components/invoices/invoice-dialog";
 import { DocumentReminderDialog } from "@/components/invoices/document-reminder-dialog";
 import { DocumentReminderRowActions } from "@/components/invoices/document-reminder-row-actions";
+import { ProjectsTab } from "@/components/invoices/projects-tab";
 import {
   TodayWidget,
   type TodayIssueItem,
@@ -39,11 +40,15 @@ import {
   InvoicesCalendar,
   type CalendarView,
 } from "@/components/invoices/invoices-calendar";
-import type { Invoice, DocumentReminder } from "@/lib/schemas";
+import type {
+  Invoice,
+  DocumentReminder,
+  InvoiceTemplate,
+} from "@/lib/schemas";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "dashboard" | "calendar" | "all" | "documents";
+type Tab = "dashboard" | "calendar" | "all" | "projects" | "documents";
 
 type SP = Promise<{
   tab?: string;
@@ -58,7 +63,7 @@ export default async function InvoicesPage({
   searchParams: SP;
 }) {
   const sp = await searchParams;
-  const knownTabs: Tab[] = ["dashboard", "calendar", "all", "documents"];
+  const knownTabs: Tab[] = ["dashboard", "calendar", "all", "projects", "documents"];
   const tab: Tab = (knownTabs.includes(sp.tab as Tab) ? sp.tab : "dashboard") as Tab;
   const calendarView: CalendarView = sp.view === "week" ? "week" : "month";
   const calendarAnchor = /^\d{4}-\d{2}-\d{2}$/.test(sp.anchor ?? "")
@@ -208,7 +213,12 @@ export default async function InvoicesPage({
           templates={templates}
           reminders={reminders}
           projects={projectsById}
+        />
+      ) : tab === "projects" ? (
+        <ProjectsTab
           projectOptions={projectOptions}
+          projects={projects}
+          templatesByProject={groupBy(templates, (t) => t.project_id)}
         />
       ) : tab === "calendar" ? (
         <InvoicesCalendar
@@ -256,6 +266,7 @@ function TabsNav({
     { id: "dashboard", label: "Дашборд", count: null },
     { id: "calendar", label: "Календарь", count: null },
     { id: "all", label: "Все инвойсы", count: allCount },
+    { id: "projects", label: "Проекты", count: null },
     { id: "documents", label: "Credit Notes", count: docCount },
   ];
   return (
@@ -298,7 +309,7 @@ function InvoicesTable({
     return (
       <div className="rounded-md border border-border bg-card py-16 text-center">
         <p className="font-mono text-xs text-muted-foreground">
-          Инвойсов пока нет — создай первый через «+ Инвойс» или заведи напоминалку.
+          Инвойсов пока нет — создай первый через «+ Инвойс» или заведи рекуррентный.
         </p>
       </div>
     );
@@ -388,7 +399,7 @@ function InvoicesTable({
 /* ─── helpers ─────────────────────────────────────────────────────── */
 
 function isTemplateDoneThisMonth(
-  t: import("@/lib/schemas").InvoiceTemplate,
+  t: InvoiceTemplate,
   today: Date,
 ): boolean {
   if (!t.last_issued_at) return false;
@@ -397,6 +408,17 @@ function isTemplateDoneThisMonth(
     d.getFullYear() === today.getFullYear() &&
     d.getMonth() === today.getMonth()
   );
+}
+
+function groupBy<T, K>(arr: T[], key: (x: T) => K): Map<K, T[]> {
+  const map = new Map<K, T[]>();
+  for (const item of arr) {
+    const k = key(item);
+    const list = map.get(k);
+    if (list) list.push(item);
+    else map.set(k, [item]);
+  }
+  return map;
 }
 
 /* ─── documents table ─────────────────────────────────────────────── */
