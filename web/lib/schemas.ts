@@ -156,7 +156,7 @@ export const ProjectEventInsert = ProjectEvent.omit({
 
 /* ─── invoices ───────────────────────────────────────────────────────── */
 export const InvoiceFrequency = z
-  .enum(["monthly", "quarterly", "once"])
+  .enum(["monthly", "quarterly", "biweekly", "once"])
   .catch("monthly");
 export const InvoiceStatus = z
   .enum(["to_issue", "issued", "paid", "cancelled"])

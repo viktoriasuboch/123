@@ -16,10 +16,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { reportActionError } from "@/lib/client-errors";
 import {
   createInvoice,
+  createInvoiceTemplate,
   updateInvoice,
 } from "@/app/(protected)/invoices/_actions";
 import type { Invoice } from "@/lib/schemas";
 import type { ProjectOption } from "./invoice-template-dialog";
+
+type RecurringMode = "monthly" | "biweekly";
 
 /**
  * Create a one-off invoice (not tied to a template) or edit an existing
@@ -48,6 +51,8 @@ export function InvoiceDialog({
         ?.next_invoice_number ??
       "",
   );
+  const [makeRecurring, setMakeRecurring] = useState(false);
+  const [recurringMode, setRecurringMode] = useState<RecurringMode>("monthly");
 
   const project = projects.find((p) => p.id === projectId);
   const planned = project?.planned_monthly;
@@ -68,6 +73,11 @@ export function InvoiceDialog({
                 await updateInvoice(invoice.id, fd);
               } else {
                 await createInvoice(fd);
+                if (makeRecurring) {
+                  await createInvoiceTemplate(
+                    buildTemplateFormData(fd, recurringMode),
+                  );
+                }
               }
               setOpen(false);
             } catch (err) {
@@ -218,6 +228,58 @@ export function InvoiceDialog({
             />
           </div>
 
+          {!isEdit ? (
+            <div className="rounded-md border border-border/60 bg-muted/20 p-3 space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={makeRecurring}
+                  onChange={(e) => setMakeRecurring(e.target.checked)}
+                  className="size-4 accent-primary"
+                />
+                <span className="font-mono text-[11px] uppercase tracking-[0.15em]">
+                  🔁 Сделать рекуррентным
+                </span>
+              </label>
+              {makeRecurring ? (
+                <div className="space-y-2 pl-6">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="recurring_mode"
+                      value="monthly"
+                      checked={recurringMode === "monthly"}
+                      onChange={() => setRecurringMode("monthly")}
+                      className="mt-0.5 size-4 accent-primary"
+                    />
+                    <span className="text-sm">
+                      <span className="font-medium">Раз в месяц</span>{" "}
+                      <span className="text-muted-foreground font-mono text-[10px]">
+                        · день = число из «Планируется выставить»
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="recurring_mode"
+                      value="biweekly"
+                      checked={recurringMode === "biweekly"}
+                      onChange={() => setRecurringMode("biweekly")}
+                      className="mt-0.5 size-4 accent-primary"
+                    />
+                    <span className="text-sm">
+                      <span className="font-medium">Раз в 2 недели</span>{" "}
+                      <span className="text-muted-foreground font-mono text-[10px]">
+                        · старт = «Планируется выставить»
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <DialogFooter>
             <Button
               type="button"
@@ -232,6 +294,43 @@ export function InvoiceDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * Copy the fields that a recurring template shares with the just-created
+ * one-off invoice, then add the recurrence-specific bits. For monthly
+ * we anchor on the day-of-month; for biweekly on the concrete start
+ * date. Anchor comes from "Планируется выставить" (scheduled_date),
+ * falling back to today when it wasn't filled in.
+ */
+function buildTemplateFormData(
+  invoiceFd: FormData,
+  mode: RecurringMode,
+): FormData {
+  const anchor =
+    (invoiceFd.get("scheduled_date") as string | null) ||
+    new Date().toISOString().slice(0, 10);
+  const anchorDate = new Date(anchor + "T00:00:00");
+  const dayOfMonth = anchorDate.getDate();
+
+  const fd = new FormData();
+  fd.set("project_id", (invoiceFd.get("project_id") as string) ?? "");
+  fd.set("client_name", (invoiceFd.get("client_name") as string) ?? "");
+  fd.set("description", (invoiceFd.get("description") as string) ?? "");
+  fd.set("amount", (invoiceFd.get("amount") as string) ?? "0");
+  fd.set("currency", (invoiceFd.get("currency") as string) ?? "USD");
+  fd.set("payment_terms_days", "14");
+  fd.set("active", "true");
+  fd.set("notes", "Создан из формы «Новый инвойс»");
+  if (mode === "monthly") {
+    fd.set("frequency", "monthly");
+    // issue_day is 1–28 in the schema, so cap it to keep February safe.
+    fd.set("issue_day", String(Math.min(dayOfMonth, 28)));
+  } else {
+    fd.set("frequency", "biweekly");
+    fd.set("next_issue_date", anchor);
+  }
+  return fd;
 }
 
 function Field({
