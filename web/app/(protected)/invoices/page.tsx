@@ -35,6 +35,8 @@ import {
   type TodayOverdueItem,
   type TodayDocumentItem,
 } from "@/components/invoices/today-widget";
+import { InvoicesDashboard } from "@/components/invoices/invoices-dashboard";
+import { InvoicesCalendar } from "@/components/invoices/invoices-calendar";
 import type {
   Invoice,
   InvoiceTemplate,
@@ -43,7 +45,9 @@ import type {
 
 export const dynamic = "force-dynamic";
 
-type SP = Promise<{ tab?: string }>;
+type Tab = "dashboard" | "calendar" | "all" | "recurring" | "documents";
+
+type SP = Promise<{ tab?: string; month?: string; day?: string }>;
 
 const FREQ_LABELS: Record<string, string> = {
   monthly: "Ежемесячно",
@@ -59,7 +63,15 @@ export default async function InvoicesPage({
   searchParams: SP;
 }) {
   const sp = await searchParams;
-  const tab = (sp.tab ?? "all") as "all" | "recurring" | "documents";
+  const knownTabs: Tab[] = ["dashboard", "calendar", "all", "recurring", "documents"];
+  const tab: Tab = (knownTabs.includes(sp.tab as Tab) ? sp.tab : "dashboard") as Tab;
+  const todayMonthISO = new Date().toISOString().slice(0, 7);
+  const monthISO = /^\d{4}-\d{2}$/.test(sp.month ?? "")
+    ? (sp.month as string)
+    : todayMonthISO;
+  const selectedDay = /^\d{4}-\d{2}-\d{2}$/.test(sp.day ?? "")
+    ? (sp.day as string)
+    : undefined;
 
   const [templates, invoices, projects, reminders] = await Promise.all([
     listInvoiceTemplates(),
@@ -164,7 +176,7 @@ export default async function InvoicesPage({
                 </Button>
               }
             />
-          ) : (
+          ) : tab === "calendar" || tab === "dashboard" ? null : (
             <InvoiceDialog
               projects={projectOptions}
               trigger={
@@ -180,13 +192,15 @@ export default async function InvoicesPage({
         </div>
       </div>
 
-      <TodayWidget
-        toIssue={toIssue}
-        overdue={overdue}
-        documents={documents}
-        projects={projectsById}
-        projectOptions={projectOptions}
-      />
+      {tab === "dashboard" ? (
+        <TodayWidget
+          toIssue={toIssue}
+          overdue={overdue}
+          documents={documents}
+          projects={projectsById}
+          projectOptions={projectOptions}
+        />
+      ) : null}
 
       <TabsNav
         tab={tab}
@@ -195,7 +209,23 @@ export default async function InvoicesPage({
         docCount={reminders.length}
       />
 
-      {tab === "recurring" ? (
+      {tab === "dashboard" ? (
+        <InvoicesDashboard
+          invoices={invoices}
+          templates={templates}
+          reminders={reminders}
+          projects={projectsById}
+        />
+      ) : tab === "calendar" ? (
+        <InvoicesCalendar
+          monthISO={monthISO}
+          selectedDay={selectedDay}
+          invoices={invoices}
+          templates={templates}
+          reminders={reminders}
+          projects={projectsById}
+        />
+      ) : tab === "recurring" ? (
         <TemplatesTable
           templates={templates}
           projectsById={projectsById}
@@ -226,36 +256,40 @@ function TabsNav({
   recCount,
   docCount,
 }: {
-  tab: "all" | "recurring" | "documents";
+  tab: Tab;
   allCount: number;
   recCount: number;
   docCount: number;
 }) {
   const items: {
-    id: "all" | "recurring" | "documents";
+    id: Tab;
     label: string;
-    count: number;
+    count: number | null;
   }[] = [
+    { id: "dashboard", label: "Дашборд", count: null },
+    { id: "calendar", label: "Календарь", count: null },
     { id: "all", label: "Все инвойсы", count: allCount },
     { id: "recurring", label: "Напоминалки", count: recCount },
     { id: "documents", label: "Документы", count: docCount },
   ];
   return (
-    <div className="flex items-center gap-1 border-b border-border">
+    <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
       {items.map((it) => {
         const active = it.id === tab;
         return (
           <Link
             key={it.id}
             href={`/invoices?tab=${it.id}`}
-            className={`px-3 py-2 -mb-px border-b-2 font-mono text-[10px] uppercase tracking-[0.15em] transition ${
+            className={`px-3 py-2 -mb-px border-b-2 font-mono text-[10px] uppercase tracking-[0.15em] whitespace-nowrap transition ${
               active
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            {it.label}{" "}
-            <span className="opacity-60 ml-1">{it.count}</span>
+            {it.label}
+            {it.count != null ? (
+              <span className="opacity-60 ml-1">{it.count}</span>
+            ) : null}
           </Link>
         );
       })}
