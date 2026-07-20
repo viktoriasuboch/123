@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, cloneElement, isValidElement } from "react";
-import type { ReactElement } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -75,7 +74,20 @@ export function InvoiceDialog({
 
   return (
     <>
-      {renderTriggerWithClick(trigger, openDialog)}
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={openDialog}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openDialog();
+          }
+        }}
+        className="inline-flex"
+      >
+        {trigger}
+      </span>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -374,39 +386,6 @@ export function InvoiceDialog({
       </Dialog>
     </>
   );
-}
-
-/**
- * Clone the trigger and attach an onClick that opens the dialog. Using
- * a plain wrapper here (instead of base-ui's DialogTrigger + render)
- * because `render` on a compound React element didn't reliably wire
- * onClick, and the Edit button in row-actions kept ignoring clicks.
- */
-function renderTriggerWithClick(trigger: React.ReactNode, onClick: () => void) {
-  if (!isValidElement(trigger)) {
-    return (
-      <span
-        role="button"
-        tabIndex={0}
-        onClick={onClick}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") onClick();
-        }}
-      >
-        {trigger}
-      </span>
-    );
-  }
-  const el = trigger as ReactElement<Record<string, unknown>>;
-  return cloneElement(el, {
-    onClick: (event: React.MouseEvent) => {
-      const prior = el.props.onClick as
-        | ((e: React.MouseEvent) => void)
-        | undefined;
-      prior?.(event);
-      onClick();
-    },
-  });
 }
 
 /**
