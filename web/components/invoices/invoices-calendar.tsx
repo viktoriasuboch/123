@@ -6,6 +6,7 @@ import type {
 } from "@/lib/schemas";
 import { effectiveStatus } from "./invoice-status-badge";
 import { fmtDate, adjustedIssueDateISO } from "@/lib/calc";
+import { MarkInvoicePaidDialog } from "./mark-invoice-paid-dialog";
 
 type EventKind = "issue" | "pay" | "document" | "paid";
 export type CalendarView = "month" | "week";
@@ -16,6 +17,9 @@ type DayEvent = {
   detail: string;
   projectId?: string;
   projectName?: string;
+  /** Present for events tied to a concrete invoice (pay / paid). Lets
+   *  the week view render a mark-as-paid action directly. */
+  invoice?: Invoice;
 };
 
 const EMOJI: Record<EventKind, string> = {
@@ -217,19 +221,22 @@ function MonthGrid({
                 {c.day}
               </div>
               {hasEvents ? (
-                <div className="flex flex-wrap gap-0.5 text-[13px] leading-none">
-                  {dayEvents.slice(0, 6).map((e, i) => (
-                    <span
+                <div className="flex flex-col gap-0.5 text-[10px] leading-tight overflow-hidden">
+                  {dayEvents.slice(0, 3).map((e, i) => (
+                    <div
                       key={i}
+                      className="flex items-center gap-1 truncate"
                       title={`${TYPE_LABEL[e.kind]}: ${e.title}`}
-                      className="inline-block"
                     >
-                      {EMOJI[e.kind]}
-                    </span>
+                      <span className="shrink-0">{EMOJI[e.kind]}</span>
+                      <span className="truncate">
+                        {e.projectName ?? e.title}
+                      </span>
+                    </div>
                   ))}
-                  {dayEvents.length > 6 ? (
+                  {dayEvents.length > 3 ? (
                     <span className="font-mono text-[9px] text-muted-foreground">
-                      +{dayEvents.length - 6}
+                      +{dayEvents.length - 3} ещё
                     </span>
                   ) : null}
                 </div>
@@ -361,6 +368,7 @@ function EventItem({
   event: DayEvent;
   compact?: boolean;
 }) {
+  const showMarkPaid = event.kind === "pay" && event.invoice;
   return (
     <li
       className={`flex items-start gap-2 rounded border border-border/40 ${
@@ -380,7 +388,7 @@ function EventItem({
         <div className="font-mono text-[10px] text-muted-foreground truncate">
           {event.projectId && event.projectName ? (
             <Link
-              href={`/projects/${event.projectId}`}
+              href={`/invoices/projects/${event.projectId}`}
               className="text-primary hover:underline"
             >
               {event.projectName}
@@ -392,6 +400,9 @@ function EventItem({
           {event.detail}
         </div>
       </div>
+      {showMarkPaid ? (
+        <MarkInvoicePaidDialog invoice={event.invoice!} />
+      ) : null}
     </li>
   );
 }
@@ -422,7 +433,8 @@ function buildEvents(
     const s = effectiveStatus(inv);
     const projName = projects.get(inv.project_id)?.name ?? "—";
     const label = `${inv.invoice_number ?? "—"} ${projName}`;
-    const detail = `${inv.currency} ${formatAmount(inv.amount)} · ${inv.client_name}`;
+    // Detail no longer echoes client_name — the project is the client.
+    const detail = `${inv.currency} ${formatAmount(inv.amount)}`;
     if (inv.due_date && s !== "cancelled" && s !== "paid") {
       push(inv.due_date, {
         kind: "pay",
@@ -430,6 +442,7 @@ function buildEvents(
         detail,
         projectId: inv.project_id,
         projectName: projName,
+        invoice: inv,
       });
     }
     if (inv.paid_date) {
@@ -439,6 +452,7 @@ function buildEvents(
         detail: `${inv.currency} ${formatAmount(inv.paid_amount ?? inv.amount)}`,
         projectId: inv.project_id,
         projectName: projName,
+        invoice: inv,
       });
     }
     if (inv.scheduled_date && s === "to_issue") {
@@ -448,6 +462,7 @@ function buildEvents(
         detail,
         projectId: inv.project_id,
         projectName: projName,
+        invoice: inv,
       });
     }
   }
@@ -461,7 +476,7 @@ function buildEvents(
       push(iso, {
         kind: "issue",
         title: projects.get(t.project_id)?.name ?? "—",
-        detail: `${t.client_name} · ~${t.currency} ${formatAmount(t.amount)}`,
+        detail: `~${t.currency} ${formatAmount(t.amount)}`,
         projectId: t.project_id,
         projectName: projects.get(t.project_id)?.name,
       });

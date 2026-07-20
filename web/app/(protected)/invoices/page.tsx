@@ -551,7 +551,7 @@ function InvoicesTable({
               Сумма
             </TableHead>
             <TableHead className="font-mono text-[10px] uppercase tracking-[0.15em]">
-              Планируется
+              Дата инвойса
             </TableHead>
             <TableHead className="font-mono text-[10px] uppercase tracking-[0.15em]">
               Оплатить до
@@ -569,15 +569,12 @@ function InvoicesTable({
             return (
               <TableRow key={inv.id}>
                 <TableCell>
-                  <div className="flex flex-col">
-                    <span className="font-medium">
-                      <span className="font-mono text-xs text-muted-foreground mr-2">
-                        {inv.invoice_number ?? "—"}
-                      </span>
-                      {project?.name ?? "—"}
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {inv.invoice_number ?? "—"}
                     </span>
-                    <span className="font-mono text-[10px] text-muted-foreground">
-                      {inv.client_name}
+                    <span className="font-medium">
+                      {project?.name ?? "—"}
                     </span>
                   </div>
                 </TableCell>
@@ -585,7 +582,7 @@ function InvoicesTable({
                   {inv.currency} {formatAmount(inv.amount)}
                 </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">
-                  {fmtDate(inv.scheduled_date ?? inv.issue_date)}
+                  {fmtDate(inv.issue_date)}
                 </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">
                   {inv.due_date ? (

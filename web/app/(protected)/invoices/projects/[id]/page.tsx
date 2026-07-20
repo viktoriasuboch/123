@@ -9,7 +9,6 @@ import {
 } from "@/lib/data/invoices";
 import { Button } from "@/components/ui/button";
 import { InvoiceDialog } from "@/components/invoices/invoice-dialog";
-import { InvoiceTemplateDialog } from "@/components/invoices/invoice-template-dialog";
 import { InvoiceRowActions } from "@/components/invoices/invoice-row-actions";
 import { TemplateRowActions } from "@/components/invoices/template-row-actions";
 import {
@@ -105,19 +104,6 @@ export default async function InvoiceProjectPage({
               </Button>
             }
           />
-          <InvoiceTemplateDialog
-            projects={[projectOption]}
-            defaultProjectId={project.id}
-            trigger={
-              <Button
-                size="sm"
-                variant="outline"
-                className="font-mono text-[10px] uppercase tracking-[0.15em]"
-              >
-                + Рекуррентный
-              </Button>
-            }
-          />
         </div>
       </header>
 
@@ -166,7 +152,6 @@ export default async function InvoiceProjectPage({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-                <th className="text-left p-3 font-normal">Клиент</th>
                 <th className="text-right p-3 font-normal">Сумма</th>
                 <th className="text-left p-3 font-normal">Периодичность</th>
                 <th className="text-left p-3 font-normal">В этом месяце</th>
@@ -181,7 +166,6 @@ export default async function InvoiceProjectPage({
                     key={t.id}
                     className="border-b border-border/40 hover:bg-muted/20 transition"
                   >
-                    <td className="p-3">{t.client_name}</td>
                     <td className="p-3 text-right font-mono">
                       {t.currency}{" "}
                       {t.amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}
@@ -230,7 +214,6 @@ export default async function InvoiceProjectPage({
             <thead>
               <tr className="border-b text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
                 <th className="text-left p-3 font-normal">Номер</th>
-                <th className="text-left p-3 font-normal">Клиент</th>
                 <th className="text-right p-3 font-normal">Сумма</th>
                 <th className="text-left p-3 font-normal">Выставлен</th>
                 <th className="text-left p-3 font-normal">Оплатить до</th>
@@ -249,7 +232,6 @@ export default async function InvoiceProjectPage({
                     <td className="p-3 font-mono text-xs">
                       {inv.invoice_number ?? "—"}
                     </td>
-                    <td className="p-3">{inv.client_name}</td>
                     <td className="p-3 text-right font-mono">
                       {inv.currency}{" "}
                       {inv.amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}
