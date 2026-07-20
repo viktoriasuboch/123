@@ -11,8 +11,6 @@ import { ProjectHeader } from "@/components/projects/project-header";
 import { KpiRow } from "@/components/projects/kpi-row";
 import { MembersTable, type DevDefaults } from "@/components/projects/members-table";
 import { EventHistory } from "@/components/projects/event-history";
-import { ProjectInvoicesSection } from "@/components/invoices/project-invoices-section";
-import { listInvoices } from "@/lib/data/invoices";
 
 function ProjectInfoCard({
   title,
@@ -44,18 +42,15 @@ type Params = Promise<{ id: string }>;
 
 export default async function ProjectDetailPage({ params }: { params: Params }) {
   const { id } = await params;
-  const [project, members, events, allMembers, devStatuses, allInvoices] =
+  const [project, members, events, allMembers, devStatuses] =
     await Promise.all([
       getProject(id),
       getProjectMembers(id),
       getProjectEvents(id),
       listProjectMembers(),
       listDevStatuses(),
-      listInvoices(),
     ]);
   if (!project) notFound();
-
-  const projectInvoices = allInvoices.filter((inv) => inv.project_id === id);
 
   // Union of every dev name we know about, so the autocomplete suggests
   // people from other projects and the developer registry as you type.
@@ -133,7 +128,6 @@ export default async function ProjectDetailPage({ params }: { params: Params }) 
           knownDevNames={knownDevNames}
           devDefaults={devDefaults}
         />
-        <ProjectInvoicesSection invoices={projectInvoices} />
         <EventHistory projectId={project.id} events={events} />
       </div>
     </div>
