@@ -7,90 +7,165 @@ import type {
 import { effectiveStatus } from "./invoice-status-badge";
 
 type EventKind = "issue" | "pay" | "document" | "paid";
+export type CalendarView = "month" | "week";
 
 type DayEvent = {
   kind: EventKind;
   title: string;
   detail: string;
+  projectId?: string;
+  projectName?: string;
+};
+
+const EMOJI: Record<EventKind, string> = {
+  issue: "🧾",
+  pay: "💰",
+  document: "📄",
+  paid: "✅",
+};
+
+const TYPE_LABEL: Record<EventKind, string> = {
+  issue: "выставить",
+  pay: "оплата",
+  document: "документ",
+  paid: "оплачено",
 };
 
 /**
- * Renders a month grid (Mon-first, 6 rows). Each day gets a set of
- * event dots — click one to jump to the tab-scoped list. `?month=YYYY-MM`
- * in the URL controls which month is rendered; defaults to today's.
+ * Renders month or week view. `anchor` (YYYY-MM-DD) is any date inside
+ * the range you want to look at; the view picks the enclosing month or
+ * ISO week from it.
  */
 export function InvoicesCalendar({
-  monthISO,
+  view,
+  anchor,
   invoices,
   templates,
   reminders,
   projects,
   selectedDay,
 }: {
-  /** YYYY-MM. Which month grid to render. */
-  monthISO: string;
+  view: CalendarView;
+  anchor: string;
   invoices: Invoice[];
   templates: InvoiceTemplate[];
   reminders: DocumentReminder[];
   projects: Map<string, { id: string; name: string }>;
-  /** YYYY-MM-DD of the currently expanded day, if any. */
+  /** YYYY-MM-DD of the day expanded in month view (ignored for week). */
   selectedDay?: string;
 }) {
-  const [yearStr, monthStr] = monthISO.split("-");
-  const year = parseInt(yearStr, 10);
-  const month0 = parseInt(monthStr, 10) - 1;
-
-  const events = buildEventsForMonth(
-    { year, month0 },
-    invoices,
-    templates,
-    reminders,
-    projects,
-  );
-
-  const cells = buildMonthGrid(year, month0);
-  const monthLabel = new Date(year, month0, 1).toLocaleDateString("ru-RU", {
-    month: "long",
-    year: "numeric",
-  });
-
-  const prev = shiftMonth(year, month0, -1);
-  const next = shiftMonth(year, month0, +1);
+  const anchorDate = parseISODate(anchor) ?? new Date();
   const todayISO = new Date().toISOString().slice(0, 10);
+
+  const monthRange = monthRangeFor(anchorDate);
+  const weekRange = weekRangeFor(anchorDate);
+
+  const events =
+    view === "week"
+      ? buildEvents(weekRange, invoices, templates, reminders, projects)
+      : buildEvents(monthRange, invoices, templates, reminders, projects);
+
+  const label =
+    view === "month"
+      ? new Date(monthRange.start).toLocaleDateString("ru-RU", {
+          month: "long",
+          year: "numeric",
+        })
+      : `${weekRange.start} — ${weekRange.end}`;
+
+  const prevAnchor = shiftAnchor(anchorDate, view, -1);
+  const nextAnchor = shiftAnchor(anchorDate, view, +1);
 
   return (
     <section className="rounded-md border bg-card">
       <header className="p-4 border-b flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <Link
-            href={`/invoices?tab=calendar&month=${prev}`}
+            href={hrefFor(view, prevAnchor)}
             className="rounded border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.15em] hover:border-primary hover:text-primary transition"
-            aria-label="Предыдущий месяц"
+            aria-label="Назад"
           >
             ←
           </Link>
           <h3 className="font-display text-lg tracking-wide leading-none capitalize">
-            {monthLabel}
+            {label}
           </h3>
           <Link
-            href={`/invoices?tab=calendar&month=${next}`}
+            href={hrefFor(view, nextAnchor)}
             className="rounded border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.15em] hover:border-primary hover:text-primary transition"
-            aria-label="Следующий месяц"
+            aria-label="Вперёд"
           >
             →
           </Link>
-          {monthISO !== todayISO.slice(0, 7) ? (
-            <Link
-              href="/invoices?tab=calendar"
-              className="rounded border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground hover:border-primary hover:text-primary transition"
-            >
-              Сегодня
-            </Link>
-          ) : null}
+          <Link
+            href={hrefFor(view, todayISO)}
+            className="rounded border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground hover:border-primary hover:text-primary transition"
+          >
+            Сегодня
+          </Link>
         </div>
-        <Legend />
+        <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
+          {(["month", "week"] as const).map((v) => {
+            const active = v === view;
+            return (
+              <Link
+                key={v}
+                href={hrefFor(v, anchor)}
+                className={`px-3 py-1 rounded font-mono text-[10px] uppercase tracking-[0.15em] transition ${
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {v === "month" ? "Месяц" : "Неделя"}
+              </Link>
+            );
+          })}
+        </div>
       </header>
 
+      {view === "month" ? (
+        <MonthGrid
+          anchorDate={anchorDate}
+          events={events}
+          selectedDay={selectedDay}
+          todayISO={todayISO}
+        />
+      ) : (
+        <WeekList weekRange={weekRange} events={events} todayISO={todayISO} />
+      )}
+
+      {view === "month" && selectedDay ? (
+        <DayPanel
+          iso={selectedDay}
+          events={events.get(selectedDay) ?? []}
+          anchor={anchor}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+/* ─── month grid ──────────────────────────────────────────────────── */
+
+function MonthGrid({
+  anchorDate,
+  events,
+  selectedDay,
+  todayISO,
+}: {
+  anchorDate: Date;
+  events: Map<string, DayEvent[]>;
+  selectedDay?: string;
+  todayISO: string;
+}) {
+  const year = anchorDate.getFullYear();
+  const month0 = anchorDate.getMonth();
+  const cells = buildMonthGrid(year, month0);
+  const monthISO = ymOf(anchorDate);
+
+  return (
+    <>
       <div className="grid grid-cols-7 border-b bg-muted/20">
         {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((d) => (
           <div
@@ -108,21 +183,21 @@ export function InvoicesCalendar({
           const dayEvents = iso ? events.get(iso) ?? [] : [];
           const isToday = iso === todayISO;
           const isSelected = iso === selectedDay;
-          const inMonth = c.inMonth;
-          if (!iso) {
-            return <div key={c.key} className="min-h-[76px] border-b border-r" />;
-          }
           const hasEvents = dayEvents.length > 0;
+          if (!iso) {
+            return (
+              <div key={c.key} className="min-h-[84px] border-b border-r" />
+            );
+          }
+          const linkHref = isSelected
+            ? `/invoices?tab=calendar&view=month&anchor=${monthISO}-01`
+            : `/invoices?tab=calendar&view=month&anchor=${monthISO}-01&day=${iso}`;
           return (
             <Link
               key={c.key}
-              href={
-                isSelected
-                  ? `/invoices?tab=calendar&month=${monthISO}`
-                  : `/invoices?tab=calendar&month=${monthISO}&day=${iso}`
-              }
-              className={`min-h-[76px] border-b border-r p-1.5 flex flex-col gap-1 transition ${
-                inMonth ? "" : "opacity-40"
+              href={linkHref}
+              className={`min-h-[84px] border-b border-r p-1.5 flex flex-col gap-1 transition ${
+                c.inMonth ? "" : "opacity-40"
               } ${isSelected ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-muted/30"}`}
             >
               <div
@@ -135,13 +210,15 @@ export function InvoicesCalendar({
                 {c.day}
               </div>
               {hasEvents ? (
-                <div className="flex flex-wrap gap-0.5">
+                <div className="flex flex-wrap gap-0.5 text-[13px] leading-none">
                   {dayEvents.slice(0, 6).map((e, i) => (
                     <span
                       key={i}
-                      className={`inline-block size-1.5 rounded-full ${dotClass(e.kind)}`}
                       title={`${TYPE_LABEL[e.kind]}: ${e.title}`}
-                    />
+                      className="inline-block"
+                    >
+                      {EMOJI[e.kind]}
+                    </span>
                   ))}
                   {dayEvents.length > 6 ? (
                     <span className="font-mono text-[9px] text-muted-foreground">
@@ -154,60 +231,82 @@ export function InvoicesCalendar({
           );
         })}
       </div>
-
-      {selectedDay ? (
-        <DayPanel
-          iso={selectedDay}
-          events={events.get(selectedDay) ?? []}
-          monthISO={monthISO}
-        />
-      ) : null}
-    </section>
+    </>
   );
 }
 
-/* ─── legend ──────────────────────────────────────────────────────── */
+/* ─── week list view ──────────────────────────────────────────────── */
 
-const TYPE_LABEL: Record<EventKind, string> = {
-  issue: "выставить",
-  pay: "оплата",
-  document: "документ",
-  paid: "оплачено",
-};
+function WeekList({
+  weekRange,
+  events,
+  todayISO,
+}: {
+  weekRange: { start: string; end: string };
+  events: Map<string, DayEvent[]>;
+  todayISO: string;
+}) {
+  const days: string[] = [];
+  const cur = parseISODate(weekRange.start)!;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(cur);
+    d.setDate(cur.getDate() + i);
+    days.push(d.toISOString().slice(0, 10));
+  }
 
-function dotClass(k: EventKind): string {
-  return k === "issue"
-    ? "bg-amber-500"
-    : k === "pay"
-      ? "bg-sky-500"
-      : k === "document"
-        ? "bg-violet-500"
-        : "bg-good";
-}
-
-function Legend() {
   return (
-    <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-      {(["issue", "pay", "document", "paid"] as EventKind[]).map((k) => (
-        <span key={k} className="inline-flex items-center gap-1.5">
-          <span className={`inline-block size-2 rounded-full ${dotClass(k)}`} />
-          {TYPE_LABEL[k]}
-        </span>
-      ))}
+    <div className="divide-y divide-border">
+      {days.map((iso) => {
+        const evs = events.get(iso) ?? [];
+        const d = parseISODate(iso)!;
+        const isToday = iso === todayISO;
+        const label = d.toLocaleDateString("ru-RU", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+        });
+        return (
+          <div key={iso} className="p-4">
+            <div className="flex items-baseline gap-3 mb-2">
+              <h4
+                className={`font-display text-base leading-none capitalize ${
+                  isToday ? "text-primary" : ""
+                }`}
+              >
+                {label}
+              </h4>
+              <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+                {evs.length === 0 ? "пусто" : `${evs.length} событ.`}
+              </span>
+            </div>
+            {evs.length === 0 ? (
+              <p className="font-mono text-xs text-muted-foreground italic">
+                —
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {evs.map((e, i) => (
+                  <EventItem key={i} event={e} />
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-/* ─── day panel (below the grid when a day is selected) ──────────── */
+/* ─── day panel (below month grid when a day is expanded) ─────────── */
 
 function DayPanel({
   iso,
   events,
-  monthISO,
+  anchor,
 }: {
   iso: string;
   events: DayEvent[];
-  monthISO: string;
+  anchor: string;
 }) {
   return (
     <div className="border-t p-4">
@@ -219,7 +318,7 @@ function DayPanel({
           </span>
         </h4>
         <Link
-          href={`/invoices?tab=calendar&month=${monthISO}`}
+          href={`/invoices?tab=calendar&view=month&anchor=${anchor}`}
           className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground hover:text-foreground"
         >
           × Закрыть
@@ -232,25 +331,7 @@ function DayPanel({
       ) : (
         <ul className="space-y-2">
           {events.map((e, i) => (
-            <li
-              key={i}
-              className="flex items-start gap-3 p-2 rounded border border-border/40"
-            >
-              <span
-                className={`inline-block size-2 rounded-full mt-1.5 ${dotClass(e.kind)}`}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm">
-                  <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-muted-foreground mr-2">
-                    {TYPE_LABEL[e.kind]}
-                  </span>
-                  <span className="font-medium">{e.title}</span>
-                </div>
-                <div className="font-mono text-[10px] text-muted-foreground">
-                  {e.detail}
-                </div>
-              </div>
-            </li>
+            <EventItem key={i} event={e} />
           ))}
         </ul>
       )}
@@ -258,10 +339,42 @@ function DayPanel({
   );
 }
 
-/* ─── helpers ────────────────────────────────────────────────────── */
+function EventItem({ event }: { event: DayEvent }) {
+  return (
+    <li className="flex items-start gap-3 p-2 rounded border border-border/40">
+      <span className="text-lg leading-none mt-0.5" aria-hidden>
+        {EMOJI[event.kind]}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm">
+          <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-muted-foreground mr-2">
+            {TYPE_LABEL[event.kind]}
+          </span>
+          <span className="font-medium">{event.title}</span>
+        </div>
+        <div className="font-mono text-[10px] text-muted-foreground">
+          {event.projectId && event.projectName ? (
+            <Link
+              href={`/projects/${event.projectId}`}
+              className="text-primary hover:underline"
+            >
+              {event.projectName}
+            </Link>
+          ) : null}
+          {event.projectId && event.projectName && event.detail
+            ? " · "
+            : null}
+          {event.detail}
+        </div>
+      </div>
+    </li>
+  );
+}
 
-function buildEventsForMonth(
-  { year, month0 }: { year: number; month0: number },
+/* ─── event building ──────────────────────────────────────────────── */
+
+function buildEvents(
+  range: { start: string; end: string },
   invoices: Invoice[],
   templates: InvoiceTemplate[],
   reminders: DocumentReminder[],
@@ -269,61 +382,140 @@ function buildEventsForMonth(
 ): Map<string, DayEvent[]> {
   const events = new Map<string, DayEvent[]>();
   const push = (iso: string, ev: DayEvent) => {
+    if (iso < range.start || iso > range.end) return;
     const list = events.get(iso);
     if (list) list.push(ev);
     else events.set(iso, [ev]);
   };
 
-  const monthISO = `${year}-${String(month0 + 1).padStart(2, "0")}`;
+  // Which months does `range` intersect? For a month range it's one; for
+  // a week range it can be one or two. We iterate months so we can
+  // populate every recurring template / reminder day that lands in-range.
+  const months = monthsSpanning(range.start, range.end);
 
   for (const inv of invoices) {
     const s = effectiveStatus(inv);
     const projName = projects.get(inv.project_id)?.name ?? "—";
     const label = `${inv.invoice_number ?? "—"} ${projName}`;
     const detail = `${inv.currency} ${formatAmount(inv.amount)} · ${inv.client_name}`;
-    if (inv.due_date?.startsWith(monthISO) && s !== "cancelled" && s !== "paid") {
-      push(inv.due_date, { kind: "pay", title: label, detail });
+    if (inv.due_date && s !== "cancelled" && s !== "paid") {
+      push(inv.due_date, {
+        kind: "pay",
+        title: label,
+        detail,
+        projectId: inv.project_id,
+        projectName: projName,
+      });
     }
-    if (inv.paid_date?.startsWith(monthISO)) {
+    if (inv.paid_date) {
       push(inv.paid_date, {
         kind: "paid",
         title: label,
         detail: `${inv.currency} ${formatAmount(inv.paid_amount ?? inv.amount)}`,
+        projectId: inv.project_id,
+        projectName: projName,
       });
     }
-    if (
-      inv.scheduled_date?.startsWith(monthISO) &&
-      s === "to_issue"
-    ) {
+    if (inv.scheduled_date && s === "to_issue") {
       push(inv.scheduled_date, {
         kind: "issue",
         title: label,
         detail,
+        projectId: inv.project_id,
+        projectName: projName,
       });
     }
   }
 
-  for (const t of templates) {
-    if (t.active === false || !t.issue_day) continue;
-    const iso = `${monthISO}-${String(t.issue_day).padStart(2, "0")}`;
-    push(iso, {
-      kind: "issue",
-      title: projects.get(t.project_id)?.name ?? "—",
-      detail: `${t.client_name} · ~${t.currency} ${formatAmount(t.amount)}`,
-    });
-  }
-
-  for (const r of reminders) {
-    if (r.active === false) continue;
-    const iso = `${monthISO}-${String(r.expected_day).padStart(2, "0")}`;
-    push(iso, {
-      kind: "document",
-      title: r.name,
-      detail: projects.get(r.project_id)?.name ?? "—",
-    });
+  for (const monthISO of months) {
+    for (const t of templates) {
+      if (t.active === false || !t.issue_day) continue;
+      const iso = `${monthISO}-${String(t.issue_day).padStart(2, "0")}`;
+      push(iso, {
+        kind: "issue",
+        title: projects.get(t.project_id)?.name ?? "—",
+        detail: `${t.client_name} · ~${t.currency} ${formatAmount(t.amount)}`,
+        projectId: t.project_id,
+        projectName: projects.get(t.project_id)?.name,
+      });
+    }
+    for (const r of reminders) {
+      if (r.active === false) continue;
+      const iso = `${monthISO}-${String(r.expected_day).padStart(2, "0")}`;
+      push(iso, {
+        kind: "document",
+        title: r.name,
+        detail: "",
+        projectId: r.project_id,
+        projectName: projects.get(r.project_id)?.name,
+      });
+    }
   }
 
   return events;
+}
+
+/* ─── ranges / dates ──────────────────────────────────────────────── */
+
+function monthRangeFor(d: Date): { start: string; end: string } {
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const start = `${y}-${String(m + 1).padStart(2, "0")}-01`;
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  const end = `${y}-${String(m + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  return { start, end };
+}
+
+function weekRangeFor(d: Date): { start: string; end: string } {
+  // Monday as first day
+  const dow = (d.getDay() + 6) % 7;
+  const s = new Date(d);
+  s.setDate(d.getDate() - dow);
+  const e = new Date(s);
+  e.setDate(s.getDate() + 6);
+  return {
+    start: s.toISOString().slice(0, 10),
+    end: e.toISOString().slice(0, 10),
+  };
+}
+
+function monthsSpanning(startISO: string, endISO: string): string[] {
+  const out: string[] = [];
+  const s = parseISODate(startISO)!;
+  const e = parseISODate(endISO)!;
+  let cur = new Date(s.getFullYear(), s.getMonth(), 1);
+  while (cur <= e) {
+    out.push(
+      `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`,
+    );
+    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+  }
+  return out;
+}
+
+function shiftAnchor(d: Date, view: CalendarView, delta: -1 | 1): string {
+  const nd = new Date(d);
+  if (view === "month") {
+    nd.setMonth(nd.getMonth() + delta);
+    nd.setDate(1);
+  } else {
+    nd.setDate(nd.getDate() + delta * 7);
+  }
+  return nd.toISOString().slice(0, 10);
+}
+
+function hrefFor(view: CalendarView, anchor: string): string {
+  return `/invoices?tab=calendar&view=${view}&anchor=${anchor}`;
+}
+
+function ymOf(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function parseISODate(s: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(s + "T00:00:00");
+  return isNaN(d.getTime()) ? null : d;
 }
 
 type Cell = {
@@ -335,16 +527,14 @@ type Cell = {
 
 function buildMonthGrid(year: number, month0: number): Cell[] {
   const first = new Date(year, month0, 1);
-  // Monday=0, ..., Sunday=6
   const firstDow = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(year, month0 + 1, 0).getDate();
   const daysPrev = new Date(year, month0, 0).getDate();
 
   const cells: Cell[] = [];
-  // Leading cells (previous month tail)
   for (let i = 0; i < firstDow; i++) {
     const day = daysPrev - firstDow + 1 + i;
-    const prev = shiftMonth(year, month0, -1);
+    const prev = shiftMonthYm(year, month0, -1);
     cells.push({
       key: `p${i}`,
       iso: `${prev}-${String(day).padStart(2, "0")}`,
@@ -352,7 +542,6 @@ function buildMonthGrid(year: number, month0: number): Cell[] {
       inMonth: false,
     });
   }
-  // In-month cells
   for (let d = 1; d <= daysInMonth; d++) {
     cells.push({
       key: `c${d}`,
@@ -361,10 +550,9 @@ function buildMonthGrid(year: number, month0: number): Cell[] {
       inMonth: true,
     });
   }
-  // Trailing cells (next month head) to complete a 6x7 grid
   while (cells.length < 42) {
     const d = cells.length - (firstDow + daysInMonth) + 1;
-    const nxt = shiftMonth(year, month0, +1);
+    const nxt = shiftMonthYm(year, month0, +1);
     cells.push({
       key: `n${d}`,
       iso: `${nxt}-${String(d).padStart(2, "0")}`,
@@ -375,7 +563,7 @@ function buildMonthGrid(year: number, month0: number): Cell[] {
   return cells;
 }
 
-function shiftMonth(year: number, month0: number, delta: number): string {
+function shiftMonthYm(year: number, month0: number, delta: number): string {
   const d = new Date(year, month0 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }

@@ -36,7 +36,10 @@ import {
   type TodayDocumentItem,
 } from "@/components/invoices/today-widget";
 import { InvoicesDashboard } from "@/components/invoices/invoices-dashboard";
-import { InvoicesCalendar } from "@/components/invoices/invoices-calendar";
+import {
+  InvoicesCalendar,
+  type CalendarView,
+} from "@/components/invoices/invoices-calendar";
 import type {
   Invoice,
   InvoiceTemplate,
@@ -47,7 +50,12 @@ export const dynamic = "force-dynamic";
 
 type Tab = "dashboard" | "calendar" | "all" | "recurring" | "documents";
 
-type SP = Promise<{ tab?: string; month?: string; day?: string }>;
+type SP = Promise<{
+  tab?: string;
+  view?: string;
+  anchor?: string;
+  day?: string;
+}>;
 
 const FREQ_LABELS: Record<string, string> = {
   monthly: "Ежемесячно",
@@ -65,10 +73,10 @@ export default async function InvoicesPage({
   const sp = await searchParams;
   const knownTabs: Tab[] = ["dashboard", "calendar", "all", "recurring", "documents"];
   const tab: Tab = (knownTabs.includes(sp.tab as Tab) ? sp.tab : "dashboard") as Tab;
-  const todayMonthISO = new Date().toISOString().slice(0, 7);
-  const monthISO = /^\d{4}-\d{2}$/.test(sp.month ?? "")
-    ? (sp.month as string)
-    : todayMonthISO;
+  const calendarView: CalendarView = sp.view === "week" ? "week" : "month";
+  const calendarAnchor = /^\d{4}-\d{2}-\d{2}$/.test(sp.anchor ?? "")
+    ? (sp.anchor as string)
+    : new Date().toISOString().slice(0, 10);
   const selectedDay = /^\d{4}-\d{2}-\d{2}$/.test(sp.day ?? "")
     ? (sp.day as string)
     : undefined;
@@ -218,7 +226,8 @@ export default async function InvoicesPage({
         />
       ) : tab === "calendar" ? (
         <InvoicesCalendar
-          monthISO={monthISO}
+          view={calendarView}
+          anchor={calendarAnchor}
           selectedDay={selectedDay}
           invoices={invoices}
           templates={templates}
