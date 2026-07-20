@@ -173,6 +173,7 @@ export const InvoiceTemplate = z.object({
   issue_day: z.coerce.number().int().min(1).max(28).nullable().optional(),
   payment_terms_days: z.coerce.number().int().min(0).default(14),
   next_issue_date: ISODate,
+  last_issued_at: z.string().nullable().optional(),
   active: z.boolean().optional(),
   notes: z.string().max(2000).nullable().optional(),
   created_at: z.string().optional(),

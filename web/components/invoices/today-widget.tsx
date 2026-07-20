@@ -1,6 +1,9 @@
 "use client";
 
-import { markDocumentReminderReceived } from "@/app/(protected)/invoices/_actions";
+import {
+  markDocumentReminderReceived,
+  markInvoiceTemplateDone,
+} from "@/app/(protected)/invoices/_actions";
 import { reportActionError } from "@/lib/client-errors";
 import type {
   Invoice,
@@ -101,7 +104,7 @@ export function TodayWidget({
       {documents.length > 0 ? (
         <section>
           <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-sky-600 dark:text-sky-400 mb-2">
-            Ждём документы · {documents.length}
+            Ждём Credit Note HAYS · {documents.length}
           </div>
           <ul className="space-y-1.5">
             {documents.map((it) => (
@@ -129,39 +132,75 @@ function IssueRow({
 }) {
   const opt = projectOptions.find((p) => p.id === item.template.project_id);
   const suggested = opt?.next_invoice_number ?? "";
-  const when =
-    item.daysUntil === 0
+  const missed = item.daysUntil < 0;
+  const when = missed
+    ? `${-item.daysUntil} дн. назад`
+    : item.daysUntil === 0
       ? "сегодня"
-      : item.daysUntil < 0
-        ? `${-item.daysUntil} дн. назад`
-        : `через ${item.daysUntil} дн.`;
+      : `через ${item.daysUntil} дн.`;
   return (
-    <li className="flex items-center justify-between gap-3 flex-wrap py-1 border-b border-border/30 last:border-b-0">
+    <li
+      className={`flex items-center justify-between gap-3 flex-wrap py-1 border-b border-border/30 last:border-b-0 ${
+        missed ? "bg-destructive/5 -mx-1 px-1 rounded" : ""
+      }`}
+    >
       <div className="min-w-0 flex-1">
-        <div className="text-sm">
-          <span className="font-mono text-muted-foreground">{suggested}</span>{" "}
-          <span className="font-medium">
-            {project?.name ?? "—"}
-          </span>{" "}
-          <span className="text-muted-foreground">— выставить {when}</span>
+        <div className="text-sm flex items-center gap-1.5 flex-wrap">
+          {missed ? (
+            <span
+              className="text-destructive text-base leading-none"
+              aria-hidden
+              title="Ты пропустила эту дату"
+            >
+              ❗
+            </span>
+          ) : null}
+          <span className="font-mono text-muted-foreground">{suggested}</span>
+          <span className="font-medium">{project?.name ?? "—"}</span>
+          <span
+            className={
+              missed ? "text-destructive" : "text-muted-foreground"
+            }
+          >
+            — выставить {when}
+          </span>
         </div>
         <div className="font-mono text-[10px] text-muted-foreground">
           {item.template.client_name} · {item.template.currency}{" "}
           {formatAmount(item.template.amount)}
         </div>
       </div>
-      <InvoiceDialog
-        projects={projectOptions}
-        defaultProjectId={item.template.project_id}
-        trigger={
+      <div className="flex items-center gap-1.5">
+        <InvoiceDialog
+          projects={projectOptions}
+          defaultProjectId={item.template.project_id}
+          trigger={
+            <button
+              type="button"
+              className="rounded border border-primary/40 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-primary hover:bg-primary/20 transition"
+            >
+              + Создать
+            </button>
+          }
+        />
+        <form
+          action={async () => {
+            try {
+              await markInvoiceTemplateDone(item.template.id);
+            } catch (err) {
+              reportActionError(err, "Не сохранилось");
+            }
+          }}
+        >
           <button
-            type="button"
-            className="rounded border border-primary/40 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-primary hover:bg-primary/20 transition"
+            type="submit"
+            className="rounded border border-good/40 bg-good/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-good hover:bg-good/20 transition"
+            title="Отметить как выполненную — исчезнет до следующего месяца"
           >
-            + Создать
+            ✓ Готово
           </button>
-        }
-      />
+        </form>
+      </div>
     </li>
   );
 }

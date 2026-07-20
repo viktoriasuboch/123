@@ -138,6 +138,39 @@ export async function createInvoice(formData: FormData) {
 
   const { error } = await sb().from("invoices").insert(parsed.data);
   if (error) throw error;
+
+  // If the invoice was created off a reminder, mark the reminder as
+  // done for the current cycle so it stops showing on the dashboard.
+  if (parsed.data.template_id) {
+    await sb()
+      .from("invoice_templates")
+      .update({ last_issued_at: new Date().toISOString() })
+      .eq("id", parsed.data.template_id);
+  }
+
+  revalidatePath("/invoices");
+}
+
+export async function markInvoiceTemplateDone(id: string) {
+  await requireUser();
+  Uuid.parse(id);
+  const { error } = await sb()
+    .from("invoice_templates")
+    .update({ last_issued_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+  revalidatePath("/invoices");
+}
+
+/** Clear "done" flag so the reminder resurfaces on the dashboard. */
+export async function undoInvoiceTemplateDone(id: string) {
+  await requireUser();
+  Uuid.parse(id);
+  const { error } = await sb()
+    .from("invoice_templates")
+    .update({ last_issued_at: null })
+    .eq("id", id);
+  if (error) throw error;
   revalidatePath("/invoices");
 }
 

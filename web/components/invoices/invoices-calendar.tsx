@@ -27,7 +27,7 @@ const EMOJI: Record<EventKind, string> = {
 const TYPE_LABEL: Record<EventKind, string> = {
   issue: "выставить",
   pay: "оплата",
-  document: "документ",
+  document: "credit note",
   paid: "оплачено",
 };
 

@@ -4,6 +4,9 @@ import type {
   DocumentReminder,
 } from "@/lib/schemas";
 import { effectiveStatus } from "./invoice-status-badge";
+import { InvoiceTemplateDialog, type ProjectOption } from "./invoice-template-dialog";
+import { TemplateRowActions } from "./template-row-actions";
+import { Button } from "@/components/ui/button";
 
 type CurrencyBucket = Record<string, number>;
 type AgingBucket = Record<string, CurrencyBucket>;
@@ -20,11 +23,13 @@ export function InvoicesDashboard({
   templates,
   reminders,
   projects,
+  projectOptions,
 }: {
   invoices: Invoice[];
   templates: InvoiceTemplate[];
   reminders: DocumentReminder[];
   projects: Map<string, { id: string; name: string }>;
+  projectOptions: ProjectOption[];
 }) {
   const today = new Date();
   const todayISO = today.toISOString().slice(0, 10);
@@ -150,7 +155,121 @@ export function InvoicesDashboard({
           <UpcomingList events={upcoming} />
         </section>
       </div>
+
+      <RemindersSection
+        templates={templates}
+        projects={projects}
+        projectOptions={projectOptions}
+      />
     </div>
+  );
+}
+
+/* ─── reminders section ───────────────────────────────────────────── */
+
+function RemindersSection({
+  templates,
+  projects,
+  projectOptions,
+}: {
+  templates: InvoiceTemplate[];
+  projects: Map<string, { id: string; name: string }>;
+  projectOptions: ProjectOption[];
+}) {
+  return (
+    <section className="rounded-md border bg-card">
+      <header className="flex items-center justify-between p-4 border-b flex-wrap gap-3">
+        <div>
+          <h3 className="font-display text-lg tracking-wide leading-none">
+            🔁 Напоминалки
+          </h3>
+          <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-1">
+            Ежемесячные ориентиры для выставления инвойсов
+          </p>
+        </div>
+        <InvoiceTemplateDialog
+          projects={projectOptions}
+          trigger={
+            <Button
+              size="sm"
+              className="font-mono text-[10px] uppercase tracking-[0.15em]"
+            >
+              + Напоминалка
+            </Button>
+          }
+        />
+      </header>
+      {templates.length === 0 ? (
+        <p className="p-6 text-center font-mono text-xs text-muted-foreground">
+          Напоминалок нет. Заведи первую — например HAYS Project X, каждое 25-е число.
+        </p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+              <th className="text-left p-3 font-normal">Клиент / Проект</th>
+              <th className="text-right p-3 font-normal">Сумма</th>
+              <th className="text-left p-3 font-normal">День</th>
+              <th className="text-left p-3 font-normal">В этом месяце</th>
+              <th className="text-right p-3 font-normal" />
+            </tr>
+          </thead>
+          <tbody>
+            {templates.map((t) => {
+              const project = projects.get(t.project_id);
+              const done = isTemplateDoneThisMonth(t);
+              return (
+                <tr
+                  key={t.id}
+                  className="border-b border-border/40 hover:bg-muted/20 transition"
+                >
+                  <td className="p-3">
+                    <div className="flex flex-col">
+                      <span className="font-medium">{t.client_name}</span>
+                      <span className="font-mono text-[10px] text-muted-foreground">
+                        {project?.name ?? "—"}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="p-3 text-right font-mono">
+                    {t.currency} {formatAmount(t.amount)}
+                  </td>
+                  <td className="p-3 font-mono text-xs text-muted-foreground">
+                    {t.issue_day ? `${t.issue_day}-го` : "—"}
+                  </td>
+                  <td className="p-3">
+                    {done ? (
+                      <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-good">
+                        ✓ выполнено
+                      </span>
+                    ) : (
+                      <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber-600 dark:text-amber-400">
+                        ждёт
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-3 text-right">
+                    <TemplateRowActions
+                      template={t}
+                      projects={projectOptions}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+function isTemplateDoneThisMonth(t: InvoiceTemplate): boolean {
+  if (!t.last_issued_at) return false;
+  const now = new Date();
+  const d = new Date(t.last_issued_at);
+  return (
+    d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
   );
 }
 

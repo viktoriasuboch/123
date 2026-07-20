@@ -24,8 +24,6 @@ import {
   effectiveStatus,
 } from "@/components/invoices/invoice-status-badge";
 import { InvoiceRowActions } from "@/components/invoices/invoice-row-actions";
-import { TemplateRowActions } from "@/components/invoices/template-row-actions";
-import { InvoiceTemplateDialog } from "@/components/invoices/invoice-template-dialog";
 import { InvoiceDialog } from "@/components/invoices/invoice-dialog";
 import { DocumentReminderDialog } from "@/components/invoices/document-reminder-dialog";
 import { DocumentReminderRowActions } from "@/components/invoices/document-reminder-row-actions";
@@ -40,15 +38,11 @@ import {
   InvoicesCalendar,
   type CalendarView,
 } from "@/components/invoices/invoices-calendar";
-import type {
-  Invoice,
-  InvoiceTemplate,
-  DocumentReminder,
-} from "@/lib/schemas";
+import type { Invoice, DocumentReminder } from "@/lib/schemas";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "dashboard" | "calendar" | "all" | "recurring" | "documents";
+type Tab = "dashboard" | "calendar" | "all" | "documents";
 
 type SP = Promise<{
   tab?: string;
@@ -57,21 +51,13 @@ type SP = Promise<{
   day?: string;
 }>;
 
-const FREQ_LABELS: Record<string, string> = {
-  monthly: "Ежемесячно",
-  quarterly: "Раз в квартал",
-  once: "Разово",
-};
-
-const ISSUE_WINDOW_DAYS = 7;
-
 export default async function InvoicesPage({
   searchParams,
 }: {
   searchParams: SP;
 }) {
   const sp = await searchParams;
-  const knownTabs: Tab[] = ["dashboard", "calendar", "all", "recurring", "documents"];
+  const knownTabs: Tab[] = ["dashboard", "calendar", "all", "documents"];
   const tab: Tab = (knownTabs.includes(sp.tab as Tab) ? sp.tab : "dashboard") as Tab;
   const calendarView: CalendarView = sp.view === "week" ? "week" : "month";
   const calendarAnchor = /^\d{4}-\d{2}-\d{2}$/.test(sp.anchor ?? "")
@@ -110,23 +96,22 @@ export default async function InvoicesPage({
   const today = new Date();
   const todayISO = today.toISOString().slice(0, 10);
 
-  // Build the "today" widget's three sections.
+  // Build the "today" widget's three sections. Reminders stay on the
+  // dashboard until the user marks them done for the current month —
+  // we don't hide them just because the day has passed.
   const toIssue: TodayIssueItem[] = [];
   for (const t of templates) {
     if (t.active === false) continue;
     const day = t.issue_day ?? null;
     if (!day) continue;
-    // Days until the next occurrence of `day` in this or next month.
-    // If today >= day: it's this month, already due (daysUntil negative).
-    // If today < day: it's coming up this month.
+    if (isTemplateDoneThisMonth(t, today)) continue;
     const thisMonth = new Date(today.getFullYear(), today.getMonth(), day);
     const diffDays = Math.round(
       (thisMonth.getTime() - today.getTime()) / 86400_000,
     );
-    if (diffDays <= ISSUE_WINDOW_DAYS && diffDays >= -3) {
-      toIssue.push({ kind: "template" as const, template: t, daysUntil: diffDays });
-    }
+    toIssue.push({ kind: "template" as const, template: t, daysUntil: diffDays });
   }
+  // Missed ones first (most overdue at the top), then upcoming.
   toIssue.sort((a, b) => a.daysUntil - b.daysUntil);
 
   const overdue: TodayOverdueItem[] = invoices
@@ -160,19 +145,7 @@ export default async function InvoicesPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {tab === "recurring" ? (
-            <InvoiceTemplateDialog
-              projects={projectOptions}
-              trigger={
-                <Button
-                  size="sm"
-                  className="font-mono text-[10px] uppercase tracking-[0.15em]"
-                >
-                  + Напоминалка
-                </Button>
-              }
-            />
-          ) : tab === "documents" ? (
+          {tab === "documents" ? (
             <DocumentReminderDialog
               projects={projects.map((p) => ({ id: p.id, name: p.name }))}
               trigger={
@@ -180,7 +153,7 @@ export default async function InvoicesPage({
                   size="sm"
                   className="font-mono text-[10px] uppercase tracking-[0.15em]"
                 >
-                  + Документ
+                  + Credit Note
                 </Button>
               }
             />
@@ -213,7 +186,6 @@ export default async function InvoicesPage({
       <TabsNav
         tab={tab}
         allCount={invoices.length}
-        recCount={templates.length}
         docCount={reminders.length}
       />
 
@@ -223,6 +195,7 @@ export default async function InvoicesPage({
           templates={templates}
           reminders={reminders}
           projects={projectsById}
+          projectOptions={projectOptions}
         />
       ) : tab === "calendar" ? (
         <InvoicesCalendar
@@ -233,12 +206,6 @@ export default async function InvoicesPage({
           templates={templates}
           reminders={reminders}
           projects={projectsById}
-        />
-      ) : tab === "recurring" ? (
-        <TemplatesTable
-          templates={templates}
-          projectsById={projectsById}
-          projectOptions={projectOptions}
         />
       ) : tab === "documents" ? (
         <DocumentsTable
@@ -262,12 +229,10 @@ export default async function InvoicesPage({
 function TabsNav({
   tab,
   allCount,
-  recCount,
   docCount,
 }: {
   tab: Tab;
   allCount: number;
-  recCount: number;
   docCount: number;
 }) {
   const items: {
@@ -278,8 +243,7 @@ function TabsNav({
     { id: "dashboard", label: "Дашборд", count: null },
     { id: "calendar", label: "Календарь", count: null },
     { id: "all", label: "Все инвойсы", count: allCount },
-    { id: "recurring", label: "Напоминалки", count: recCount },
-    { id: "documents", label: "Документы", count: docCount },
+    { id: "documents", label: "Credit Notes", count: docCount },
   ];
   return (
     <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
@@ -408,82 +372,17 @@ function InvoicesTable({
   );
 }
 
-/* ─── templates table ─────────────────────────────────────────────── */
+/* ─── helpers ─────────────────────────────────────────────────────── */
 
-function TemplatesTable({
-  templates,
-  projectsById,
-  projectOptions,
-}: {
-  templates: InvoiceTemplate[];
-  projectsById: Map<string, { id: string; name: string }>;
-  projectOptions: import("@/components/invoices/invoice-template-dialog").ProjectOption[];
-}) {
-  if (templates.length === 0) {
-    return (
-      <div className="rounded-md border border-border bg-card py-16 text-center">
-        <p className="font-mono text-xs text-muted-foreground">
-          Напоминалок нет. Заведи первую — например HAYS Project X, каждое 25-е число.
-        </p>
-      </div>
-    );
-  }
-
+function isTemplateDoneThisMonth(
+  t: import("@/lib/schemas").InvoiceTemplate,
+  today: Date,
+): boolean {
+  if (!t.last_issued_at) return false;
+  const d = new Date(t.last_issued_at);
   return (
-    <div className="rounded-md border border-border bg-card">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="font-mono text-[10px] uppercase tracking-[0.15em]">
-              Клиент / Проект
-            </TableHead>
-            <TableHead className="font-mono text-[10px] uppercase tracking-[0.15em]">
-              Сумма
-            </TableHead>
-            <TableHead className="font-mono text-[10px] uppercase tracking-[0.15em]">
-              Частота
-            </TableHead>
-            <TableHead className="font-mono text-[10px] uppercase tracking-[0.15em]">
-              День
-            </TableHead>
-            <TableHead className="text-right" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {templates.map((t) => {
-            const project = projectsById.get(t.project_id);
-            const freq = t.frequency ?? "monthly";
-            return (
-              <TableRow key={t.id}>
-                <TableCell>
-                  <div className="flex flex-col">
-                    <span className="font-medium">{t.client_name}</span>
-                    <span className="font-mono text-[10px] text-muted-foreground">
-                      {project?.name ?? "—"}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell className="font-mono">
-                  {t.currency} {formatAmount(t.amount)}
-                </TableCell>
-                <TableCell className="font-mono text-xs">
-                  {FREQ_LABELS[freq] ?? freq}
-                </TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">
-                  {t.issue_day ? `${t.issue_day}-го числа` : "—"}
-                </TableCell>
-                <TableCell className="text-right">
-                  <TemplateRowActions
-                    template={t}
-                    projects={projectOptions}
-                  />
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth()
   );
 }
 
@@ -502,7 +401,7 @@ function DocumentsTable({
     return (
       <div className="rounded-md border border-border bg-card py-16 text-center">
         <p className="font-mono text-xs text-muted-foreground">
-          Напоминалок про документы нет. Пример: «Credit note от HAYS к 10-му числу».
+          Credit notes ещё не отслеживаются. Пример: «Credit note от HAYS к 10-му числу».
         </p>
       </div>
     );
