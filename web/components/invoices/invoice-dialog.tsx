@@ -80,7 +80,11 @@ export function InvoiceDialog({
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-display text-2xl tracking-wide">
-              {isEdit ? "Редактировать инвойс" : "Новый инвойс"}
+              {isEdit
+                ? "Редактировать инвойс"
+                : makeRecurring
+                  ? "Новый рекуррентный инвойс"
+                  : "Новый инвойс"}
             </DialogTitle>
           </DialogHeader>
           <form
@@ -92,22 +96,24 @@ export function InvoiceDialog({
                     (p) => p.id === (fd.get("project_id") as string),
                   )?.name ?? "";
                 fd.set("client_name", projectName);
-                // On create we lock status=issued (the user just sent it).
-                if (!isEdit) fd.set("status", "issued");
 
                 if (isEdit && invoice) {
                   await updateInvoice(invoice.id, fd);
+                } else if (makeRecurring) {
+                  // "Recurring" mode = we're setting up a reminder, NOT
+                  // issuing an invoice today. Don't materialise a
+                  // concrete `invoices` row — just the template.
+                  // "Дата инвойса" becomes the start of the schedule.
+                  await createInvoiceTemplate(
+                    buildTemplateFormData(fd, recurringMode, projectName),
+                  );
                 } else {
+                  fd.set("status", "issued");
                   await createInvoice(fd);
-                  if (makeRecurring) {
-                    await createInvoiceTemplate(
-                      buildTemplateFormData(fd, recurringMode, projectName),
-                    );
-                  }
                 }
                 setOpen(false);
               } catch (err) {
-                reportActionError(err, "Не сохранился инвойс");
+                reportActionError(err, "Не сохранилось");
               }
             }}
             className="space-y-4"
@@ -188,13 +194,13 @@ export function InvoiceDialog({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className={makeRecurring ? "" : "grid grid-cols-2 gap-3"}>
               <div className="space-y-1.5">
                 <Label
                   htmlFor="issue_date"
                   className="text-xs uppercase tracking-widest text-muted-foreground"
                 >
-                  Дата инвойса *
+                  {makeRecurring ? "Первое выставление *" : "Дата инвойса *"}
                 </Label>
                 <Input
                   id="issue_date"
@@ -205,8 +211,6 @@ export function InvoiceDialog({
                   onChange={(e) => {
                     const v = e.target.value;
                     setIssueDate(v);
-                    // Nudge due_date forward with issue_date if user
-                    // hasn't manually broken the link yet (delta of 14).
                     if (v && dueDate && issueDate) {
                       const oldDelta =
                         (new Date(dueDate).getTime() -
@@ -218,45 +222,54 @@ export function InvoiceDialog({
                     }
                   }}
                 />
+                {makeRecurring ? (
+                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                    С этой даты запустится напоминалка. Сам инвойс создадим когда выставишь.
+                  </p>
+                ) : null}
               </div>
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="due_date"
-                  className="text-xs uppercase tracking-widest text-muted-foreground"
-                >
-                  Оплатить до *
-                </Label>
-                <Input
-                  id="due_date"
-                  name="due_date"
-                  type="date"
-                  required
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label
-                htmlFor="invoice_number"
-                className="text-xs uppercase tracking-widest text-muted-foreground"
-              >
-                Номер
-              </Label>
-              <Input
-                id="invoice_number"
-                name="invoice_number"
-                value={invoiceNumber}
-                onChange={(e) => setInvoiceNumber(e.target.value)}
-                placeholder="INV-001"
-              />
-              {!isEdit && project ? (
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                  Следующий по проекту: {project.next_invoice_number}
-                </p>
+              {!makeRecurring ? (
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="due_date"
+                    className="text-xs uppercase tracking-widest text-muted-foreground"
+                  >
+                    Оплатить до *
+                  </Label>
+                  <Input
+                    id="due_date"
+                    name="due_date"
+                    type="date"
+                    required
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                  />
+                </div>
               ) : null}
             </div>
+
+            {!makeRecurring ? (
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="invoice_number"
+                  className="text-xs uppercase tracking-widest text-muted-foreground"
+                >
+                  Номер
+                </Label>
+                <Input
+                  id="invoice_number"
+                  name="invoice_number"
+                  value={invoiceNumber}
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                  placeholder="INV-001"
+                />
+                {!isEdit && project ? (
+                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                    Следующий по проекту: {project.next_invoice_number}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="space-y-1.5">
               <Label
@@ -348,7 +361,13 @@ export function InvoiceDialog({
               >
                 Отмена
               </Button>
-              <Button type="submit">{isEdit ? "Сохранить" : "Создать"}</Button>
+              <Button type="submit">
+                {isEdit
+                  ? "Сохранить"
+                  : makeRecurring
+                    ? "Настроить рекуррент"
+                    : "Создать инвойс"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
