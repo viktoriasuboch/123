@@ -28,7 +28,11 @@ import { InvoiceRowActions } from "@/components/invoices/invoice-row-actions";
 import { InvoiceDialog } from "@/components/invoices/invoice-dialog";
 import { DocumentReminderDialog } from "@/components/invoices/document-reminder-dialog";
 import { DocumentReminderRowActions } from "@/components/invoices/document-reminder-row-actions";
-import { ProjectsTab } from "@/components/invoices/projects-tab";
+import {
+  ProjectsTab,
+  type ProjectScope,
+} from "@/components/invoices/projects-tab";
+import { IssuedMonthFilter } from "@/components/invoices/issued-month-filter";
 import {
   TodayWidget,
   type TodayIssueItem,
@@ -48,14 +52,25 @@ import type {
 
 export const dynamic = "force-dynamic";
 
-type Tab = "dashboard" | "calendar" | "all" | "projects" | "documents";
+type Tab = "dashboard" | "calendar" | "all" | "projects";
+
+type InvoiceScope = "invoices" | "hays";
 
 type SP = Promise<{
   tab?: string;
   view?: string;
   anchor?: string;
   day?: string;
+  scope?: string;
+  issued_month?: string;
 }>;
+
+const isHaysProject = (name: string) => /hays/i.test(name);
+const yearMonth = (iso: string | null | undefined): string | null => {
+  if (!iso) return null;
+  const m = iso.match(/^(\d{4})-(\d{2})/);
+  return m ? `${m[1]}-${m[2]}` : null;
+};
 
 export default async function InvoicesPage({
   searchParams,
@@ -63,8 +78,11 @@ export default async function InvoicesPage({
   searchParams: SP;
 }) {
   const sp = await searchParams;
-  const knownTabs: Tab[] = ["dashboard", "calendar", "all", "projects", "documents"];
-  const tab: Tab = (knownTabs.includes(sp.tab as Tab) ? sp.tab : "dashboard") as Tab;
+  const knownTabs: Tab[] = ["dashboard", "calendar", "all", "projects"];
+  // Legacy tab=documents redirects onto tab=all&scope=hays; the concepts
+  // now live together on the "Все инвойсы" tab.
+  const rawTab = sp.tab === "documents" ? "all" : sp.tab;
+  const tab: Tab = (knownTabs.includes(rawTab as Tab) ? rawTab : "dashboard") as Tab;
   const calendarView: CalendarView = sp.view === "week" ? "week" : "month";
   const calendarAnchor = /^\d{4}-\d{2}-\d{2}$/.test(sp.anchor ?? "")
     ? (sp.anchor as string)
@@ -72,6 +90,13 @@ export default async function InvoicesPage({
   const selectedDay = /^\d{4}-\d{2}-\d{2}$/.test(sp.day ?? "")
     ? (sp.day as string)
     : undefined;
+  const projectScope: ProjectScope = sp.scope === "hays" ? "hays" : "all";
+  const invoiceScope: InvoiceScope =
+    sp.scope === "hays" || sp.tab === "documents" ? "hays" : "invoices";
+  const issuedMonthFilter =
+    /^\d{4}-\d{2}$/.test(sp.issued_month ?? "")
+      ? (sp.issued_month as string)
+      : "all";
 
   const [templates, invoices, projects, reminders] = await Promise.all([
     listInvoiceTemplates(),
@@ -163,7 +188,7 @@ export default async function InvoicesPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {tab === "documents" ? (
+          {tab === "all" && invoiceScope === "hays" ? (
             <DocumentReminderDialog
               projects={projects.map((p) => ({ id: p.id, name: p.name }))}
               trigger={
@@ -175,7 +200,9 @@ export default async function InvoicesPage({
                 </Button>
               }
             />
-          ) : tab === "calendar" || tab === "dashboard" ? null : (
+          ) : tab === "calendar" ||
+            tab === "dashboard" ||
+            tab === "projects" ? null : (
             <InvoiceDialog
               projects={projectOptions}
               trigger={
@@ -201,11 +228,7 @@ export default async function InvoicesPage({
         />
       ) : null}
 
-      <TabsNav
-        tab={tab}
-        allCount={invoices.length}
-        docCount={reminders.length}
-      />
+      <TabsNav tab={tab} allCount={invoices.length + reminders.length} />
 
       {tab === "dashboard" ? (
         <InvoicesDashboard
@@ -219,6 +242,7 @@ export default async function InvoicesPage({
           projectOptions={projectOptions}
           projects={projects}
           templatesByProject={groupBy(templates, (t) => t.project_id)}
+          scope={projectScope}
         />
       ) : tab === "calendar" ? (
         <InvoicesCalendar
@@ -230,17 +254,15 @@ export default async function InvoicesPage({
           reminders={reminders}
           projects={projectsById}
         />
-      ) : tab === "documents" ? (
-        <DocumentsTable
+      ) : (
+        <AllInvoicesTab
+          invoices={invoices}
           reminders={reminders}
           projectsById={projectsById}
           projects={projects.map((p) => ({ id: p.id, name: p.name }))}
-        />
-      ) : (
-        <InvoicesTable
-          invoices={invoices}
-          projectsById={projectsById}
           projectOptions={projectOptions}
+          scope={invoiceScope}
+          issuedMonth={issuedMonthFilter}
         />
       )}
     </div>
@@ -252,11 +274,9 @@ export default async function InvoicesPage({
 function TabsNav({
   tab,
   allCount,
-  docCount,
 }: {
   tab: Tab;
   allCount: number;
-  docCount: number;
 }) {
   const items: {
     id: Tab;
@@ -267,7 +287,6 @@ function TabsNav({
     { id: "calendar", label: "Календарь", count: null },
     { id: "all", label: "Все инвойсы", count: allCount },
     { id: "projects", label: "Проекты", count: null },
-    { id: "documents", label: "Credit Notes", count: docCount },
   ];
   return (
     <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
@@ -292,6 +311,211 @@ function TabsNav({
       })}
     </div>
   );
+}
+
+/* ─── all-invoices tab: switches + filter + forecast + tables ─────── */
+
+function AllInvoicesTab({
+  invoices,
+  reminders,
+  projectsById,
+  projects,
+  projectOptions,
+  scope,
+  issuedMonth,
+}: {
+  invoices: Invoice[];
+  reminders: DocumentReminder[];
+  projectsById: Map<string, { id: string; name: string }>;
+  projects: { id: string; name: string }[];
+  projectOptions: import("@/components/invoices/invoice-template-dialog").ProjectOption[];
+  scope: InvoiceScope;
+  issuedMonth: string; // YYYY-MM or "all"
+}) {
+  // Non-HAYS invoices vs HAYS. HAYS = invoices for projects whose name
+  // matches /hays/i. Credit-note reminders always live under the HAYS
+  // switch.
+  const projectsHaysMap = new Map<string, boolean>();
+  projectsById.forEach((p, id) => projectsHaysMap.set(id, isHaysProject(p.name)));
+  const nonHaysInvoices = invoices.filter(
+    (i) => !projectsHaysMap.get(i.project_id),
+  );
+  const haysInvoices = invoices.filter((i) =>
+    projectsHaysMap.get(i.project_id),
+  );
+
+  const filteredInvoices = (
+    scope === "hays" ? haysInvoices : nonHaysInvoices
+  ).filter((inv) => {
+    if (issuedMonth === "all") return true;
+    return yearMonth(inv.issue_date) === issuedMonth;
+  });
+
+  // Options for the "issued month" dropdown: distinct issue_month
+  // values seen in the current scope's invoices, sorted newest first.
+  const monthOptions = Array.from(
+    new Set(
+      (scope === "hays" ? haysInvoices : nonHaysInvoices)
+        .map((i) => yearMonth(i.issue_date))
+        .filter((m): m is string => !!m),
+    ),
+  ).sort((a, b) => b.localeCompare(a));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 justify-between">
+        <InvoiceScopeSwitches
+          scope={scope}
+          issuedMonth={issuedMonth}
+          invoicesCount={nonHaysInvoices.length}
+          haysInvoicesCount={haysInvoices.length + reminders.length}
+        />
+        <IssuedMonthFilter
+          value={issuedMonth}
+          options={monthOptions}
+          scope={scope}
+        />
+      </div>
+
+      {scope === "invoices" ? (
+        <>
+          <ForecastBar invoices={filteredInvoices} />
+          <InvoicesTable
+            invoices={filteredInvoices}
+            projectsById={projectsById}
+            projectOptions={projectOptions}
+          />
+        </>
+      ) : (
+        <>
+          <ForecastBar invoices={filteredInvoices} />
+          {filteredInvoices.length > 0 ? (
+            <InvoicesTable
+              invoices={filteredInvoices}
+              projectsById={projectsById}
+              projectOptions={projectOptions}
+            />
+          ) : null}
+          <DocumentsTable
+            reminders={reminders}
+            projectsById={projectsById}
+            projects={projects}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+function InvoiceScopeSwitches({
+  scope,
+  issuedMonth,
+  invoicesCount,
+  haysInvoicesCount,
+}: {
+  scope: InvoiceScope;
+  issuedMonth: string;
+  invoicesCount: number;
+  haysInvoicesCount: number;
+}) {
+  const items: { id: InvoiceScope; label: string; count: number }[] = [
+    { id: "invoices", label: "Инвойсы", count: invoicesCount },
+    { id: "hays", label: "HAYS · Credit Notes", count: haysInvoicesCount },
+  ];
+  const monthParam =
+    issuedMonth === "all" ? "" : `&issued_month=${issuedMonth}`;
+  return (
+    <div className="flex items-center gap-1">
+      {items.map((it) => {
+        const active = it.id === scope;
+        return (
+          <Link
+            key={it.id}
+            href={`/invoices?tab=all&scope=${it.id}${monthParam}`}
+            className={`px-3 py-1 rounded-md border font-mono text-[10px] uppercase tracking-[0.15em] transition ${
+              active
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:border-primary/60 hover:text-primary"
+            }`}
+          >
+            {it.label}{" "}
+            <span className="opacity-60 ml-1">{it.count}</span>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+const RU_MONTHS = [
+  "янв",
+  "фев",
+  "мар",
+  "апр",
+  "май",
+  "июн",
+  "июл",
+  "авг",
+  "сен",
+  "окт",
+  "ноя",
+  "дек",
+];
+
+function labelForMonth(ym: string): string {
+  const [y, m] = ym.split("-").map((s) => parseInt(s, 10));
+  return `${RU_MONTHS[m - 1]} ${y}`;
+}
+
+function ForecastBar({ invoices }: { invoices: Invoice[] }) {
+  // Bucket outstanding amounts by due_date month per currency, so the
+  // user sees "выставлено X, получим в июле Y, в августе Z".
+  const issued: Record<string, number> = {};
+  const byMonth: Map<string, Record<string, number>> = new Map();
+  for (const inv of invoices) {
+    if (inv.status === "cancelled") continue;
+    issued[inv.currency] = (issued[inv.currency] ?? 0) + inv.amount;
+    if (inv.status !== "paid" && inv.due_date) {
+      const ym = yearMonth(inv.due_date);
+      if (!ym) continue;
+      const bucket = byMonth.get(ym) ?? {};
+      bucket[inv.currency] = (bucket[inv.currency] ?? 0) + inv.amount;
+      byMonth.set(ym, bucket);
+    }
+  }
+  const monthKeys = [...byMonth.keys()].sort();
+  if (Object.keys(issued).length === 0) return null;
+
+  return (
+    <div className="rounded-md border bg-card p-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+      <div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+          Выставлено
+        </div>
+        <div className="font-mono text-sm">{fmtBucket(issued)}</div>
+      </div>
+      {monthKeys.map((ym) => (
+        <div key={ym}>
+          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+            Получим · {labelForMonth(ym)}
+          </div>
+          <div className="font-mono text-sm text-primary">
+            {fmtBucket(byMonth.get(ym)!)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function fmtBucket(b: Record<string, number>): string {
+  const parts = Object.entries(b)
+    .sort((a, b2) => b2[1] - a[1])
+    .map(
+      ([c, v]) =>
+        `${c} ${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`,
+    );
+  return parts.length ? parts.join(" · ") : "—";
 }
 
 /* ─── invoices table ──────────────────────────────────────────────── */
