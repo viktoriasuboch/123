@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Invoice } from "@/lib/schemas";
+import { fmtDate } from "@/lib/calc";
 import {
   InvoiceStatusBadge,
   effectiveStatus,
@@ -107,7 +108,7 @@ export function ProjectInvoicesSection({
                     {inv.currency} {formatAmount(inv.amount)}
                   </td>
                   <td className="p-3 font-mono text-xs text-muted-foreground">
-                    {inv.issue_date ?? "—"}
+                    {fmtDate(inv.issue_date)}
                   </td>
                   <td className="p-3 font-mono text-xs text-muted-foreground">
                     {inv.due_date ? (
@@ -118,7 +119,7 @@ export function ProjectInvoicesSection({
                             : undefined
                         }
                       >
-                        {inv.due_date}
+                        {fmtDate(inv.due_date)}
                       </span>
                     ) : (
                       "—"

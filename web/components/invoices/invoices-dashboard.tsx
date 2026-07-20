@@ -7,6 +7,7 @@ import { effectiveStatus } from "./invoice-status-badge";
 import { InvoiceTemplateDialog, type ProjectOption } from "./invoice-template-dialog";
 import { TemplateRowActions } from "./template-row-actions";
 import { Button } from "@/components/ui/button";
+import { fmtDate, adjustedIssueDateISO } from "@/lib/calc";
 
 type CurrencyBucket = Record<string, number>;
 type AgingBucket = Record<string, CurrencyBucket>;
@@ -95,8 +96,8 @@ export function InvoicesDashboard({
   }
   for (const t of templates) {
     if (t.active === false || !t.issue_day) continue;
-    const dt = new Date(y, m, t.issue_day);
-    const iso = dt.toISOString().slice(0, 10);
+    // Weekend issue_days slide to the next business day.
+    const iso = adjustedIssueDateISO(y, m, t.issue_day);
     if (iso >= todayISO && iso <= in7ISO) {
       upcoming.push({
         date: iso,
@@ -149,7 +150,7 @@ export function InvoicesDashboard({
               Ближайшие 7 дней
             </h3>
             <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-1">
-              Что произойдёт до {in7ISO}
+              Что произойдёт до {fmtDate(in7ISO)}
             </p>
           </header>
           <UpcomingList events={upcoming} />
@@ -410,8 +411,8 @@ function UpcomingList({ events }: { events: UpcomingEvent[] }) {
             key={`${e.date}-${e.type}-${i}`}
             className="p-3 flex items-start gap-3"
           >
-            <div className="font-mono text-[11px] text-muted-foreground w-20 shrink-0">
-              {e.date}
+            <div className="font-mono text-[11px] text-muted-foreground w-24 shrink-0">
+              {fmtDate(e.date)}
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm truncate">

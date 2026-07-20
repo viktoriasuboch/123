@@ -5,6 +5,7 @@ import type {
   DocumentReminder,
 } from "@/lib/schemas";
 import { effectiveStatus } from "./invoice-status-badge";
+import { fmtDate, adjustedIssueDateISO } from "@/lib/calc";
 
 type EventKind = "issue" | "pay" | "document" | "paid";
 export type CalendarView = "month" | "week";
@@ -62,7 +63,13 @@ export function InvoicesCalendar({
 
   const events =
     view === "week"
-      ? buildEvents(weekRange, invoices, templates, reminders, projects)
+      ? buildEvents(
+          { start: weekRange.start, end: weekRange.workEnd },
+          invoices,
+          templates,
+          reminders,
+          projects,
+        )
       : buildEvents(monthRange, invoices, templates, reminders, projects);
 
   const label =
@@ -71,7 +78,7 @@ export function InvoicesCalendar({
           month: "long",
           year: "numeric",
         })
-      : `${weekRange.start} — ${weekRange.end}`;
+      : `${fmtDate(weekRange.start)} — ${fmtDate(weekRange.workEnd)}`;
 
   const prevAnchor = shiftAnchor(anchorDate, view, -1);
   const nextAnchor = shiftAnchor(anchorDate, view, +1);
@@ -242,41 +249,49 @@ function WeekList({
   events,
   todayISO,
 }: {
-  weekRange: { start: string; end: string };
+  weekRange: { start: string; end: string; workEnd: string };
   events: Map<string, DayEvent[]>;
   todayISO: string;
 }) {
+  // Only Monday–Friday. Recurring reminders whose issue_day lands on a
+  // weekend get sifted onto the next Monday by buildEvents, so we don't
+  // lose them by dropping Sat/Sun.
   const days: string[] = [];
   const cur = parseISODate(weekRange.start)!;
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 5; i++) {
     const d = new Date(cur);
     d.setDate(cur.getDate() + i);
     days.push(d.toISOString().slice(0, 10));
   }
 
   return (
-    <div className="divide-y divide-border">
+    <div className="grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-border">
       {days.map((iso) => {
         const evs = events.get(iso) ?? [];
         const d = parseISODate(iso)!;
         const isToday = iso === todayISO;
-        const label = d.toLocaleDateString("ru-RU", {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-        });
+        const weekday = d.toLocaleDateString("ru-RU", { weekday: "long" });
         return (
-          <div key={iso} className="p-4">
-            <div className="flex items-baseline gap-3 mb-2">
-              <h4
-                className={`font-display text-base leading-none capitalize ${
+          <div
+            key={iso}
+            className={`p-3 min-h-[180px] flex flex-col gap-2 ${
+              isToday ? "bg-primary/5" : ""
+            }`}
+          >
+            <div className="flex flex-col gap-0.5">
+              <span
+                className={`font-mono text-[10px] uppercase tracking-[0.18em] capitalize ${
+                  isToday ? "text-primary" : "text-muted-foreground"
+                }`}
+              >
+                {weekday}
+              </span>
+              <span
+                className={`font-display text-lg leading-none ${
                   isToday ? "text-primary" : ""
                 }`}
               >
-                {label}
-              </h4>
-              <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-                {evs.length === 0 ? "пусто" : `${evs.length} событ.`}
+                {fmtDate(iso)}
               </span>
             </div>
             {evs.length === 0 ? (
@@ -284,9 +299,9 @@ function WeekList({
                 —
               </p>
             ) : (
-              <ul className="space-y-1.5">
+              <ul className="space-y-1.5 flex-1">
                 {evs.map((e, i) => (
-                  <EventItem key={i} event={e} />
+                  <EventItem key={i} event={e} compact />
                 ))}
               </ul>
             )}
@@ -312,7 +327,7 @@ function DayPanel({
     <div className="border-t p-4">
       <div className="flex items-center justify-between mb-3">
         <h4 className="font-display text-base tracking-wide">
-          {iso}
+          {fmtDate(iso)}
           <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
             {events.length} событий
           </span>
@@ -339,20 +354,30 @@ function DayPanel({
   );
 }
 
-function EventItem({ event }: { event: DayEvent }) {
+function EventItem({
+  event,
+  compact = false,
+}: {
+  event: DayEvent;
+  compact?: boolean;
+}) {
   return (
-    <li className="flex items-start gap-3 p-2 rounded border border-border/40">
-      <span className="text-lg leading-none mt-0.5" aria-hidden>
+    <li
+      className={`flex items-start gap-2 rounded border border-border/40 ${
+        compact ? "p-1.5" : "p-2 gap-3"
+      }`}
+    >
+      <span className={`leading-none mt-0.5 ${compact ? "text-base" : "text-lg"}`} aria-hidden>
         {EMOJI[event.kind]}
       </span>
       <div className="flex-1 min-w-0">
-        <div className="text-sm">
-          <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-muted-foreground mr-2">
+        <div className={compact ? "text-xs" : "text-sm"}>
+          <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-muted-foreground mr-1.5">
             {TYPE_LABEL[event.kind]}
           </span>
           <span className="font-medium">{event.title}</span>
         </div>
-        <div className="font-mono text-[10px] text-muted-foreground">
+        <div className="font-mono text-[10px] text-muted-foreground truncate">
           {event.projectId && event.projectName ? (
             <Link
               href={`/projects/${event.projectId}`}
@@ -428,9 +453,11 @@ function buildEvents(
   }
 
   for (const monthISO of months) {
+    const [y, mm] = monthISO.split("-").map((s) => parseInt(s, 10));
     for (const t of templates) {
       if (t.active === false || !t.issue_day) continue;
-      const iso = `${monthISO}-${String(t.issue_day).padStart(2, "0")}`;
+      // Weekend issue days → next business day.
+      const iso = adjustedIssueDateISO(y, mm - 1, t.issue_day);
       push(iso, {
         kind: "issue",
         title: projects.get(t.project_id)?.name ?? "—",
@@ -466,16 +493,26 @@ function monthRangeFor(d: Date): { start: string; end: string } {
   return { start, end };
 }
 
-function weekRangeFor(d: Date): { start: string; end: string } {
-  // Monday as first day
+function weekRangeFor(d: Date): {
+  start: string;
+  end: string;
+  workEnd: string;
+} {
+  // Monday as first day. `end` is the Sunday (calendar range for event
+  // filtering — templates might land on the weekend before we shift
+  // them into Monday). `workEnd` is the Friday — what we actually show
+  // in the week view because the user only cares about business days.
   const dow = (d.getDay() + 6) % 7;
   const s = new Date(d);
   s.setDate(d.getDate() - dow);
   const e = new Date(s);
   e.setDate(s.getDate() + 6);
+  const w = new Date(s);
+  w.setDate(s.getDate() + 4);
   return {
     start: s.toISOString().slice(0, 10),
     end: e.toISOString().slice(0, 10),
+    workEnd: w.toISOString().slice(0, 10),
   };
 }
 

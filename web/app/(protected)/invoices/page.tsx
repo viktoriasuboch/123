@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { fmtDate, adjustedIssueDateISO } from "@/lib/calc";
 import {
   InvoiceStatusBadge,
   effectiveStatus,
@@ -105,9 +106,21 @@ export default async function InvoicesPage({
     const day = t.issue_day ?? null;
     if (!day) continue;
     if (isTemplateDoneThisMonth(t, today)) continue;
-    const thisMonth = new Date(today.getFullYear(), today.getMonth(), day);
+    // If issue_day lands on a weekend, treat the reminder as due on the
+    // next business day (Monday).
+    const adjustedISO = adjustedIssueDateISO(
+      today.getFullYear(),
+      today.getMonth(),
+      day,
+    );
+    const adjusted = new Date(adjustedISO + "T00:00:00");
+    const todayMidnight = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+    );
     const diffDays = Math.round(
-      (thisMonth.getTime() - today.getTime()) / 86400_000,
+      (adjusted.getTime() - todayMidnight.getTime()) / 86400_000,
     );
     toIssue.push({ kind: "template" as const, template: t, daysUntil: diffDays });
   }
@@ -337,7 +350,7 @@ function InvoicesTable({
                   {inv.currency} {formatAmount(inv.amount)}
                 </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">
-                  {inv.scheduled_date ?? inv.issue_date ?? "—"}
+                  {fmtDate(inv.scheduled_date ?? inv.issue_date)}
                 </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">
                   {inv.due_date ? (
@@ -348,7 +361,7 @@ function InvoicesTable({
                           : undefined
                       }
                     >
-                      {inv.due_date}
+                      {fmtDate(inv.due_date)}
                     </span>
                   ) : (
                     "—"
@@ -447,9 +460,7 @@ function DocumentsTable({
                   {r.recurring === false ? "Разово" : "Каждый месяц"}
                 </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">
-                  {r.last_received_at
-                    ? new Date(r.last_received_at).toISOString().slice(0, 10)
-                    : "—"}
+                  {fmtDate(r.last_received_at)}
                 </TableCell>
                 <TableCell className="text-right">
                   <DocumentReminderRowActions

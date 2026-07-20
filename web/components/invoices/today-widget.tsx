@@ -5,6 +5,7 @@ import {
   markInvoiceTemplateDone,
 } from "@/app/(protected)/invoices/_actions";
 import { reportActionError } from "@/lib/client-errors";
+import { fmtDate } from "@/lib/calc";
 import type {
   Invoice,
   InvoiceTemplate,
@@ -228,7 +229,7 @@ function OverdueRow({
         </div>
         <div className="font-mono text-[10px] text-muted-foreground">
           {item.invoice.client_name} · {item.invoice.currency}{" "}
-          {formatAmount(item.invoice.amount)} · due {item.invoice.due_date}
+          {formatAmount(item.invoice.amount)} · due {fmtDate(item.invoice.due_date)}
         </div>
       </div>
       <MarkInvoicePaidDialog invoice={item.invoice} />

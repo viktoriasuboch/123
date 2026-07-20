@@ -143,13 +143,37 @@ export function fmtRate(v: number) {
   return `${sign}$${text}`;
 }
 
+/**
+ * Format an ISO date (YYYY-MM-DD or full ISO string) as dd-mm-yyyy —
+ * the format the user standardised on. Returns "—" for null/invalid.
+ */
 export function fmtDate(s: string | null | undefined) {
   if (!s) return "—";
   const d = new Date(s);
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
+}
+
+/**
+ * Advance a Sat/Sun issue day to the following Monday. Recurring
+ * invoice templates use this: if the target day-of-month falls on a
+ * weekend, the reminder + calendar dot render on the next business
+ * day instead. Returns the adjusted ISO date (YYYY-MM-DD).
+ */
+export function adjustedIssueDateISO(
+  year: number,
+  month0: number,
+  day: number,
+): string {
+  const d = new Date(year, month0, day);
+  // 0 = Sun, 6 = Sat
+  while (d.getDay() === 0 || d.getDay() === 6) {
+    d.setDate(d.getDate() + 1);
+  }
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
 }
