@@ -42,14 +42,26 @@ export function InvoiceDialog({
   invoice,
   trigger,
   defaultProjectId,
+  open: openProp,
+  onOpenChange,
 }: {
   projects: ProjectOption[];
   invoice?: Invoice;
-  trigger: React.ReactNode;
+  /** Optional trigger. Omit when using controlled `open` / `onOpenChange`. */
+  trigger?: React.ReactNode;
   defaultProjectId?: string;
+  /** Controlled open state. When present, `trigger` is ignored. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const isEdit = !!invoice;
-  const [open, setOpen] = useState(false);
+  const isControlled = openProp !== undefined;
+  const [openInternal, setOpenInternal] = useState(false);
+  const open = isControlled ? openProp : openInternal;
+  const setOpen = (v: boolean) => {
+    if (isControlled) onOpenChange?.(v);
+    else setOpenInternal(v);
+  };
   const initialProjectId =
     invoice?.project_id ?? defaultProjectId ?? projects[0]?.id ?? "";
   const [projectId, setProjectId] = useState<string>(initialProjectId);
@@ -74,20 +86,22 @@ export function InvoiceDialog({
 
   return (
     <>
-      <span
-        role="button"
-        tabIndex={0}
-        onClick={openDialog}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            openDialog();
-          }
-        }}
-        className="inline-flex"
-      >
-        {trigger}
-      </span>
+      {!isControlled && trigger ? (
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={openDialog}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openDialog();
+            }
+          }}
+          className="inline-flex"
+        >
+          {trigger}
+        </span>
+      ) : null}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>

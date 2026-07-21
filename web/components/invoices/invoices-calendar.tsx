@@ -7,6 +7,8 @@ import type {
 import { effectiveStatus } from "./invoice-status-badge";
 import { fmtDate, adjustedIssueDateISO } from "@/lib/calc";
 import { MarkInvoicePaidDialog } from "./mark-invoice-paid-dialog";
+import type { ProjectOption } from "./invoice-template-dialog";
+import { CalendarIssueActions, CalendarDocumentAction } from "./calendar-actions";
 
 type EventKind = "issue" | "pay" | "document" | "paid";
 export type CalendarView = "month" | "week";
@@ -17,9 +19,14 @@ type DayEvent = {
   detail: string;
   projectId?: string;
   projectName?: string;
-  /** Present for events tied to a concrete invoice (pay / paid). Lets
-   *  the week view render a mark-as-paid action directly. */
+  /** For pay / paid events — the concrete invoice, so the week view
+   *  can offer "Оплачен" without another round-trip. */
   invoice?: Invoice;
+  /** For "issue" events fired by a recurring template — used by
+   *  the "+ Создать" / "✓ Готово" actions. */
+  template?: InvoiceTemplate;
+  /** For "document" events — enables the "✓ Получен" action. */
+  reminder?: DocumentReminder;
 };
 
 const EMOJI: Record<EventKind, string> = {
@@ -48,6 +55,7 @@ export function InvoicesCalendar({
   templates,
   reminders,
   projects,
+  projectOptions,
   selectedDay,
 }: {
   view: CalendarView;
@@ -56,6 +64,9 @@ export function InvoicesCalendar({
   templates: InvoiceTemplate[];
   reminders: DocumentReminder[];
   projects: Map<string, { id: string; name: string }>;
+  /** Needed so calendar issue events can spin up an InvoiceDialog
+   *  prefilled from the recurring template. */
+  projectOptions: ProjectOption[];
   /** YYYY-MM-DD of the day expanded in month view (ignored for week). */
   selectedDay?: string;
 }) {
@@ -143,7 +154,12 @@ export function InvoicesCalendar({
           todayISO={todayISO}
         />
       ) : (
-        <WeekList weekRange={weekRange} events={events} todayISO={todayISO} />
+        <WeekList
+          weekRange={weekRange}
+          events={events}
+          todayISO={todayISO}
+          projectOptions={projectOptions}
+        />
       )}
 
       {view === "month" && selectedDay ? (
@@ -151,6 +167,7 @@ export function InvoicesCalendar({
           iso={selectedDay}
           events={events.get(selectedDay) ?? []}
           anchor={anchor}
+          projectOptions={projectOptions}
         />
       ) : null}
     </section>
@@ -255,10 +272,12 @@ function WeekList({
   weekRange,
   events,
   todayISO,
+  projectOptions,
 }: {
   weekRange: { start: string; end: string; workEnd: string };
   events: Map<string, DayEvent[]>;
   todayISO: string;
+  projectOptions: ProjectOption[];
 }) {
   // Only Monday–Friday. Recurring reminders whose issue_day lands on a
   // weekend get sifted onto the next Monday by buildEvents, so we don't
@@ -308,7 +327,12 @@ function WeekList({
             ) : (
               <ul className="space-y-1.5 flex-1">
                 {evs.map((e, i) => (
-                  <EventItem key={i} event={e} compact />
+                  <EventItem
+                    key={i}
+                    event={e}
+                    projectOptions={projectOptions}
+                    compact
+                  />
                 ))}
               </ul>
             )}
@@ -325,10 +349,12 @@ function DayPanel({
   iso,
   events,
   anchor,
+  projectOptions,
 }: {
   iso: string;
   events: DayEvent[];
   anchor: string;
+  projectOptions: ProjectOption[];
 }) {
   return (
     <div className="border-t p-4">
@@ -353,7 +379,7 @@ function DayPanel({
       ) : (
         <ul className="space-y-2">
           {events.map((e, i) => (
-            <EventItem key={i} event={e} />
+            <EventItem key={i} event={e} projectOptions={projectOptions} />
           ))}
         </ul>
       )}
@@ -364,11 +390,15 @@ function DayPanel({
 function EventItem({
   event,
   compact = false,
+  projectOptions,
 }: {
   event: DayEvent;
   compact?: boolean;
+  projectOptions: ProjectOption[];
 }) {
   const showMarkPaid = event.kind === "pay" && event.invoice;
+  const showIssueActions = event.kind === "issue" && event.template;
+  const showDocumentAction = event.kind === "document" && event.reminder;
   return (
     <li
       className={`flex items-start gap-2 rounded border border-border/40 ${
@@ -402,6 +432,15 @@ function EventItem({
       </div>
       {showMarkPaid ? (
         <MarkInvoicePaidDialog invoice={event.invoice!} />
+      ) : null}
+      {showIssueActions ? (
+        <CalendarIssueActions
+          template={event.template!}
+          projectOptions={projectOptions}
+        />
+      ) : null}
+      {showDocumentAction ? (
+        <CalendarDocumentAction reminder={event.reminder!} />
       ) : null}
     </li>
   );
@@ -471,6 +510,7 @@ function buildEvents(
     const [y, mm] = monthISO.split("-").map((s) => parseInt(s, 10));
     for (const t of templates) {
       if (t.active === false || !t.issue_day) continue;
+      if (templateDoneInMonth(t, y, mm - 1)) continue;
       // Weekend issue days → next business day.
       const iso = adjustedIssueDateISO(y, mm - 1, t.issue_day);
       push(iso, {
@@ -479,10 +519,12 @@ function buildEvents(
         detail: `~${t.currency} ${formatAmount(t.amount)}`,
         projectId: t.project_id,
         projectName: projects.get(t.project_id)?.name,
+        template: t,
       });
     }
     for (const r of reminders) {
       if (r.active === false) continue;
+      if (reminderReceivedInMonth(r, y, mm - 1)) continue;
       const iso = `${monthISO}-${String(r.expected_day).padStart(2, "0")}`;
       push(iso, {
         kind: "document",
@@ -490,6 +532,7 @@ function buildEvents(
         detail: "",
         projectId: r.project_id,
         projectName: projects.get(r.project_id)?.name,
+        reminder: r,
       });
     }
   }
@@ -625,4 +668,27 @@ function formatAmount(v: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
+}
+
+/** True when a template's last_issued_at falls in the given month —
+ *  used to hide the calendar todo once the user marked it done. */
+function templateDoneInMonth(
+  t: InvoiceTemplate,
+  year: number,
+  month0: number,
+): boolean {
+  if (!t.last_issued_at) return false;
+  const d = new Date(t.last_issued_at);
+  return d.getFullYear() === year && d.getMonth() === month0;
+}
+
+/** Same idea for document reminders. */
+function reminderReceivedInMonth(
+  r: DocumentReminder,
+  year: number,
+  month0: number,
+): boolean {
+  if (!r.last_received_at) return false;
+  const d = new Date(r.last_received_at);
+  return d.getFullYear() === year && d.getMonth() === month0;
 }

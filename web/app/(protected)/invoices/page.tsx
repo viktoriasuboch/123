@@ -253,6 +253,7 @@ export default async function InvoicesPage({
           templates={templates}
           reminders={reminders}
           projects={projectsById}
+          projectOptions={projectOptions}
         />
       ) : (
         <AllInvoicesTab
