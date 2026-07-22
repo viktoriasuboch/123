@@ -178,6 +178,61 @@ export function adjustedIssueDateISO(
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
+/** today's local date as YYYY-MM-DD (not UTC — avoids off-by-one near midnight). */
+function localISO(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/**
+ * Where a monthly recurring reminder next lands, relative to `today`.
+ *
+ * - This month's issue day still ahead (or today) → that date, not missed.
+ * - Already passed this month:
+ *     - template existed on/before that date → genuine miss (user
+ *       forgot to issue): keep the past date, `missed = true` (renders
+ *       with ❗ "N дн. назад").
+ *     - template was created AFTER the day already passed (e.g. set up
+ *       mid-month) → roll forward to next month's issue day, not missed.
+ *       This is the fix for "reminder for the 9th shows '13 дн. назад'
+ *       when I only just created it on the 22nd".
+ *
+ * Weekend issue days are shifted to Monday via adjustedIssueDateISO.
+ */
+export function monthlyReminderDue(
+  issueDay: number,
+  createdAtISO: string | null | undefined,
+  today: Date,
+): { dueISO: string; daysUntil: number; missed: boolean } {
+  const y = today.getFullYear();
+  const m = today.getMonth();
+  const todayISO = localISO(today);
+  const thisMonth = adjustedIssueDateISO(y, m, issueDay);
+
+  let dueISO: string;
+  let missed = false;
+  if (thisMonth >= todayISO) {
+    dueISO = thisMonth;
+  } else {
+    const created = createdAtISO ? createdAtISO.slice(0, 10) : null;
+    const existedByThen = created ? created <= thisMonth : true;
+    if (existedByThen) {
+      dueISO = thisMonth;
+      missed = true;
+    } else {
+      dueISO = adjustedIssueDateISO(y, m + 1, issueDay);
+    }
+  }
+
+  const due = new Date(dueISO + "T00:00:00");
+  const midnight = new Date(y, m, today.getDate());
+  const daysUntil = Math.round(
+    (due.getTime() - midnight.getTime()) / 86400_000,
+  );
+  return { dueISO, daysUntil, missed };
+}
+
 /* ═══ invoices dashboard aggregators (pure, over listInvoices) ═══════ */
 
 export type DashboardPeriodKind = "this" | "prev" | "prev2" | "custom";

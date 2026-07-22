@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fmtDate, adjustedIssueDateISO, dashboardPeriod } from "@/lib/calc";
+import { fmtDate, monthlyReminderDue, dashboardPeriod } from "@/lib/calc";
 import {
   InvoiceStatusBadge,
   effectiveStatus,
@@ -128,30 +128,17 @@ export default async function InvoicesPage({
 
   // Build the "today" widget's three sections. Reminders stay on the
   // dashboard until the user marks them done for the current month —
-  // we don't hide them just because the day has passed.
+  // we don't hide them just because the day has passed. A reminder is
+  // only "overdue" (❗, negative daysUntil) when the template actually
+  // existed before this month's issue day; otherwise it rolls forward
+  // to next month. See monthlyReminderDue.
   const toIssue: TodayIssueItem[] = [];
   for (const t of templates) {
     if (t.active === false) continue;
-    const day = t.issue_day ?? null;
-    if (!day) continue;
+    if (!t.issue_day) continue;
     if (isTemplateDoneThisMonth(t, today)) continue;
-    // If issue_day lands on a weekend, treat the reminder as due on the
-    // next business day (Monday).
-    const adjustedISO = adjustedIssueDateISO(
-      today.getFullYear(),
-      today.getMonth(),
-      day,
-    );
-    const adjusted = new Date(adjustedISO + "T00:00:00");
-    const todayMidnight = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-    );
-    const diffDays = Math.round(
-      (adjusted.getTime() - todayMidnight.getTime()) / 86400_000,
-    );
-    toIssue.push({ kind: "template" as const, template: t, daysUntil: diffDays });
+    const { daysUntil } = monthlyReminderDue(t.issue_day, t.created_at, today);
+    toIssue.push({ kind: "template" as const, template: t, daysUntil });
   }
   // Missed ones first (most overdue at the top), then upcoming.
   toIssue.sort((a, b) => a.daysUntil - b.daysUntil);

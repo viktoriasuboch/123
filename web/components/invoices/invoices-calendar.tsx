@@ -513,6 +513,10 @@ function buildEvents(
       if (templateDoneInMonth(t, y, mm - 1)) continue;
       // Weekend issue days → next business day.
       const iso = adjustedIssueDateISO(y, mm - 1, t.issue_day);
+      // Don't paint issue events on dates before the template existed —
+      // a reminder set up on the 22nd shouldn't back-fill the 9th.
+      const created = t.created_at ? t.created_at.slice(0, 10) : null;
+      if (created && iso < created) continue;
       push(iso, {
         kind: "issue",
         title: projects.get(t.project_id)?.name ?? "—",
