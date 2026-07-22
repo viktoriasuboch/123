@@ -107,10 +107,15 @@ export function InvoiceDialog({
           <form
             action={async (fd) => {
               try {
+                // A disabled <select> isn't submitted, so set project_id
+                // from state explicitly. client_name falls back to the
+                // existing invoice value so an edit never sends an empty
+                // required field (that was the "Не сохранилось" crash).
+                fd.set("project_id", projectId);
                 const projectName =
-                  projects.find(
-                    (p) => p.id === (fd.get("project_id") as string),
-                  )?.name ?? "";
+                  projects.find((p) => p.id === projectId)?.name ??
+                  invoice?.client_name ??
+                  "";
                 fd.set("client_name", projectName);
 
                 if (isEdit && invoice) {
@@ -127,21 +132,23 @@ export function InvoiceDialog({
             className="space-y-4"
           >
             <div className="space-y-1.5">
-              <Label
-                htmlFor="project_id"
-                className="text-xs uppercase tracking-widest text-muted-foreground"
-              >
+              <Label className="text-xs uppercase tracking-widest text-muted-foreground">
                 Проект *
               </Label>
-              <select
-                id="project_id"
-                name="project_id"
-                required
-                value={projectId}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setProjectId(v);
-                  if (!isEdit) {
+              {isEdit ? (
+                <div className="font-display text-lg leading-tight">
+                  {projects.find((p) => p.id === projectId)?.name ??
+                    invoice?.client_name ??
+                    "—"}
+                </div>
+              ) : (
+                <select
+                  name="project_id"
+                  required
+                  value={projectId}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setProjectId(v);
                     const prev = projects.find(
                       (p) => p.id === projectId,
                     )?.next_invoice_number;
@@ -151,18 +158,17 @@ export function InvoiceDialog({
                     if (invoiceNumber === "" || invoiceNumber === prev) {
                       setInvoiceNumber(nextSuggestion);
                     }
-                  }
-                }}
-                disabled={isEdit}
-                className="w-full h-9 px-3 rounded-md border border-input bg-transparent text-sm dark:bg-input/30"
-              >
-                <option value="">— выбери —</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+                  }}
+                  className="w-full h-9 px-3 rounded-md border border-input bg-transparent text-sm dark:bg-input/30"
+                >
+                  <option value="">— выбери —</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              )}
               {planned != null && planned > 0 && !isEdit ? (
                 <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                   ≈ ${planned.toLocaleString("en-US", { maximumFractionDigits: 0 })} / мес по команде
