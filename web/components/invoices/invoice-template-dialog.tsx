@@ -8,15 +8,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { reportActionError } from "@/lib/client-errors";
 import {
   createInvoiceTemplate,
   updateInvoiceTemplate,
+  deleteInvoiceTemplate,
 } from "@/app/(protected)/invoices/_actions";
 import type { InvoiceTemplate } from "@/lib/schemas";
 
@@ -28,12 +27,20 @@ export type ProjectOption = {
   next_invoice_number: string;
 };
 
+type Freq = "monthly" | "biweekly";
+
+const today = () => new Date().toISOString().slice(0, 10);
+
 /**
- * Create or edit a recurring invoice template. When `template` is
- * provided it's an edit; otherwise it's a create dialog.
- * `plannedByProject` gives the auto-suggested amount when the user
- * picks a project — pulled from `sum(sell_rate * hours_load)` over the
- * project's active members.
+ * The single recurring-schedule editor for a project. Reached only from
+ * the project page ("⚙ Настроить напоминание"). Project == client, so
+ * there's no client field; the amount is пример from Projects, not
+ * entered here. Opens with the existing schedule prefilled when
+ * `template` is passed (edit), otherwise creates a new one.
+ *
+ * Controlled `open`/`onOpenChange` is used instead of base-ui's
+ * DialogTrigger `render` — the render path swallowed clicks on
+ * compound buttons before (see invoice-dialog).
  */
 export function InvoiceTemplateDialog({
   projects,
@@ -44,88 +51,170 @@ export function InvoiceTemplateDialog({
   projects: ProjectOption[];
   template?: InvoiceTemplate;
   trigger: React.ReactNode;
-  /** Preselect a project when opening (used by Projects tab rows). */
   defaultProjectId?: string;
 }) {
   const isEdit = !!template;
   const [open, setOpen] = useState(false);
-  const [projectId, setProjectId] = useState<string>(
-    template?.project_id ?? defaultProjectId ?? projects[0]?.id ?? "",
-  );
 
-  const planned = projects.find((p) => p.id === projectId)?.planned_monthly;
+  const projectId = template?.project_id ?? defaultProjectId ?? projects[0]?.id ?? "";
+  const project = projects.find((p) => p.id === projectId);
+  const planned = project?.planned_monthly ?? 0;
+
+  const [freq, setFreq] = useState<Freq>(
+    template?.frequency === "biweekly" ? "biweekly" : "monthly",
+  );
+  const [issueDay, setIssueDay] = useState<string>(
+    template?.issue_day?.toString() ?? "1",
+  );
+  const [anchor, setAnchor] = useState<string>(
+    template?.next_issue_date ?? today(),
+  );
+  const [currency, setCurrency] = useState<string>(template?.currency ?? "USD");
+  const [notes, setNotes] = useState<string>(template?.notes ?? "");
+  const [active, setActive] = useState<boolean>(template?.active !== false);
+
+  const submit = async (fd: FormData) => {
+    try {
+      fd.set("project_id", projectId);
+      fd.set("client_name", project?.name ?? "");
+      // Approx amount lives with the schedule so the DB NOT NULL is
+      // satisfied; the real figure is entered when issuing.
+      fd.set("amount", String(planned || 0));
+      fd.set("currency", currency);
+      fd.set("frequency", freq);
+      // Explicitly write BOTH cadence fields so switching monthly↔biweekly
+      // clears the one that no longer applies.
+      fd.set("issue_day", freq === "monthly" ? issueDay : "");
+      fd.set("next_issue_date", freq === "biweekly" ? anchor : "");
+      fd.set("notes", notes);
+      fd.set("active", active ? "true" : "false");
+
+      if (isEdit && template) {
+        await updateInvoiceTemplate(template.id, fd);
+      } else {
+        await createInvoiceTemplate(fd);
+      }
+      setOpen(false);
+    } catch (err) {
+      reportActionError(err, "Не сохранилось расписание");
+    }
+  };
+
+  const remove = async () => {
+    if (!template) return;
+    if (!confirm("Удалить расписание выставления?")) return;
+    try {
+      await deleteInvoiceTemplate(template.id);
+      setOpen(false);
+    } catch (err) {
+      reportActionError(err, "Не удалилось");
+    }
+  };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger as React.ReactElement} />
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="font-display text-2xl tracking-wide">
-            {isEdit ? "Редактировать рекуррентный инвойс" : "Новый рекуррентный инвойс"}
-          </DialogTitle>
-        </DialogHeader>
-        <form
-          action={async (fd) => {
-            try {
-              if (isEdit && template) {
-                await updateInvoiceTemplate(template.id, fd);
-              } else {
-                await createInvoiceTemplate(fd);
-              }
-              setOpen(false);
-            } catch (err) {
-              reportActionError(err, "Не сохранился шаблон");
-            }
-          }}
-          className="space-y-4"
-        >
-          <div className="space-y-1.5">
-            <Label
-              htmlFor="project_id"
-              className="text-xs uppercase tracking-widest text-muted-foreground"
-            >
-              Проект *
-            </Label>
-            <select
-              id="project_id"
-              name="project_id"
-              required
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              disabled={isEdit}
-              className="w-full h-9 px-3 rounded-md border border-input bg-transparent text-sm dark:bg-input/30"
-            >
-              <option value="">— выбери —</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            {planned != null && planned > 0 ? (
-              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                ≈ ${planned.toLocaleString("en-US", { maximumFractionDigits: 0 })} / мес по команде
-              </p>
-            ) : null}
-          </div>
+    <>
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
+        className="inline-flex"
+      >
+        {trigger}
+      </span>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display text-2xl tracking-wide">
+              {isEdit ? "Настройка выставления" : "Настроить выставление"}
+            </DialogTitle>
+          </DialogHeader>
+          <form action={submit} className="space-y-4">
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+                Проект
+              </div>
+              <div className="font-display text-lg leading-tight">
+                {project?.name ?? "—"}
+              </div>
+              {planned > 0 ? (
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground mt-0.5">
+                  ≈ ${planned.toLocaleString("en-US", { maximumFractionDigits: 0 })} / мес по команде
+                </p>
+              ) : null}
+            </div>
 
-          <Field
-            name="client_name"
-            label="Клиент (контрагент)"
-            required
-            defaultValue={template?.client_name ?? ""}
-            placeholder="HAYS PLC"
-          />
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-widest text-muted-foreground">
+                Периодичность
+              </Label>
+              <div className="flex gap-2">
+                {(
+                  [
+                    { id: "monthly", label: "Каждый месяц" },
+                    { id: "biweekly", label: "Каждые 2 недели" },
+                  ] as { id: Freq; label: string }[]
+                ).map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    onClick={() => setFreq(o.id)}
+                    className={`flex-1 rounded-md border px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] transition ${
+                      freq === o.id
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/60"
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              name="amount"
-              label="Сумма *"
-              type="number"
-              step="0.01"
-              defaultValue={template?.amount?.toString() ?? planned?.toString() ?? ""}
-              required
-            />
+            {freq === "monthly" ? (
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="issue_day"
+                  className="text-xs uppercase tracking-widest text-muted-foreground"
+                >
+                  Число месяца (1–28)
+                </Label>
+                <Input
+                  id="issue_day"
+                  type="number"
+                  min="1"
+                  max="28"
+                  value={issueDay}
+                  onChange={(e) => setIssueDay(e.target.value)}
+                  required
+                />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="anchor"
+                  className="text-xs uppercase tracking-widest text-muted-foreground"
+                >
+                  Применять с (первое выставление)
+                </Label>
+                <Input
+                  id="anchor"
+                  type="date"
+                  value={anchor}
+                  onChange={(e) => setAnchor(e.target.value)}
+                  required
+                />
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  Дальше — каждые 14 дней от этой даты.
+                </p>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label
                 htmlFor="currency"
@@ -135,8 +224,8 @@ export function InvoiceTemplateDialog({
               </Label>
               <select
                 id="currency"
-                name="currency"
-                defaultValue={template?.currency ?? "USD"}
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
                 className="w-full h-9 px-3 rounded-md border border-input bg-transparent text-sm dark:bg-input/30"
               >
                 <option value="USD">USD</option>
@@ -145,138 +234,54 @@ export function InvoiceTemplateDialog({
                 <option value="RUB">RUB</option>
               </select>
             </div>
-          </div>
 
-          <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <Label
-                htmlFor="frequency"
+                htmlFor="notes"
                 className="text-xs uppercase tracking-widest text-muted-foreground"
               >
-                Частота
+                Заметки
               </Label>
-              <select
-                id="frequency"
-                name="frequency"
-                defaultValue={template?.frequency ?? "monthly"}
-                className="w-full h-9 px-3 rounded-md border border-input bg-transparent text-sm dark:bg-input/30"
-              >
-                <option value="monthly">Ежемесячно</option>
-                <option value="quarterly">Раз в квартал</option>
-                <option value="once">Разово</option>
-              </select>
+              <Input
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="напр. просить credit note заранее"
+              />
             </div>
-            <Field
-              name="issue_day"
-              label="День мес."
-              type="number"
-              min="1"
-              max="28"
-              defaultValue={template?.issue_day?.toString() ?? ""}
-              placeholder="25"
-            />
-            <Field
-              name="payment_terms_days"
-              label="Terms (дн)"
-              type="number"
-              min="0"
-              defaultValue={template?.payment_terms_days?.toString() ?? "14"}
-            />
-          </div>
 
-          <Field
-            name="next_issue_date"
-            label="Ближайшая дата выставления"
-            type="date"
-            defaultValue={template?.next_issue_date ?? ""}
-          />
+            {isEdit ? (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={active}
+                  onChange={(e) => setActive(e.target.checked)}
+                  className="size-4 accent-primary"
+                />
+                <span className="font-mono text-[11px] uppercase tracking-[0.12em]">
+                  Активно {active ? "" : "· на паузе"}
+                </span>
+              </label>
+            ) : null}
 
-          <div className="space-y-1.5">
-            <Label
-              htmlFor="description"
-              className="text-xs uppercase tracking-widest text-muted-foreground"
-            >
-              Описание строки
-            </Label>
-            <Input
-              id="description"
-              name="description"
-              defaultValue={template?.description ?? ""}
-              placeholder="Development services — monthly"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label
-              htmlFor="notes"
-              className="text-xs uppercase tracking-widest text-muted-foreground"
-            >
-              Заметки
-            </Label>
-            <Textarea
-              id="notes"
-              name="notes"
-              rows={2}
-              defaultValue={template?.notes ?? ""}
-            />
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setOpen(false)}
-            >
-              Отмена
-            </Button>
-            <Button type="submit">{isEdit ? "Сохранить" : "Создать"}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function Field({
-  name,
-  label,
-  required,
-  type = "text",
-  placeholder,
-  defaultValue,
-  min,
-  max,
-  step,
-}: {
-  name: string;
-  label: string;
-  required?: boolean;
-  type?: string;
-  placeholder?: string;
-  defaultValue?: string;
-  min?: string;
-  max?: string;
-  step?: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label
-        htmlFor={name}
-        className="text-xs uppercase tracking-widest text-muted-foreground"
-      >
-        {label}
-      </Label>
-      <Input
-        id={name}
-        name={name}
-        type={type}
-        required={required}
-        placeholder={placeholder}
-        defaultValue={defaultValue}
-        min={min}
-        max={max}
-        step={step}
-      />
-    </div>
+            <DialogFooter className="flex-wrap gap-2">
+              {isEdit ? (
+                <button
+                  type="button"
+                  onClick={remove}
+                  className="mr-auto rounded border border-destructive/40 bg-destructive/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-destructive hover:bg-destructive/20 transition"
+                >
+                  Удалить расписание
+                </button>
+              ) : null}
+              <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+                Отмена
+              </Button>
+              <Button type="submit">{isEdit ? "Сохранить" : "Настроить"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

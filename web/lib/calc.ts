@@ -233,6 +233,28 @@ export function monthlyReminderDue(
   return { dueISO, daysUntil, missed };
 }
 
+/**
+ * Next occurrence of a biweekly schedule on or after today: step +14
+ * days from the anchor ("apply from" date) until we reach today, then
+ * shift a weekend result to Monday. Returns null when there's no anchor.
+ */
+export function biweeklyNextISO(
+  anchorISO: string | null | undefined,
+  today: Date,
+): string | null {
+  if (!anchorISO) return null;
+  const d = new Date(anchorISO + "T00:00:00");
+  if (isNaN(d.getTime())) return null;
+  const todayISO = localISO(today);
+  let guard = 0;
+  while (localISO(d) < todayISO && guard < 520) {
+    d.setDate(d.getDate() + 14);
+    guard++;
+  }
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  return localISO(d);
+}
+
 /* ═══ invoices dashboard aggregators (pure, over listInvoices) ═══════ */
 
 export type DashboardPeriodKind = "this" | "prev" | "prev2" | "custom";

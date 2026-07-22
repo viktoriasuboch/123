@@ -5,7 +5,6 @@ import { useState } from "react";
 import type { InvoiceTemplate } from "@/lib/schemas";
 import { Input } from "@/components/ui/input";
 import type { ProjectOption } from "./invoice-template-dialog";
-import { fmtDate } from "@/lib/calc";
 
 type Project = {
   id: string;
@@ -161,9 +160,7 @@ function describeFrequency(t: InvoiceTemplate): string {
       : "раз в квартал";
   }
   if (freq === "biweekly") {
-    return t.next_issue_date
-      ? `каждые 2 недели с ${fmtDate(t.next_issue_date)}`
-      : "каждые 2 недели";
+    return "каждые 2 недели";
   }
   return "разово";
 }

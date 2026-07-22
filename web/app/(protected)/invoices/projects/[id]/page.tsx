@@ -11,23 +11,16 @@ import { Button } from "@/components/ui/button";
 import { InvoiceDialog } from "@/components/invoices/invoice-dialog";
 import { InvoiceTemplateDialog } from "@/components/invoices/invoice-template-dialog";
 import { InvoiceRowActions } from "@/components/invoices/invoice-row-actions";
-import { TemplateRowActions } from "@/components/invoices/template-row-actions";
 import {
   InvoiceStatusBadge,
   effectiveStatus,
 } from "@/components/invoices/invoice-status-badge";
-import { fmtDate } from "@/lib/calc";
+import { fmtDate, monthlyReminderDue, biweeklyNextISO } from "@/lib/calc";
+import type { InvoiceTemplate } from "@/lib/schemas";
 
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ id: string }>;
-
-const FREQ: Record<string, string> = {
-  monthly: "каждый месяц",
-  quarterly: "раз в квартал",
-  biweekly: "каждые 2 недели",
-  once: "разово",
-};
 
 export default async function InvoiceProjectPage({
   params,
@@ -47,6 +40,9 @@ export default async function InvoiceProjectPage({
 
   const invoices = allInvoices.filter((inv) => inv.project_id === id);
   const templates = allTemplates.filter((t) => t.project_id === id);
+  // One schedule per project: prefer an active one, else whatever exists.
+  const schedule =
+    templates.find((t) => t.active !== false) ?? templates[0] ?? null;
 
   // Per-currency totals split by state for the summary strip.
   const totals = new Map<
@@ -107,6 +103,7 @@ export default async function InvoiceProjectPage({
           />
           <InvoiceTemplateDialog
             projects={[projectOption]}
+            template={schedule ?? undefined}
             defaultProjectId={project.id}
             trigger={
               <Button
@@ -149,66 +146,10 @@ export default async function InvoiceProjectPage({
         </div>
       ) : null}
 
-      <section className="rounded-md border bg-card">
-        <header className="p-4 border-b">
-          <h2 className="font-display text-xl tracking-wide leading-none">
-            🔁 Рекуррентные инвойсы
-          </h2>
-          <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-1">
-            {templates.length} шт.
-          </p>
-        </header>
-        {templates.length === 0 ? (
-          <p className="p-6 text-center font-mono text-xs text-muted-foreground">
-            Рекуррентных инвойсов у проекта нет — заведи через «+ Рекуррентный».
-          </p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-                <th className="text-right p-3 font-normal">Сумма</th>
-                <th className="text-left p-3 font-normal">Периодичность</th>
-                <th className="text-left p-3 font-normal">В этом месяце</th>
-                <th className="text-right p-3 font-normal" />
-              </tr>
-            </thead>
-            <tbody>
-              {templates.map((t) => {
-                const done = templateDoneThisMonth(t);
-                return (
-                  <tr
-                    key={t.id}
-                    className="border-b border-border/40 hover:bg-muted/20 transition"
-                  >
-                    <td className="p-3 text-right font-mono">
-                      {t.currency}{" "}
-                      {t.amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="p-3 text-sm">{describeFrequency(t)}</td>
-                    <td className="p-3">
-                      {done ? (
-                        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-good">
-                          ✓ выполнено
-                        </span>
-                      ) : (
-                        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber-600 dark:text-amber-400">
-                          ждёт
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3 text-right">
-                      <TemplateRowActions
-                        template={t}
-                        projects={[projectOption]}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </section>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <InvoiceDateBlock schedule={schedule} />
+        <NextInvoiceBlock schedule={schedule} planned={planned} />
+      </div>
 
       <section className="rounded-md border bg-card">
         <header className="p-4 border-b">
@@ -288,37 +229,94 @@ export default async function InvoiceProjectPage({
   );
 }
 
-function templateDoneThisMonth(t: {
-  last_issued_at?: string | null;
-}): boolean {
-  if (!t.last_issued_at) return false;
-  const now = new Date();
-  const d = new Date(t.last_issued_at);
+/** Frequency label WITHOUT the anchor date — the start date lives in
+ *  settings, the block only states the cadence. */
+function describeFrequency(t: InvoiceTemplate): string {
+  const freq = t.frequency ?? "monthly";
+  if (freq === "biweekly") return "каждые 2 недели";
+  if (freq === "quarterly") return "раз в квартал";
+  if (freq === "once") return "разово";
+  return t.issue_day ? `каждое ${t.issue_day}-е число` : "каждый месяц";
+}
+
+/** ① Invoice date — how issuing is scheduled (read-only). */
+function InvoiceDateBlock({ schedule }: { schedule: InvoiceTemplate | null }) {
+  const paused = schedule?.active === false;
   return (
-    d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+    <section className="rounded-md border bg-card p-4">
+      <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+        📅 Invoice date
+      </div>
+      {!schedule ? (
+        <div className="mt-2 text-sm text-muted-foreground italic">
+          уведомление не настроено
+        </div>
+      ) : (
+        <>
+          <div className="mt-2 font-display text-2xl leading-tight">
+            {describeFrequency(schedule)}
+          </div>
+          {paused ? (
+            <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-amber-600 dark:text-amber-400">
+              на паузе
+            </div>
+          ) : null}
+        </>
+      )}
+      <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+        Правится в «⚙ Настроить напоминание»
+      </div>
+    </section>
   );
 }
 
-function describeFrequency(t: {
-  frequency?: string;
-  issue_day?: number | null;
-  next_issue_date?: string | null;
-}): string {
-  const freq = t.frequency ?? "monthly";
-  if (freq === "monthly") {
-    return t.issue_day
-      ? `каждое ${t.issue_day}-е число`
-      : FREQ.monthly;
+/** ② Next Invoice date — forecast of the next issue + approx amount. */
+function NextInvoiceBlock({
+  schedule,
+  planned,
+}: {
+  schedule: InvoiceTemplate | null;
+  planned: number;
+}) {
+  const today = new Date();
+  let dueISO: string | null = null;
+  let amount = 0;
+
+  if (schedule && schedule.active !== false) {
+    const freq = schedule.frequency ?? "monthly";
+    if (freq === "biweekly") {
+      dueISO = biweeklyNextISO(schedule.next_issue_date, today);
+      amount = planned / 2; // Projects holds a month; biweekly bills half.
+    } else if (freq === "monthly" && schedule.issue_day) {
+      dueISO = monthlyReminderDue(
+        schedule.issue_day,
+        schedule.created_at,
+        today,
+      ).dueISO;
+      amount = planned;
+    }
   }
-  if (freq === "biweekly") {
-    return t.next_issue_date
-      ? `каждые 2 недели с ${fmtDate(t.next_issue_date)}`
-      : FREQ.biweekly;
-  }
-  if (freq === "quarterly") {
-    return t.issue_day
-      ? `раз в квартал, ${t.issue_day}-го`
-      : FREQ.quarterly;
-  }
-  return FREQ.once;
+
+  return (
+    <section className="rounded-md border bg-card p-4">
+      <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+        ⏭ Next Invoice date
+      </div>
+      {dueISO ? (
+        <>
+          <div className="mt-2 font-display text-2xl leading-tight text-primary">
+            {fmtDate(dueISO)}
+          </div>
+          <div className="mt-1 font-mono text-sm text-muted-foreground">
+            ≈ {schedule?.currency ?? "USD"}{" "}
+            {amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+          </div>
+        </>
+      ) : (
+        <div className="mt-2 text-sm text-muted-foreground italic">
+          {schedule ? "расписание на паузе" : "нет расписания"}
+        </div>
+      )}
+    </section>
+  );
 }
