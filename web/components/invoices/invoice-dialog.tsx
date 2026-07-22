@@ -15,13 +15,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { reportActionError } from "@/lib/client-errors";
 import {
   createInvoice,
-  createInvoiceTemplate,
   updateInvoice,
 } from "@/app/(protected)/invoices/_actions";
 import type { Invoice } from "@/lib/schemas";
 import type { ProjectOption } from "./invoice-template-dialog";
-
-type RecurringMode = "monthly" | "biweekly";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const addDays = (iso: string, days: number) => {
@@ -76,8 +73,6 @@ export function InvoiceDialog({
   const [dueDate, setDueDate] = useState<string>(
     invoice?.due_date ?? addDays(today(), 14),
   );
-  const [makeRecurring, setMakeRecurring] = useState(false);
-  const [recurringMode, setRecurringMode] = useState<RecurringMode>("monthly");
 
   const project = projects.find((p) => p.id === projectId);
   const planned = project?.planned_monthly;
@@ -106,17 +101,12 @@ export function InvoiceDialog({
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-display text-2xl tracking-wide">
-              {isEdit
-                ? "Редактировать инвойс"
-                : makeRecurring
-                  ? "Новый рекуррентный инвойс"
-                  : "Новый инвойс"}
+              {isEdit ? "Редактировать инвойс" : "Новый инвойс"}
             </DialogTitle>
           </DialogHeader>
           <form
             action={async (fd) => {
               try {
-                // Client is always the project name — synthesise it here.
                 const projectName =
                   projects.find(
                     (p) => p.id === (fd.get("project_id") as string),
@@ -125,14 +115,6 @@ export function InvoiceDialog({
 
                 if (isEdit && invoice) {
                   await updateInvoice(invoice.id, fd);
-                } else if (makeRecurring) {
-                  // "Recurring" mode = we're setting up a reminder, NOT
-                  // issuing an invoice today. Don't materialise a
-                  // concrete `invoices` row — just the template.
-                  // "Дата инвойса" becomes the start of the schedule.
-                  await createInvoiceTemplate(
-                    buildTemplateFormData(fd, recurringMode, projectName),
-                  );
                 } else {
                   fd.set("status", "issued");
                   await createInvoice(fd);
@@ -220,13 +202,13 @@ export function InvoiceDialog({
               </div>
             </div>
 
-            <div className={makeRecurring ? "" : "grid grid-cols-2 gap-3"}>
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label
                   htmlFor="issue_date"
                   className="text-xs uppercase tracking-widest text-muted-foreground"
                 >
-                  {makeRecurring ? "Первое выставление *" : "Дата инвойса *"}
+                  Дата инвойса *
                 </Label>
                 <Input
                   id="issue_date"
@@ -248,54 +230,45 @@ export function InvoiceDialog({
                     }
                   }}
                 />
-                {makeRecurring ? (
-                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                    С этой даты запустится напоминалка. Сам инвойс создадим когда выставишь.
-                  </p>
-                ) : null}
               </div>
-              {!makeRecurring ? (
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="due_date"
-                    className="text-xs uppercase tracking-widest text-muted-foreground"
-                  >
-                    Оплатить до *
-                  </Label>
-                  <Input
-                    id="due_date"
-                    name="due_date"
-                    type="date"
-                    required
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                  />
-                </div>
-              ) : null}
-            </div>
-
-            {!makeRecurring ? (
               <div className="space-y-1.5">
                 <Label
-                  htmlFor="invoice_number"
+                  htmlFor="due_date"
                   className="text-xs uppercase tracking-widest text-muted-foreground"
                 >
-                  Номер
+                  Оплатить до *
                 </Label>
                 <Input
-                  id="invoice_number"
-                  name="invoice_number"
-                  value={invoiceNumber}
-                  onChange={(e) => setInvoiceNumber(e.target.value)}
-                  placeholder="INV-001"
+                  id="due_date"
+                  name="due_date"
+                  type="date"
+                  required
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
                 />
-                {!isEdit && project ? (
-                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                    Следующий по проекту: {project.next_invoice_number}
-                  </p>
-                ) : null}
               </div>
-            ) : null}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="invoice_number"
+                className="text-xs uppercase tracking-widest text-muted-foreground"
+              >
+                Номер
+              </Label>
+              <Input
+                id="invoice_number"
+                name="invoice_number"
+                value={invoiceNumber}
+                onChange={(e) => setInvoiceNumber(e.target.value)}
+                placeholder="INV-001"
+              />
+              {!isEdit && project ? (
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  Следующий по проекту: {project.next_invoice_number}
+                </p>
+              ) : null}
+            </div>
 
             <div className="space-y-1.5">
               <Label
@@ -327,58 +300,6 @@ export function InvoiceDialog({
               />
             </div>
 
-            {!isEdit ? (
-              <div className="rounded-md border border-border/60 bg-muted/20 p-3 space-y-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={makeRecurring}
-                    onChange={(e) => setMakeRecurring(e.target.checked)}
-                    className="size-4 accent-primary"
-                  />
-                  <span className="font-mono text-[11px] uppercase tracking-[0.15em]">
-                    🔁 Сделать рекуррентным
-                  </span>
-                </label>
-                {makeRecurring ? (
-                  <div className="space-y-2 pl-6">
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="recurring_mode"
-                        value="monthly"
-                        checked={recurringMode === "monthly"}
-                        onChange={() => setRecurringMode("monthly")}
-                        className="mt-0.5 size-4 accent-primary"
-                      />
-                      <span className="text-sm">
-                        <span className="font-medium">Раз в месяц</span>{" "}
-                        <span className="text-muted-foreground font-mono text-[10px]">
-                          · день = число из «Дата инвойса»
-                        </span>
-                      </span>
-                    </label>
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="recurring_mode"
-                        value="biweekly"
-                        checked={recurringMode === "biweekly"}
-                        onChange={() => setRecurringMode("biweekly")}
-                        className="mt-0.5 size-4 accent-primary"
-                      />
-                      <span className="text-sm">
-                        <span className="font-medium">Раз в 2 недели</span>{" "}
-                        <span className="text-muted-foreground font-mono text-[10px]">
-                          · старт = «Дата инвойса»
-                        </span>
-                      </span>
-                    </label>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
             <DialogFooter>
               <Button
                 type="button"
@@ -388,11 +309,7 @@ export function InvoiceDialog({
                 Отмена
               </Button>
               <Button type="submit">
-                {isEdit
-                  ? "Сохранить"
-                  : makeRecurring
-                    ? "Настроить рекуррент"
-                    : "Создать инвойс"}
+                {isEdit ? "Сохранить" : "Создать инвойс"}
               </Button>
             </DialogFooter>
           </form>
@@ -400,40 +317,6 @@ export function InvoiceDialog({
       </Dialog>
     </>
   );
-}
-
-/**
- * Copy the fields that a recurring template shares with the just-created
- * one-off invoice, then add the recurrence-specific bits.
- */
-function buildTemplateFormData(
-  invoiceFd: FormData,
-  mode: RecurringMode,
-  projectName: string,
-): FormData {
-  const anchor =
-    (invoiceFd.get("issue_date") as string | null) ||
-    new Date().toISOString().slice(0, 10);
-  const anchorDate = new Date(anchor + "T00:00:00");
-  const dayOfMonth = anchorDate.getDate();
-
-  const fd = new FormData();
-  fd.set("project_id", (invoiceFd.get("project_id") as string) ?? "");
-  fd.set("client_name", projectName);
-  fd.set("description", (invoiceFd.get("description") as string) ?? "");
-  fd.set("amount", (invoiceFd.get("amount") as string) ?? "0");
-  fd.set("currency", (invoiceFd.get("currency") as string) ?? "USD");
-  fd.set("payment_terms_days", "14");
-  fd.set("active", "true");
-  fd.set("notes", "Создан из формы «Новый инвойс»");
-  if (mode === "monthly") {
-    fd.set("frequency", "monthly");
-    fd.set("issue_day", String(Math.min(dayOfMonth, 28)));
-  } else {
-    fd.set("frequency", "biweekly");
-    fd.set("next_issue_date", anchor);
-  }
-  return fd;
 }
 
 function Field({

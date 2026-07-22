@@ -86,13 +86,15 @@ export function ProjectsTab({
               <tr className="border-b text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
                 <th className="text-left p-3 font-normal">Проект</th>
                 <th className="text-right p-3 font-normal">Планируется/мес</th>
-                <th className="text-left p-3 font-normal">Периодичность</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((p) => {
                 const opt = projectOptions.find((o) => o.id === p.id);
                 const templates = templatesByProject.get(p.id) ?? [];
+                const activeTemplates = templates.filter(
+                  (t) => t.active !== false,
+                );
                 const planned = opt?.planned_monthly ?? 0;
                 return (
                   <tr
@@ -107,20 +109,33 @@ export function ProjectsTab({
                         <span className="font-display text-xl group-hover:text-primary transition leading-tight">
                           {p.name}
                         </span>
-                        {p.status === "support" ? (
-                          <span className="block font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground mt-1">
-                            support
-                          </span>
-                        ) : null}
+                        <div className="mt-1 space-y-0.5">
+                          {p.status === "support" ? (
+                            <span className="block font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                              support
+                            </span>
+                          ) : null}
+                          {activeTemplates.length > 0 ? (
+                            activeTemplates.map((t) => (
+                              <div
+                                key={t.id}
+                                className="font-mono text-[11px] text-muted-foreground"
+                              >
+                                🔁 {describeFrequency(t)}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/60">
+                              напоминание не настроено
+                            </div>
+                          )}
+                        </div>
                       </Link>
                     </td>
-                    <td className="p-3 text-right font-mono text-base text-muted-foreground align-middle">
+                    <td className="p-3 text-right font-mono text-base text-muted-foreground align-top">
                       {planned > 0
                         ? `~$${planned.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
                         : "—"}
-                    </td>
-                    <td className="p-3 align-middle">
-                      <FrequencyLabel templates={templates} />
                     </td>
                   </tr>
                 );
@@ -130,26 +145,6 @@ export function ProjectsTab({
         </div>
       )}
     </div>
-  );
-}
-
-function FrequencyLabel({ templates }: { templates: InvoiceTemplate[] }) {
-  const active = templates.filter((t) => t.active !== false);
-  if (active.length === 0) {
-    return (
-      <span className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
-        не настроено
-      </span>
-    );
-  }
-  return (
-    <ul className="space-y-0.5">
-      {active.map((t) => (
-        <li key={t.id} className="text-sm">
-          {describeFrequency(t)}
-        </li>
-      ))}
-    </ul>
   );
 }
 

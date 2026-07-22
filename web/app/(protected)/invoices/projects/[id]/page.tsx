@@ -9,6 +9,7 @@ import {
 } from "@/lib/data/invoices";
 import { Button } from "@/components/ui/button";
 import { InvoiceDialog } from "@/components/invoices/invoice-dialog";
+import { InvoiceTemplateDialog } from "@/components/invoices/invoice-template-dialog";
 import { InvoiceRowActions } from "@/components/invoices/invoice-row-actions";
 import { TemplateRowActions } from "@/components/invoices/template-row-actions";
 import {
@@ -91,7 +92,7 @@ export default async function InvoiceProjectPage({
               : "Планируется/мес: —"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <InvoiceDialog
             projects={[projectOption]}
             defaultProjectId={project.id}
@@ -101,6 +102,19 @@ export default async function InvoiceProjectPage({
                 className="font-mono text-[10px] uppercase tracking-[0.15em]"
               >
                 + Инвойс
+              </Button>
+            }
+          />
+          <InvoiceTemplateDialog
+            projects={[projectOption]}
+            defaultProjectId={project.id}
+            trigger={
+              <Button
+                size="sm"
+                variant="outline"
+                className="font-mono text-[10px] uppercase tracking-[0.15em]"
+              >
+                ⚙ Настроить напоминание
               </Button>
             }
           />
