@@ -15,7 +15,12 @@ import {
   InvoiceStatusBadge,
   effectiveStatus,
 } from "@/components/invoices/invoice-status-badge";
-import { fmtDate, monthlyReminderDue, biweeklyNextISO } from "@/lib/calc";
+import {
+  fmtDate,
+  monthlyReminderDue,
+  biweeklyNextISO,
+  adjustedIssueDateISO,
+} from "@/lib/calc";
 import type { InvoiceTemplate } from "@/lib/schemas";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +64,15 @@ export default async function InvoiceProjectPage({
     else if (s === "issued" || s === "to_issue") bucket.pending += inv.amount;
     totals.set(inv.currency, bucket);
   }
+
+  // Most recent actually-issued invoice — drives the Next-Invoice
+  // forecast (date advances once you issue) and the fallback amount
+  // when Projects has no team data to estimate from.
+  const lastIssued =
+    invoices
+      .filter((i) => i.issue_date && effectiveStatus(i) !== "cancelled")
+      .sort((a, b) => (b.issue_date ?? "").localeCompare(a.issue_date ?? ""))[0] ??
+    null;
 
   // Only the current project as the ProjectOption feed for dialogs.
   const projectOption = {
@@ -148,7 +162,13 @@ export default async function InvoiceProjectPage({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <InvoiceDateBlock schedule={schedule} />
-        <NextInvoiceBlock schedule={schedule} planned={planned} />
+        <NextInvoiceBlock
+          schedule={schedule}
+          planned={planned}
+          lastIssuedDate={lastIssued?.issue_date ?? null}
+          lastAmount={lastIssued?.amount ?? null}
+          lastCurrency={lastIssued?.currency ?? null}
+        />
       </div>
 
       <section className="rounded-md border bg-card">
@@ -270,31 +290,62 @@ function InvoiceDateBlock({ schedule }: { schedule: InvoiceTemplate | null }) {
   );
 }
 
-/** ② Next Invoice date — forecast of the next issue + approx amount. */
+/** ② Next Invoice date — forecast of the next issue + approx amount.
+ *  The date advances off the LAST issued invoice (issue → next cycle),
+ *  so once you invoice, the forecast jumps forward. The amount comes
+ *  from Projects when available, else falls back to the last invoice. */
 function NextInvoiceBlock({
   schedule,
   planned,
+  lastIssuedDate,
+  lastAmount,
+  lastCurrency,
 }: {
   schedule: InvoiceTemplate | null;
   planned: number;
+  lastIssuedDate: string | null;
+  lastAmount: number | null;
+  lastCurrency: string | null;
 }) {
   const today = new Date();
+  const todayISO = fmtISO(today);
   let dueISO: string | null = null;
-  let amount = 0;
 
   if (schedule && schedule.active !== false) {
     const freq = schedule.frequency ?? "monthly";
     if (freq === "biweekly") {
-      dueISO = biweeklyNextISO(schedule.next_issue_date, today);
-      amount = planned / 2; // Projects holds a month; biweekly bills half.
-    } else if (freq === "monthly" && schedule.issue_day) {
-      dueISO = monthlyReminderDue(
-        schedule.issue_day,
-        schedule.created_at,
-        today,
-      ).dueISO;
-      amount = planned;
+      // Step from (last issued + 14d) if we've issued, else from the
+      // configured anchor. biweeklyNextISO rolls it up to today.
+      const base = lastIssuedDate
+        ? addDaysISO(lastIssuedDate, 14)
+        : schedule.next_issue_date;
+      dueISO = biweeklyNextISO(base, today);
+    } else if (schedule.issue_day) {
+      // Already issued this calendar month → roll to next month;
+      // otherwise the normal (roll-forward / genuine-miss) computation.
+      const issuedThisMonth =
+        lastIssuedDate && lastIssuedDate.slice(0, 7) === todayISO.slice(0, 7);
+      dueISO = issuedThisMonth
+        ? adjustedIssueDateISO(
+            today.getFullYear(),
+            today.getMonth() + 1,
+            schedule.issue_day,
+          )
+        : monthlyReminderDue(schedule.issue_day, schedule.created_at, today)
+            .dueISO;
     }
+  }
+
+  // Approx amount: Projects first (biweekly halves the monthly figure),
+  // else the last invoice's amount (already a real per-cycle number).
+  const freq = schedule?.frequency ?? "monthly";
+  let amount = 0;
+  let currency = schedule?.currency ?? lastCurrency ?? "USD";
+  if (planned > 0) {
+    amount = freq === "biweekly" ? planned / 2 : planned;
+  } else if (lastAmount != null) {
+    amount = lastAmount;
+    currency = lastCurrency ?? currency;
   }
 
   return (
@@ -308,8 +359,9 @@ function NextInvoiceBlock({
             {fmtDate(dueISO)}
           </div>
           <div className="mt-1 font-mono text-sm text-muted-foreground">
-            ≈ {schedule?.currency ?? "USD"}{" "}
-            {amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+            {amount > 0
+              ? `≈ ${currency} ${amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+              : "сумма — впишешь при выставлении"}
           </div>
         </>
       ) : (
@@ -319,4 +371,17 @@ function NextInvoiceBlock({
       )}
     </section>
   );
+}
+
+/** Local YYYY-MM-DD (not UTC). */
+function fmtISO(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+function addDaysISO(iso: string, n: number): string {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return fmtISO(d);
 }
