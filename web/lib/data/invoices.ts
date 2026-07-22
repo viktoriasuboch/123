@@ -133,3 +133,82 @@ export async function plannedMonthlyForProject(
     .filter((m) => m.is_active !== false)
     .reduce((sum, m) => sum + (m.sell_rate ?? 0) * (m.hours_load ?? 0), 0);
 }
+
+/* ── batched variants — one query for the whole set ───────────────── */
+
+const ProjectMemberSlice = ProjectMember.pick({
+  project_id: true,
+  sell_rate: true,
+  hours_load: true,
+  is_active: true,
+});
+
+/**
+ * Same computation as `plannedMonthlyForProject`, but done in a single
+ * `project_members` query and grouped in memory. Returns a map keyed by
+ * project_id so callers avoid the N+1 pattern on the invoices page.
+ * Projects with no active members are absent from the map (caller
+ * defaults to 0).
+ */
+export async function plannedMonthlyByProject(): Promise<Map<string, number>> {
+  const { data, error } = await sb()
+    .from("project_members")
+    .select("project_id, sell_rate, hours_load, is_active");
+  if (error) throw error;
+  const rows = z.array(ProjectMemberSlice).parse(data ?? []);
+  const totals = new Map<string, number>();
+  for (const m of rows) {
+    if (m.is_active === false) continue;
+    const add = (m.sell_rate ?? 0) * (m.hours_load ?? 0);
+    if (add === 0) continue;
+    totals.set(m.project_id, (totals.get(m.project_id) ?? 0) + add);
+  }
+  return totals;
+}
+
+const InvoiceNumberRow = z.object({
+  project_id: z.string().uuid(),
+  invoice_number: z.string().nullable(),
+});
+
+/**
+ * Same logic as `nextInvoiceNumberForProject`, but done with one query
+ * over `invoices` and grouped in memory. Returns a map keyed by
+ * project_id. Projects with no numbered invoice yet are absent from
+ * the map — callers should treat "missing" as `INV-001`.
+ */
+export async function nextInvoiceNumbersByProject(): Promise<
+  Map<string, string>
+> {
+  const { data, error } = await sb()
+    .from("invoices")
+    .select("project_id, invoice_number")
+    .not("invoice_number", "is", null);
+  if (error) throw error;
+  const rows = z.array(InvoiceNumberRow).parse(data ?? []);
+
+  type Best = { prefix: string; pad: number; max: number };
+  const perProject = new Map<string, Best>();
+  for (const r of rows) {
+    if (!r.invoice_number) continue;
+    const m = r.invoice_number.match(/^(.*?)(\d+)\s*$/);
+    if (!m) continue;
+    const n = parseInt(m[2], 10);
+    if (!Number.isFinite(n)) continue;
+    const cur = perProject.get(r.project_id);
+    if (!cur || n >= cur.max) {
+      perProject.set(r.project_id, {
+        prefix: m[1],
+        pad: Math.max(m[2].length, 3),
+        max: n,
+      });
+    }
+  }
+
+  const out = new Map<string, string>();
+  for (const [projectId, best] of perProject) {
+    const next = String(best.max + 1).padStart(best.pad, "0");
+    out.set(projectId, `${best.prefix}${next}`);
+  }
+  return out;
+}

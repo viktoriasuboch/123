@@ -2,8 +2,8 @@ import Link from "next/link";
 import {
   listInvoiceTemplates,
   listInvoices,
-  plannedMonthlyForProject,
-  nextInvoiceNumberForProject,
+  plannedMonthlyByProject,
+  nextInvoiceNumbersByProject,
 } from "@/lib/data/invoices";
 import {
   listDocumentReminders,
@@ -98,31 +98,27 @@ export default async function InvoicesPage({
       ? (sp.issued_month as string)
       : "all";
 
-  const [templates, invoices, projects, reminders] = await Promise.all([
-    listInvoiceTemplates(),
-    listInvoices(),
-    listProjects(),
-    listDocumentReminders(),
-  ]);
+  const [templates, invoices, projects, reminders, plannedByProject, nextNumberByProject] =
+    await Promise.all([
+      listInvoiceTemplates(),
+      listInvoices(),
+      listProjects(),
+      listDocumentReminders(),
+      plannedMonthlyByProject(),
+      nextInvoiceNumbersByProject(),
+    ]);
 
   const projectsById = new Map(projects.map((p) => [p.id, p]));
 
-  // Preload per-project: planned monthly billing + suggested next number.
-  const projectMeta = await Promise.all(
-    projects.map(async (p) => {
-      const [planned, nextNumber] = await Promise.all([
-        plannedMonthlyForProject(p.id),
-        nextInvoiceNumberForProject(p.id),
-      ]);
-      return {
-        id: p.id,
-        name: p.name,
-        planned_monthly: planned,
-        next_invoice_number: nextNumber,
-      };
-    }),
-  );
-  const projectOptions = projectMeta;
+  // Two batched queries above replace the previous ~2 × projects.length
+  // per-project queries. Projects with no numbered invoice fall back to
+  // INV-001; projects with no active members fall back to 0.
+  const projectOptions = projects.map((p) => ({
+    id: p.id,
+    name: p.name,
+    planned_monthly: plannedByProject.get(p.id) ?? 0,
+    next_invoice_number: nextNumberByProject.get(p.id) ?? "INV-001",
+  }));
 
   const today = new Date();
   const todayISO = today.toISOString().slice(0, 10);
