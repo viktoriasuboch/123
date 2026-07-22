@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fmtDate, adjustedIssueDateISO } from "@/lib/calc";
+import { fmtDate, adjustedIssueDateISO, dashboardPeriod } from "@/lib/calc";
 import {
   InvoiceStatusBadge,
   effectiveStatus,
@@ -36,10 +36,10 @@ import { IssuedMonthFilter } from "@/components/invoices/issued-month-filter";
 import {
   TodayWidget,
   type TodayIssueItem,
-  type TodayOverdueItem,
   type TodayDocumentItem,
 } from "@/components/invoices/today-widget";
 import { InvoicesDashboard } from "@/components/invoices/invoices-dashboard";
+import type { OverdueItem } from "@/components/invoices/overdue-list";
 import {
   InvoicesCalendar,
   type CalendarView,
@@ -63,6 +63,9 @@ type SP = Promise<{
   day?: string;
   scope?: string;
   issued_month?: string;
+  period?: string;
+  from?: string;
+  to?: string;
 }>;
 
 const isHaysProject = (name: string) => /hays/i.test(name);
@@ -153,16 +156,20 @@ export default async function InvoicesPage({
   // Missed ones first (most overdue at the top), then upcoming.
   toIssue.sort((a, b) => a.daysUntil - b.daysUntil);
 
-  const overdue: TodayOverdueItem[] = invoices
+  // Overdue is absolute ("as of today"), independent of the dashboard
+  // period filter — it feeds the standalone overdue section + KPI.
+  const overdue: OverdueItem[] = invoices
     .filter((inv) => effectiveStatus(inv, todayISO) === "overdue")
     .map((inv) => {
       const due = inv.due_date ? new Date(inv.due_date) : null;
       const daysLate = due
         ? Math.max(0, Math.floor((today.getTime() - due.getTime()) / 86400_000))
         : 0;
-      return { kind: "overdue" as const, invoice: inv, daysLate };
+      return { invoice: inv, daysLate };
     })
     .sort((a, b) => b.daysLate - a.daysLate);
+
+  const period = dashboardPeriod(sp.period, sp.from, sp.to, today);
 
   const documents: TodayDocumentItem[] = reminders
     .filter((r) => isReminderOutstanding(r, today))
@@ -215,13 +222,14 @@ export default async function InvoicesPage({
       </div>
 
       {tab === "dashboard" ? (
-        <TodayWidget
-          toIssue={toIssue}
-          overdue={overdue}
-          documents={documents}
-          projects={projectsById}
-          projectOptions={projectOptions}
-        />
+        <div className="sticky top-0 z-20 -mx-1 px-1 pb-1 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <TodayWidget
+            toIssue={toIssue}
+            documents={documents}
+            projects={projectsById}
+            projectOptions={projectOptions}
+          />
+        </div>
       ) : null}
 
       <TabsNav tab={tab} allCount={invoices.length + reminders.length} />
@@ -232,6 +240,9 @@ export default async function InvoicesPage({
           templates={templates}
           reminders={reminders}
           projects={projectsById}
+          projectOptions={projectOptions}
+          period={period}
+          overdue={overdue}
         />
       ) : tab === "projects" ? (
         <ProjectsTab

@@ -1,4 +1,4 @@
-import type { ProjectMember } from "@/lib/schemas";
+import type { Invoice, ProjectMember } from "@/lib/schemas";
 
 export const HOURS_PER_MONTH = 160;
 
@@ -176,4 +176,170 @@ export function adjustedIssueDateISO(
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/* ═══ invoices dashboard aggregators (pure, over listInvoices) ═══════ */
+
+export type DashboardPeriodKind = "this" | "prev" | "prev2" | "custom";
+export type DashboardPeriod = {
+  kind: DashboardPeriodKind;
+  /** inclusive YYYY-MM-DD */
+  from: string;
+  /** inclusive YYYY-MM-DD */
+  to: string;
+};
+
+type CurrencyBucket = Record<string, number>;
+export type AgingBucketMap = Record<"0-30" | "31-60" | "60+", CurrencyBucket>;
+
+const ymUTC = (d: Date) => d.toISOString().slice(0, 7);
+const ymdUTC = (d: Date) => d.toISOString().slice(0, 10);
+const dateKey = (iso: string) => iso.slice(0, 10);
+
+/**
+ * Resolve the dashboard's period from URL params into an inclusive
+ * YYYY-MM-DD range. Month presets are computed in UTC off `now`;
+ * `custom` uses the from/to params and falls back to the current month
+ * when either is missing/invalid or inverted. String comparison on the
+ * YYYY-MM-DD keys is enough downstream, so no timezone math leaks out.
+ */
+export function dashboardPeriod(
+  kind: string | undefined,
+  fromParam: string | undefined,
+  toParam: string | undefined,
+  now: Date,
+): DashboardPeriod {
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const monthRange = (yy: number, mm: number) => ({
+    from: ymdUTC(new Date(Date.UTC(yy, mm, 1))),
+    to: ymdUTC(new Date(Date.UTC(yy, mm + 1, 0))),
+  });
+
+  if (kind === "prev") return { kind: "prev", ...monthRange(y, m - 1) };
+  if (kind === "prev2") return { kind: "prev2", ...monthRange(y, m - 2) };
+  if (kind === "custom") {
+    const isDate = (s?: string) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    if (isDate(fromParam) && isDate(toParam) && fromParam! <= toParam!) {
+      return { kind: "custom", from: fromParam!, to: toParam! };
+    }
+    return { kind: "custom", ...monthRange(y, m) };
+  }
+  return { kind: "this", ...monthRange(y, m) };
+}
+
+const notCancelled = (inv: Invoice) => (inv.status ?? "to_issue") !== "cancelled";
+const inRangeISO = (iso: string | null | undefined, p: { from: string; to: string }) => {
+  if (!iso) return false;
+  const k = dateKey(iso);
+  return k >= p.from && k <= p.to;
+};
+
+/** Currency carrying the largest non-cancelled volume; "USD" if empty. */
+export function primaryCurrency(invoices: Invoice[]): string {
+  const totals: CurrencyBucket = {};
+  for (const inv of invoices) {
+    if (!notCancelled(inv)) continue;
+    totals[inv.currency] = (totals[inv.currency] ?? 0) + inv.amount;
+  }
+  const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+  return sorted[0]?.[0] ?? "USD";
+}
+
+/** Paid cash for one currency, bucketed by paid_date month, last N months up to `now`. */
+export function cashByMonth(
+  invoices: Invoice[],
+  currency: string,
+  now: Date,
+  monthsBack = 6,
+): { ym: string; total: number }[] {
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const months: string[] = [];
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    months.push(ymUTC(new Date(Date.UTC(y, m - i, 1))));
+  }
+  const totals = new Map<string, number>(months.map((ym) => [ym, 0]));
+  for (const inv of invoices) {
+    if (inv.currency !== currency) continue;
+    if ((inv.status ?? "") !== "paid" || !inv.paid_date) continue;
+    const ym = dateKey(inv.paid_date).slice(0, 7);
+    if (totals.has(ym)) {
+      totals.set(ym, totals.get(ym)! + (inv.paid_amount ?? inv.amount));
+    }
+  }
+  return months.map((ym) => ({ ym, total: totals.get(ym)! }));
+}
+
+/** Top-N clients by issued volume in the period; the rest folded into "Другие". */
+export function topClients(
+  invoices: Invoice[],
+  currency: string,
+  period: { from: string; to: string },
+  n = 5,
+): { name: string; total: number }[] {
+  const totals: CurrencyBucket = {};
+  for (const inv of invoices) {
+    if (inv.currency !== currency || !notCancelled(inv)) continue;
+    if (!inRangeISO(inv.issue_date, period)) continue;
+    totals[inv.client_name] = (totals[inv.client_name] ?? 0) + inv.amount;
+  }
+  const sorted = Object.entries(totals)
+    .map(([name, total]) => ({ name, total }))
+    .sort((a, b) => b.total - a.total);
+  if (sorted.length <= n) return sorted;
+  const rest = sorted.slice(n).reduce((s, c) => s + c.total, 0);
+  return [...sorted.slice(0, n), { name: "Другие", total: rest }];
+}
+
+/** Issue→paid latency distribution for invoices paid within the period. */
+export function paymentLatency(
+  invoices: Invoice[],
+  currency: string,
+  period: { from: string; to: string },
+): { avgDays: number; count: number; buckets: { label: string; count: number }[] } {
+  const bucketDefs: { label: string; test: (d: number) => boolean }[] = [
+    { label: "0–7", test: (d) => d <= 7 },
+    { label: "8–14", test: (d) => d <= 14 },
+    { label: "15–30", test: (d) => d <= 30 },
+    { label: "30+", test: () => true },
+  ];
+  const buckets = bucketDefs.map((b) => ({ label: b.label, count: 0 }));
+  let sum = 0;
+  let count = 0;
+  for (const inv of invoices) {
+    if (inv.currency !== currency) continue;
+    if ((inv.status ?? "") !== "paid" || !inv.paid_date || !inv.issue_date) continue;
+    if (!inRangeISO(inv.paid_date, period)) continue;
+    const days = Math.round(
+      (Date.parse(inv.paid_date) - Date.parse(inv.issue_date)) / 86400_000,
+    );
+    if (!Number.isFinite(days) || days < 0) continue;
+    sum += days;
+    count++;
+    const idx = bucketDefs.findIndex((b) => b.test(days));
+    buckets[idx].count++;
+  }
+  return { avgDays: count ? Math.round(sum / count) : 0, count, buckets };
+}
+
+/**
+ * Aging of overdue invoices, absolute "as of `now`" (independent of the
+ * period filter). Overdue = issued invoice whose due_date is before
+ * today — the same UI-derived rule used elsewhere.
+ */
+export function agingBuckets(invoices: Invoice[], now: Date): AgingBucketMap {
+  const todayISO = ymdUTC(now);
+  const aging: AgingBucketMap = { "0-30": {}, "31-60": {}, "60+": {} };
+  for (const inv of invoices) {
+    const s = inv.status ?? "to_issue";
+    if (s !== "issued" || !inv.due_date) continue;
+    if (dateKey(inv.due_date) >= todayISO) continue; // not overdue yet
+    const daysLate = Math.floor(
+      (now.getTime() - Date.parse(inv.due_date)) / 86400_000,
+    );
+    const b = daysLate <= 30 ? "0-30" : daysLate <= 60 ? "31-60" : "60+";
+    aging[b][inv.currency] = (aging[b][inv.currency] ?? 0) + inv.amount;
+  }
+  return aging;
 }

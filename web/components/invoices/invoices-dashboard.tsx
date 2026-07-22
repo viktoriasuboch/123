@@ -3,82 +3,196 @@ import type {
   InvoiceTemplate,
   DocumentReminder,
 } from "@/lib/schemas";
+import type { ProjectOption } from "./invoice-template-dialog";
+import {
+  fmtDate,
+  adjustedIssueDateISO,
+  primaryCurrency,
+  cashByMonth,
+  topClients,
+  paymentLatency,
+  agingBuckets,
+  type DashboardPeriod,
+  type AgingBucketMap,
+} from "@/lib/calc";
 import { effectiveStatus } from "./invoice-status-badge";
-import { fmtDate, adjustedIssueDateISO } from "@/lib/calc";
+import { DashboardPeriodFilter } from "./dashboard-period-filter";
+import {
+  CashByMonthBar,
+  TopClientsDonut,
+  PaymentLatencyBars,
+} from "./dashboard-charts";
+import { OverdueList, type OverdueItem } from "./overdue-list";
 
 type CurrencyBucket = Record<string, number>;
-type AgingBucket = Record<string, CurrencyBucket>;
 
-/** True if the ISO date falls in the given (year, month0) pair. */
-function inMonth(iso: string | null | undefined, year: number, month0: number) {
-  if (!iso) return false;
-  const d = new Date(iso + (iso.length === 10 ? "T00:00:00Z" : ""));
-  return d.getUTCFullYear() === year && d.getUTCMonth() === month0;
-}
+const dateKey = (iso: string | null | undefined) => iso?.slice(0, 10) ?? "";
+const inPeriod = (iso: string | null | undefined, p: DashboardPeriod) => {
+  const k = dateKey(iso);
+  return !!k && k >= p.from && k <= p.to;
+};
 
 export function InvoicesDashboard({
   invoices,
   templates,
   reminders,
   projects,
+  projectOptions,
+  period,
+  overdue,
 }: {
   invoices: Invoice[];
   templates: InvoiceTemplate[];
   reminders: DocumentReminder[];
   projects: Map<string, { id: string; name: string }>;
+  projectOptions: ProjectOption[];
+  period: DashboardPeriod;
+  overdue: OverdueItem[];
 }) {
   const today = new Date();
   const todayISO = today.toISOString().slice(0, 10);
-  const y = today.getFullYear();
-  const m = today.getMonth();
-  const prevMonth = m === 0 ? 11 : m - 1;
-  const prevYear = m === 0 ? y - 1 : y;
 
-  const pending: CurrencyBucket = {};
-  const overdue: CurrencyBucket = {};
-  const paidThisMonth: CurrencyBucket = {};
-  const paidPrevMonth: CurrencyBucket = {};
-  const aging: AgingBucket = { "0-30": {}, "31-60": {}, "60+": {} };
+  // ── period-aware KPI buckets ──────────────────────────────────────
+  const pending: CurrencyBucket = {}; // due within period, not yet paid
+  const paid: CurrencyBucket = {}; // paid within period
+  const issued: CurrencyBucket = {}; // issued (created) within period
+  const overdueBucket: CurrencyBucket = {}; // absolute, as of today
 
   for (const inv of invoices) {
-    const s = effectiveStatus(inv, todayISO);
+    const s = inv.status ?? "to_issue";
     if (s === "cancelled") continue;
     if (s === "paid") {
-      if (inMonth(inv.paid_date, y, m)) {
-        bump(paidThisMonth, inv.currency, inv.paid_amount ?? inv.amount);
-      } else if (inMonth(inv.paid_date, prevYear, prevMonth)) {
-        bump(paidPrevMonth, inv.currency, inv.paid_amount ?? inv.amount);
+      if (inPeriod(inv.paid_date, period)) {
+        bump(paid, inv.currency, inv.paid_amount ?? inv.amount);
       }
-      continue;
-    }
-    if (s === "overdue") {
-      bump(overdue, inv.currency, inv.amount);
-      const due = inv.due_date ? new Date(inv.due_date + "T00:00:00Z") : null;
-      const daysLate = due
-        ? Math.floor((today.getTime() - due.getTime()) / 86400_000)
-        : 0;
-      const bucket =
-        daysLate <= 30 ? "0-30" : daysLate <= 60 ? "31-60" : "60+";
-      bump(aging[bucket], inv.currency, inv.amount);
-      continue;
-    }
-    // to_issue + issued (not yet overdue) — both count as "waiting".
-    if (s === "issued" || s === "to_issue") {
+    } else if (inPeriod(inv.due_date, period)) {
       bump(pending, inv.currency, inv.amount);
     }
+    if (inPeriod(inv.issue_date, period)) {
+      bump(issued, inv.currency, inv.amount);
+    }
+  }
+  for (const { invoice } of overdue) {
+    bump(overdueBucket, invoice.currency, invoice.amount);
   }
 
-  // Upcoming 7 days: any invoice with due_date in [today, today+7], any
-  // reminder whose next expected date falls in the window, any template
-  // whose issue_day falls in the window.
-  const upcoming: UpcomingEvent[] = [];
+  // ── charts (single dominant currency, no cross-currency sums) ─────
+  const currency = primaryCurrency(invoices);
+  const cash = cashByMonth(invoices, currency, today, 6);
+  const clients = topClients(invoices, currency, period, 5);
+  const latency = paymentLatency(invoices, currency, period);
+
+  // ── aging: absolute, as of today ─────────────────────────────────
+  const aging = agingBuckets(invoices, today);
+  const agingHasRows = Object.values(aging).some(
+    (b) => Object.keys(b).length > 0,
+  );
+
+  // ── upcoming 7 days (unchanged behaviour) ─────────────────────────
+  const upcoming = buildUpcoming(
+    invoices,
+    templates,
+    reminders,
+    projects,
+    today,
+    todayISO,
+  );
+
+  return (
+    <div className="space-y-6">
+      <DashboardPeriodFilter
+        kind={period.kind}
+        from={period.from}
+        to={period.to}
+      />
+
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Ожидается · период" bucket={pending} tone="warn" />
+        <KpiCard label="Просрочено · сегодня" bucket={overdueBucket} tone="bad" />
+        <KpiCard label="Оплачено · период" bucket={paid} tone="good" />
+        <KpiCard label="Выставлено · период" bucket={issued} tone="muted" />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <CashByMonthBar data={cash} currency={currency} />
+        <TopClientsDonut data={clients} currency={currency} />
+        <PaymentLatencyBars
+          avgDays={latency.avgDays}
+          count={latency.count}
+          buckets={latency.buckets}
+          currency={currency}
+        />
+      </div>
+
+      {overdue.length > 0 ? (
+        <OverdueList
+          items={overdue}
+          projects={projects}
+          projectOptions={projectOptions}
+        />
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {agingHasRows ? (
+          <section className="rounded-md border bg-card">
+            <header className="p-4 border-b">
+              <h3 className="font-display text-lg tracking-wide leading-none">
+                Aging просроченных
+              </h3>
+              <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-1">
+                Сколько дней прошло с due date
+              </p>
+            </header>
+            <AgingTable aging={aging} />
+          </section>
+        ) : null}
+
+        <section className="rounded-md border bg-card">
+          <header className="p-4 border-b">
+            <h3 className="font-display text-lg tracking-wide leading-none">
+              Ближайшие 7 дней
+            </h3>
+            <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-1">
+              Что произойдёт до {fmtDate(upcomingHorizon(today))}
+            </p>
+          </header>
+          <UpcomingList events={upcoming} />
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function upcomingHorizon(today: Date): string {
   const in7 = new Date(today);
   in7.setDate(in7.getDate() + 7);
-  const in7ISO = in7.toISOString().slice(0, 10);
+  return in7.toISOString().slice(0, 10);
+}
+
+/* ─── upcoming events builder ─────────────────────────────────────── */
+
+type UpcomingEvent = {
+  date: string;
+  type: "issue" | "pay" | "document";
+  title: string;
+  detail: string;
+};
+
+function buildUpcoming(
+  invoices: Invoice[],
+  templates: InvoiceTemplate[],
+  reminders: DocumentReminder[],
+  projects: Map<string, { id: string; name: string }>,
+  today: Date,
+  todayISO: string,
+): UpcomingEvent[] {
+  const y = today.getFullYear();
+  const m = today.getMonth();
+  const in7ISO = upcomingHorizon(today);
+  const upcoming: UpcomingEvent[] = [];
 
   for (const inv of invoices) {
-    const s = effectiveStatus(inv, todayISO);
-    if (s !== "issued") continue;
+    if (effectiveStatus(inv, todayISO) !== "issued") continue;
     if (!inv.due_date) continue;
     if (inv.due_date >= todayISO && inv.due_date <= in7ISO) {
       upcoming.push({
@@ -91,7 +205,6 @@ export function InvoicesDashboard({
   }
   for (const t of templates) {
     if (t.active === false || !t.issue_day) continue;
-    // Weekend issue_days slide to the next business day.
     const iso = adjustedIssueDateISO(y, m, t.issue_day);
     if (iso >= todayISO && iso <= in7ISO) {
       upcoming.push({
@@ -116,43 +229,7 @@ export function InvoicesDashboard({
     }
   }
   upcoming.sort((a, b) => a.date.localeCompare(b.date));
-
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Ожидается · этот месяц" bucket={pending} tone="warn" />
-        <KpiCard label="Просрочено" bucket={overdue} tone="bad" />
-        <KpiCard label="Оплачено · этот месяц" bucket={paidThisMonth} tone="good" />
-        <KpiCard label="Оплачено · прошлый месяц" bucket={paidPrevMonth} tone="muted" />
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <section className="rounded-md border bg-card">
-          <header className="p-4 border-b">
-            <h3 className="font-display text-lg tracking-wide leading-none">
-              Aging просроченных
-            </h3>
-            <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-1">
-              Сколько дней прошло с due date
-            </p>
-          </header>
-          <AgingTable aging={aging} />
-        </section>
-
-        <section className="rounded-md border bg-card">
-          <header className="p-4 border-b">
-            <h3 className="font-display text-lg tracking-wide leading-none">
-              Ближайшие 7 дней
-            </h3>
-            <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-1">
-              Что произойдёт до {fmtDate(in7ISO)}
-            </p>
-          </header>
-          <UpcomingList events={upcoming} />
-        </section>
-      </div>
-    </div>
-  );
+  return upcoming;
 }
 
 /* ─── KPI card ────────────────────────────────────────────────────── */
@@ -204,22 +281,12 @@ function KpiCard({
 
 /* ─── aging table ─────────────────────────────────────────────────── */
 
-function AgingTable({ aging }: { aging: AgingBucket }) {
+function AgingTable({ aging }: { aging: AgingBucketMap }) {
   const currencies = Array.from(
-    new Set(
-      Object.values(aging).flatMap((b) => Object.keys(b)),
-    ),
+    new Set(Object.values(aging).flatMap((b) => Object.keys(b))),
   ).sort();
 
-  if (currencies.length === 0) {
-    return (
-      <p className="p-6 text-center font-mono text-xs text-muted-foreground">
-        Нет просроченных инвойсов.
-      </p>
-    );
-  }
-
-  const buckets: Array<keyof typeof aging> = ["0-30", "31-60", "60+"];
+  const buckets: Array<keyof AgingBucketMap> = ["0-30", "31-60", "60+"];
 
   return (
     <table className="w-full text-sm">
@@ -258,13 +325,6 @@ function AgingTable({ aging }: { aging: AgingBucket }) {
 }
 
 /* ─── upcoming events list ────────────────────────────────────────── */
-
-type UpcomingEvent = {
-  date: string;
-  type: "issue" | "pay" | "document";
-  title: string;
-  detail: string;
-};
 
 const TYPE_META: Record<
   UpcomingEvent["type"],

@@ -4,16 +4,13 @@ import {
   markDocumentReminderReceived,
   markInvoiceTemplateDone,
 } from "@/app/(protected)/invoices/_actions";
-import { reportActionError } from "@/lib/client-errors";
-import { fmtDate } from "@/lib/calc";
+import { useHideable } from "@/lib/use-hideable";
 import type {
-  Invoice,
   InvoiceTemplate,
   DocumentReminder,
 } from "@/lib/schemas";
 import type { ProjectOption } from "./invoice-template-dialog";
 import { InvoiceDialog } from "./invoice-dialog";
-import { MarkInvoicePaidDialog } from "./mark-invoice-paid-dialog";
 
 type Project = { id: string; name: string };
 
@@ -21,12 +18,6 @@ export type TodayIssueItem = {
   kind: "template";
   template: InvoiceTemplate;
   daysUntil: number;
-};
-
-export type TodayOverdueItem = {
-  kind: "overdue";
-  invoice: Invoice;
-  daysLate: number;
 };
 
 export type TodayDocumentItem = {
@@ -37,19 +28,16 @@ export type TodayDocumentItem = {
 
 export function TodayWidget({
   toIssue,
-  overdue,
   documents,
   projects,
   projectOptions,
 }: {
   toIssue: TodayIssueItem[];
-  overdue: TodayOverdueItem[];
   documents: TodayDocumentItem[];
   projects: Map<string, Project>;
   projectOptions: ProjectOption[];
 }) {
-  const isEmpty =
-    toIssue.length === 0 && overdue.length === 0 && documents.length === 0;
+  const isEmpty = toIssue.length === 0 && documents.length === 0;
   if (isEmpty) {
     return (
       <div className="rounded-md border border-good/30 bg-good/5 p-4">
@@ -85,23 +73,6 @@ export function TodayWidget({
         </section>
       ) : null}
 
-      {overdue.length > 0 ? (
-        <section>
-          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-destructive mb-2">
-            Просрочено · {overdue.length}
-          </div>
-          <ul className="space-y-1.5">
-            {overdue.map((it) => (
-              <OverdueRow
-                key={it.invoice.id}
-                item={it}
-                project={projects.get(it.invoice.project_id)}
-              />
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
       {documents.length > 0 ? (
         <section>
           <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-sky-600 dark:text-sky-400 mb-2">
@@ -131,6 +102,9 @@ function IssueRow({
   project?: Project;
   projectOptions: ProjectOption[];
 }) {
+  const { hidden, dismiss } = useHideable();
+  if (hidden) return null;
+
   const opt = projectOptions.find((p) => p.id === item.template.project_id);
   const suggested = opt?.next_invoice_number ?? "";
   const missed = item.daysUntil < 0;
@@ -185,13 +159,12 @@ function IssueRow({
           }
         />
         <form
-          action={async () => {
-            try {
-              await markInvoiceTemplateDone(item.template.id);
-            } catch (err) {
-              reportActionError(err, "Не сохранилось");
-            }
-          }}
+          action={() =>
+            dismiss(
+              () => markInvoiceTemplateDone(item.template.id),
+              "Не сохранилось",
+            )
+          }
         >
           <button
             type="submit"
@@ -206,37 +179,6 @@ function IssueRow({
   );
 }
 
-function OverdueRow({
-  item,
-  project,
-}: {
-  item: TodayOverdueItem;
-  project?: Project;
-}) {
-  return (
-    <li className="flex items-center justify-between gap-3 flex-wrap py-1 border-b border-border/30 last:border-b-0">
-      <div className="min-w-0 flex-1">
-        <div className="text-sm">
-          <span className="font-mono text-muted-foreground">
-            {item.invoice.invoice_number ?? "—"}
-          </span>{" "}
-          <span className="font-medium">
-            {project?.name ?? "—"}
-          </span>{" "}
-          <span className="text-destructive">
-            — просрочен на {item.daysLate} дн.
-          </span>
-        </div>
-        <div className="font-mono text-[10px] text-muted-foreground">
-          {item.invoice.client_name} · {item.invoice.currency}{" "}
-          {formatAmount(item.invoice.amount)} · due {fmtDate(item.invoice.due_date)}
-        </div>
-      </div>
-      <MarkInvoicePaidDialog invoice={item.invoice} />
-    </li>
-  );
-}
-
 function DocumentRow({
   item,
   project,
@@ -244,6 +186,8 @@ function DocumentRow({
   item: TodayDocumentItem;
   project?: Project;
 }) {
+  const { hidden, dismiss } = useHideable();
+  if (hidden) return null;
   return (
     <li className="flex items-center justify-between gap-3 flex-wrap py-1 border-b border-border/30 last:border-b-0">
       <div className="min-w-0 flex-1">
@@ -264,13 +208,12 @@ function DocumentRow({
         ) : null}
       </div>
       <form
-        action={async () => {
-          try {
-            await markDocumentReminderReceived(item.reminder.id);
-          } catch (err) {
-            reportActionError(err, "Не сохранилось");
-          }
-        }}
+        action={() =>
+          dismiss(
+            () => markDocumentReminderReceived(item.reminder.id),
+            "Не сохранилось",
+          )
+        }
       >
         <button
           type="submit"

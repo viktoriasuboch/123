@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { reportActionError } from "@/lib/client-errors";
 import {
   markInvoiceTemplateDone,
   markDocumentReminderReceived,
 } from "@/app/(protected)/invoices/_actions";
 import { InvoiceDialog } from "./invoice-dialog";
+import { useHideable } from "@/lib/use-hideable";
 import type { InvoiceTemplate, DocumentReminder } from "@/lib/schemas";
 import type { ProjectOption } from "./invoice-template-dialog";
 
@@ -29,6 +29,8 @@ export function CalendarIssueActions({
   projectOptions: ProjectOption[];
 }) {
   const [open, setOpen] = useState(false);
+  const { hidden, dismiss } = useHideable();
+  if (hidden) return null;
   return (
     <div className="flex items-center gap-1.5 shrink-0">
       <button
@@ -39,13 +41,12 @@ export function CalendarIssueActions({
         + Создать
       </button>
       <form
-        action={async () => {
-          try {
-            await markInvoiceTemplateDone(template.id);
-          } catch (err) {
-            reportActionError(err, "Не сохранилось");
-          }
-        }}
+        action={() =>
+          dismiss(
+            () => markInvoiceTemplateDone(template.id),
+            "Не сохранилось",
+          )
+        }
       >
         <button
           type="submit"
@@ -74,15 +75,16 @@ export function CalendarDocumentAction({
 }: {
   reminder: DocumentReminder;
 }) {
+  const { hidden, dismiss } = useHideable();
+  if (hidden) return null;
   return (
     <form
-      action={async () => {
-        try {
-          await markDocumentReminderReceived(reminder.id);
-        } catch (err) {
-          reportActionError(err, "Не сохранилось");
-        }
-      }}
+      action={() =>
+        dismiss(
+          () => markDocumentReminderReceived(reminder.id),
+          "Не сохранилось",
+        )
+      }
       className="shrink-0"
     >
       <button
