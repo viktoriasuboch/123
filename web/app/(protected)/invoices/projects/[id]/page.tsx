@@ -282,9 +282,6 @@ function InvoiceDateBlock({ schedule }: { schedule: InvoiceTemplate | null }) {
           ) : null}
         </>
       )}
-      <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-        Правится в «⚙ Настроить напоминание»
-      </div>
     </section>
   );
 }
