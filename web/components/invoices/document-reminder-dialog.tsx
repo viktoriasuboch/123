@@ -34,6 +34,12 @@ export function DocumentReminderDialog({
   const isEdit = !!reminder;
   const [open, setOpen] = useState(false);
 
+  const initialProjectId = reminder?.project_id ?? "";
+  const [projectId, setProjectId] = useState<string>(initialProjectId);
+  const [search, setSearch] = useState<string>(
+    projects.find((p) => p.id === initialProjectId)?.name ?? "",
+  );
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={trigger as React.ReactElement} />
@@ -46,6 +52,14 @@ export function DocumentReminderDialog({
         <form
           action={async (fd) => {
             try {
+              if (!isEdit && !projectId) {
+                reportActionError(
+                  new Error("Выбери проект из списка"),
+                  "Не сохранилось",
+                );
+                return;
+              }
+              fd.set("project_id", projectId);
               if (isEdit && reminder) {
                 await updateDocumentReminder(reminder.id, fd);
               } else {
@@ -59,27 +73,38 @@ export function DocumentReminderDialog({
           className="space-y-4"
         >
           <div className="space-y-1.5">
-            <Label
-              htmlFor="project_id"
-              className="text-xs uppercase tracking-widest text-muted-foreground"
-            >
+            <Label className="text-xs uppercase tracking-widest text-muted-foreground">
               Проект *
             </Label>
-            <select
-              id="project_id"
-              name="project_id"
-              required
-              defaultValue={reminder?.project_id ?? projects[0]?.id ?? ""}
-              disabled={isEdit}
-              className="w-full h-9 px-3 rounded-md border border-input bg-transparent text-sm dark:bg-input/30"
-            >
-              <option value="">— выбери —</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            {isEdit ? (
+              <div className="font-display text-lg leading-tight">
+                {projects.find((p) => p.id === projectId)?.name ?? "—"}
+              </div>
+            ) : (
+              <>
+                <Input
+                  list="creditnote-project-search"
+                  value={search}
+                  autoComplete="off"
+                  placeholder="Начни печатать проект…"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setSearch(v);
+                    setProjectId(projects.find((p) => p.name === v)?.id ?? "");
+                  }}
+                />
+                <datalist id="creditnote-project-search">
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.name} />
+                  ))}
+                </datalist>
+                {search && !projectId ? (
+                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber-600 dark:text-amber-400">
+                    выбери проект из списка
+                  </p>
+                ) : null}
+              </>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -126,9 +151,7 @@ export function DocumentReminderDialog({
               <select
                 id="recurring"
                 name="recurring"
-                defaultValue={
-                  reminder?.recurring === false ? "false" : "true"
-                }
+                defaultValue={reminder?.recurring === false ? "false" : "true"}
                 className="w-full h-9 px-3 rounded-md border border-input bg-transparent text-sm dark:bg-input/30"
               >
                 <option value="true">Каждый месяц</option>
@@ -168,11 +191,7 @@ export function DocumentReminderDialog({
           </div>
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setOpen(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Отмена
             </Button>
             <Button type="submit">{isEdit ? "Сохранить" : "Создать"}</Button>
