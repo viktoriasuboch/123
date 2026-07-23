@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type {
   Invoice,
   InvoiceTemplate,
@@ -6,252 +7,200 @@ import type {
 import type { ProjectOption } from "./invoice-template-dialog";
 import {
   fmtDate,
-  adjustedIssueDateISO,
-  primaryCurrency,
-  cashByMonth,
-  topClients,
-  paymentLatency,
-  agingBuckets,
+  monthlyReminderDue,
+  biweeklyNextISO,
+  forecastIssuanceByCurrency,
   type DashboardPeriod,
-  type AgingBucketMap,
 } from "@/lib/calc";
+import { bucketToUsd } from "@/lib/fx";
 import { effectiveStatus } from "./invoice-status-badge";
 import { DashboardPeriodFilter } from "./dashboard-period-filter";
-import {
-  CashByMonthBar,
-  TopClientsDonut,
-  PaymentLatencyBars,
-} from "./dashboard-charts";
+import { DashboardOverviewChart, type OverviewBucket } from "./dashboard-overview-chart";
 import { OverdueList, type OverdueItem } from "./overdue-list";
+import {
+  TodayWidget,
+  type TodayIssueItem,
+  type TodayDocumentItem,
+} from "./today-widget";
 
-type CurrencyBucket = Record<string, number>;
+type Bucket = Record<string, number>;
+type ProjectLite = { id: string; name: string; status?: string | null };
 
+const RU_MONTHS = [
+  "Янв","Фев","Мар","Апр","Май","Июн","Июл","Авг","Сен","Окт","Ноя","Дек",
+];
+const isHays = (n: string) => /hays/i.test(n);
 const dateKey = (iso: string | null | undefined) => iso?.slice(0, 10) ?? "";
 const inPeriod = (iso: string | null | undefined, p: DashboardPeriod) => {
   const k = dateKey(iso);
   return !!k && k >= p.from && k <= p.to;
 };
+const bump = (b: Bucket, c: string, v: number) => {
+  b[c] = (b[c] ?? 0) + v;
+};
+const fmtAmt = (v: number) =>
+  v.toLocaleString("en-US", { maximumFractionDigits: 0 });
 
 export function InvoicesDashboard({
   invoices,
   templates,
-  reminders,
-  projects,
+  projectList,
   projectOptions,
+  projectsById,
   period,
   overdue,
+  rates,
+  toIssueDue,
+  documentsDue,
 }: {
   invoices: Invoice[];
   templates: InvoiceTemplate[];
-  reminders: DocumentReminder[];
-  projects: Map<string, { id: string; name: string }>;
+  projectList: ProjectLite[];
   projectOptions: ProjectOption[];
+  projectsById: Map<string, { id: string; name: string }>;
   period: DashboardPeriod;
   overdue: OverdueItem[];
+  rates: Record<string, number>;
+  toIssueDue: TodayIssueItem[];
+  documentsDue: TodayDocumentItem[];
 }) {
   const today = new Date();
-  const todayISO = today.toISOString().slice(0, 10);
 
-  // ── period-aware KPI buckets ──────────────────────────────────────
-  const pending: CurrencyBucket = {}; // due within period, not yet paid
-  const paid: CurrencyBucket = {}; // paid within period
-  const issued: CurrencyBucket = {}; // issued (created) within period
-  const overdueBucket: CurrencyBucket = {}; // absolute, as of today
+  // ── KPI buckets ───────────────────────────────────────────────────
+  const issued: Bucket = {}; // issued within period
+  const paid: Bucket = {}; // paid within period
+  const receivable: Bucket = {}; // issued, unpaid, not overdue (as of now)
+  const overdueB: Bucket = {}; // overdue as of now
+  const overdueByMonthAgnostic: Bucket = {};
 
   for (const inv of invoices) {
-    const s = inv.status ?? "to_issue";
+    const s = effectiveStatus(inv);
     if (s === "cancelled") continue;
+    if (inPeriod(inv.issue_date, period)) bump(issued, inv.currency, inv.amount);
     if (s === "paid") {
-      if (inPeriod(inv.paid_date, period)) {
+      if (inPeriod(inv.paid_date, period))
         bump(paid, inv.currency, inv.paid_amount ?? inv.amount);
-      }
-    } else if (inPeriod(inv.due_date, period)) {
-      bump(pending, inv.currency, inv.amount);
-    }
-    if (inPeriod(inv.issue_date, period)) {
-      bump(issued, inv.currency, inv.amount);
+    } else if (s === "overdue") {
+      bump(overdueB, inv.currency, inv.amount);
+    } else if (s === "issued" || s === "to_issue") {
+      bump(receivable, inv.currency, inv.amount);
     }
   }
-  for (const { invoice } of overdue) {
-    bump(overdueBucket, invoice.currency, invoice.amount);
+  void overdueByMonthAgnostic;
+  const forecast = forecastIssuanceByCurrency(templates, period, today);
+
+  // ── overview chart buckets: Просрочено + receipts by due-month ────
+  const byMonth = new Map<string, Bucket>();
+  for (const inv of invoices) {
+    const s = effectiveStatus(inv);
+    if (s === "issued" && inv.due_date) {
+      const ym = dateKey(inv.due_date).slice(0, 7);
+      const b = byMonth.get(ym) ?? {};
+      bump(b, inv.currency, inv.amount);
+      byMonth.set(ym, b);
+    }
+  }
+  const chartBuckets: OverviewBucket[] = [];
+  if (Object.keys(overdueB).length > 0) {
+    chartBuckets.push({ label: "Просрочено", overdue: true, values: overdueB });
+  }
+  for (const ym of [...byMonth.keys()].sort()) {
+    const [, m] = ym.split("-");
+    chartBuckets.push({ label: RU_MONTHS[parseInt(m, 10) - 1], values: byMonth.get(ym)! });
   }
 
-  // ── charts (single dominant currency, no cross-currency sums) ─────
-  const currency = primaryCurrency(invoices);
-  const cash = cashByMonth(invoices, currency, today, 6);
-  const clients = topClients(invoices, currency, period, 5);
-  const latency = paymentLatency(invoices, currency, period);
+  const hasAction = toIssueDue.length > 0 || documentsDue.length > 0;
 
-  // ── aging: absolute, as of today ─────────────────────────────────
-  const aging = agingBuckets(invoices, today);
-  const agingHasRows = Object.values(aging).some(
-    (b) => Object.keys(b).length > 0,
-  );
-
-  // ── upcoming 7 days (unchanged behaviour) ─────────────────────────
-  const upcoming = buildUpcoming(
-    invoices,
-    templates,
-    reminders,
-    projects,
-    today,
-    todayISO,
-  );
+  // ── project billing sections (обычные / HAYS) ─────────────────────
+  const live = projectList.filter((p) => {
+    const st = p.status ?? "active";
+    return st === "active" || st === "support";
+  });
+  const normalProjects = live.filter((p) => !isHays(p.name));
+  const haysProjects = live.filter((p) => isHays(p.name));
+  const templateByProject = new Map<string, InvoiceTemplate>();
+  for (const t of templates) {
+    if (t.active === false) continue;
+    if (!templateByProject.has(t.project_id)) templateByProject.set(t.project_id, t);
+  }
 
   return (
     <div className="space-y-6">
-      <DashboardPeriodFilter
-        kind={period.kind}
-        from={period.from}
-        to={period.to}
-      />
+      <DashboardPeriodFilter kind={period.kind} from={period.from} to={period.to} />
 
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Ожидается · период" bucket={pending} tone="warn" />
-        <KpiCard label="Просрочено · сегодня" bucket={overdueBucket} tone="bad" />
-        <KpiCard label="Оплачено · период" bucket={paid} tone="good" />
-        <KpiCard label="Выставлено · период" bucket={issued} tone="muted" />
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+        <Kpi label="Выставлено" bucket={issued} rates={rates} tone="muted" />
+        <Kpi label="Оплачено" bucket={paid} rates={rates} tone="good" />
+        <Kpi label="Ожидается к оплате" bucket={receivable} rates={rates} tone="sky" />
+        <Kpi label="Прогноз выставления" bucket={forecast} rates={rates} tone="muted" />
+        <Kpi label="Просрочено" bucket={overdueB} rates={rates} tone="bad" />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <CashByMonthBar data={cash} currency={currency} />
-        <TopClientsDonut data={clients} currency={currency} />
-        <PaymentLatencyBars
-          avgDays={latency.avgDays}
-          count={latency.count}
-          buckets={latency.buckets}
-          currency={currency}
+      <DashboardOverviewChart buckets={chartBuckets} />
+
+      {hasAction ? (
+        <TodayWidget
+          toIssue={toIssueDue}
+          documents={documentsDue}
+          projects={projectsById}
+          projectOptions={projectOptions}
+        />
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <ProjectBillingSection
+          title="Проекты"
+          projects={normalProjects}
+          templateByProject={templateByProject}
+          projectOptions={projectOptions}
+          today={today}
+        />
+        <ProjectBillingSection
+          title="HAYS"
+          projects={haysProjects}
+          templateByProject={templateByProject}
+          projectOptions={projectOptions}
+          today={today}
         />
       </div>
 
       {overdue.length > 0 ? (
         <OverdueList
           items={overdue}
-          projects={projects}
+          projects={projectsById}
           projectOptions={projectOptions}
         />
       ) : null}
-
-      <div className="grid gap-4 md:grid-cols-2">
-        {agingHasRows ? (
-          <section className="rounded-md border bg-card">
-            <header className="p-4 border-b">
-              <h3 className="font-display text-lg tracking-wide leading-none">
-                Aging просроченных
-              </h3>
-              <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-1">
-                Сколько дней прошло с due date
-              </p>
-            </header>
-            <AgingTable aging={aging} />
-          </section>
-        ) : null}
-
-        <section className="rounded-md border bg-card">
-          <header className="p-4 border-b">
-            <h3 className="font-display text-lg tracking-wide leading-none">
-              Ближайшие 7 дней
-            </h3>
-            <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-1">
-              Что произойдёт до {fmtDate(upcomingHorizon(today))}
-            </p>
-          </header>
-          <UpcomingList events={upcoming} />
-        </section>
-      </div>
     </div>
   );
 }
 
-function upcomingHorizon(today: Date): string {
-  const in7 = new Date(today);
-  in7.setDate(in7.getDate() + 7);
-  return in7.toISOString().slice(0, 10);
-}
+/* ─── KPI tile ─────────────────────────────────────────────────────── */
 
-/* ─── upcoming events builder ─────────────────────────────────────── */
-
-type UpcomingEvent = {
-  date: string;
-  type: "issue" | "pay" | "document";
-  title: string;
-  detail: string;
-};
-
-function buildUpcoming(
-  invoices: Invoice[],
-  templates: InvoiceTemplate[],
-  reminders: DocumentReminder[],
-  projects: Map<string, { id: string; name: string }>,
-  today: Date,
-  todayISO: string,
-): UpcomingEvent[] {
-  const y = today.getFullYear();
-  const m = today.getMonth();
-  const in7ISO = upcomingHorizon(today);
-  const upcoming: UpcomingEvent[] = [];
-
-  for (const inv of invoices) {
-    if (effectiveStatus(inv, todayISO) !== "issued") continue;
-    if (!inv.due_date) continue;
-    if (inv.due_date >= todayISO && inv.due_date <= in7ISO) {
-      upcoming.push({
-        date: inv.due_date,
-        type: "pay",
-        title: `${inv.invoice_number ?? "—"} ${projects.get(inv.project_id)?.name ?? ""}`,
-        detail: `${inv.currency} ${formatAmount(inv.amount)} · ${inv.client_name}`,
-      });
-    }
-  }
-  for (const t of templates) {
-    if (t.active === false || !t.issue_day) continue;
-    const iso = adjustedIssueDateISO(y, m, t.issue_day);
-    if (iso >= todayISO && iso <= in7ISO) {
-      upcoming.push({
-        date: iso,
-        type: "issue",
-        title: projects.get(t.project_id)?.name ?? "—",
-        detail: `${t.client_name} · ~${t.currency} ${formatAmount(t.amount)}`,
-      });
-    }
-  }
-  for (const r of reminders) {
-    if (r.active === false) continue;
-    const dt = new Date(y, m, r.expected_day);
-    const iso = dt.toISOString().slice(0, 10);
-    if (iso >= todayISO && iso <= in7ISO) {
-      upcoming.push({
-        date: iso,
-        type: "document",
-        title: r.name,
-        detail: projects.get(r.project_id)?.name ?? "—",
-      });
-    }
-  }
-  upcoming.sort((a, b) => a.date.localeCompare(b.date));
-  return upcoming;
-}
-
-/* ─── KPI card ────────────────────────────────────────────────────── */
-
-function KpiCard({
+function Kpi({
   label,
   bucket,
+  rates,
   tone,
 }: {
   label: string;
-  bucket: CurrencyBucket;
-  tone: "good" | "bad" | "warn" | "muted";
+  bucket: Bucket;
+  rates: Record<string, number>;
+  tone: "good" | "bad" | "sky" | "muted";
 }) {
-  const entries = Object.entries(bucket).sort((a, b) => b[1] - a[1]);
+  const entries = Object.entries(bucket)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1]);
   const toneCls =
     tone === "good"
       ? "text-good"
       : tone === "bad"
         ? "text-destructive"
-        : tone === "warn"
-          ? "text-warn"
+        : tone === "sky"
+          ? "text-sky-500"
           : "text-foreground";
+  const usd = bucketToUsd(bucket, rates);
+  const multi = entries.length > 1;
 
   return (
     <div className="rounded-md border bg-card p-4">
@@ -261,127 +210,95 @@ function KpiCard({
       {entries.length === 0 ? (
         <div className="font-display text-2xl text-muted-foreground">—</div>
       ) : (
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {entries.map(([currency, amount]) => (
-            <div
-              key={currency}
-              className={`font-display text-2xl leading-tight ${toneCls}`}
-            >
-              <span className="font-mono text-xs text-muted-foreground mr-1.5">
+            <div key={currency} className={`font-display text-xl leading-tight ${toneCls}`}>
+              <span className="font-mono text-[10px] text-muted-foreground mr-1.5">
                 {currency}
               </span>
-              {formatAmount(amount)}
+              {fmtAmt(amount)}
             </div>
           ))}
+          {multi ? (
+            <div className="font-mono text-[10px] text-muted-foreground pt-0.5">
+              ≈ ${fmtAmt(usd)}
+            </div>
+          ) : null}
         </div>
       )}
     </div>
   );
 }
 
-/* ─── aging table ─────────────────────────────────────────────────── */
+/* ─── project billing section ──────────────────────────────────────── */
 
-function AgingTable({ aging }: { aging: AgingBucketMap }) {
-  const currencies = Array.from(
-    new Set(Object.values(aging).flatMap((b) => Object.keys(b))),
-  ).sort();
-
-  const buckets: Array<keyof AgingBucketMap> = ["0-30", "31-60", "60+"];
-
+function ProjectBillingSection({
+  title,
+  projects,
+  templateByProject,
+  projectOptions,
+  today,
+}: {
+  title: string;
+  projects: ProjectLite[];
+  templateByProject: Map<string, InvoiceTemplate>;
+  projectOptions: ProjectOption[];
+  today: Date;
+}) {
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-          <th className="text-left p-3 font-normal">Валюта</th>
-          {buckets.map((b) => (
-            <th key={b} className="text-right p-3 font-normal">
-              {b} дн.
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {currencies.map((c) => (
-          <tr key={c} className="border-b border-border/30 last:border-b-0">
-            <td className="p-3 font-mono text-xs">{c}</td>
-            {buckets.map((b) => {
-              const amt = aging[b][c] ?? 0;
-              return (
-                <td
-                  key={b}
-                  className={`p-3 text-right font-mono ${
-                    amt > 0 && b !== "0-30" ? "text-destructive" : ""
-                  }`}
+    <section className="rounded-md border bg-card">
+      <header className="p-4 border-b">
+        <h3 className="font-display text-lg tracking-wide leading-none">{title}</h3>
+        <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-1">
+          {projects.length} · когда выставлять
+        </p>
+      </header>
+      {projects.length === 0 ? (
+        <p className="p-6 text-center font-mono text-xs text-muted-foreground">
+          Нет проектов.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border/40">
+          {projects.map((p) => {
+            const t = templateByProject.get(p.id);
+            const opt = projectOptions.find((o) => o.id === p.id);
+            const planned = opt?.planned_monthly ?? 0;
+            let nextISO: string | null = null;
+            let amount = 0;
+            let currency = t?.currency ?? "USD";
+            if (t) {
+              if ((t.frequency ?? "monthly") === "biweekly") {
+                nextISO = biweeklyNextISO(t.next_issue_date, today);
+                amount = planned / 2;
+              } else if (t.issue_day) {
+                nextISO = monthlyReminderDue(t.issue_day, t.created_at, today).dueISO;
+                amount = planned;
+              }
+              currency = t.currency ?? currency;
+            }
+            return (
+              <li key={p.id} className="p-3 flex items-center justify-between gap-3">
+                <Link
+                  href={`/invoices/projects/${p.id}`}
+                  className="min-w-0 flex-1 group"
                 >
-                  {amt > 0 ? formatAmount(amt) : "—"}
-                </td>
-              );
-            })}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+                  <div className="font-medium truncate group-hover:text-primary transition">
+                    {p.name}
+                  </div>
+                  <div className="font-mono text-[10px] text-muted-foreground">
+                    {t ? `выставить ${fmtDate(nextISO)}` : "напоминание не настроено"}
+                  </div>
+                </Link>
+                {t && amount > 0 ? (
+                  <div className="font-mono text-sm text-muted-foreground shrink-0">
+                    ≈ {currency} {fmtAmt(amount)}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
-}
-
-/* ─── upcoming events list ────────────────────────────────────────── */
-
-const TYPE_META: Record<
-  UpcomingEvent["type"],
-  { label: string; cls: string }
-> = {
-  issue: { label: "выставить", cls: "text-amber-600 dark:text-amber-400" },
-  pay: { label: "оплата", cls: "text-sky-600 dark:text-sky-400" },
-  document: { label: "документ", cls: "text-violet-600 dark:text-violet-400" },
-};
-
-function UpcomingList({ events }: { events: UpcomingEvent[] }) {
-  if (events.length === 0) {
-    return (
-      <p className="p-6 text-center font-mono text-xs text-muted-foreground">
-        В ближайшие 7 дней ничего не запланировано.
-      </p>
-    );
-  }
-  return (
-    <ul className="divide-y divide-border/40">
-      {events.map((e, i) => {
-        const meta = TYPE_META[e.type];
-        return (
-          <li
-            key={`${e.date}-${e.type}-${i}`}
-            className="p-3 flex items-start gap-3"
-          >
-            <div className="font-mono text-[11px] text-muted-foreground w-24 shrink-0">
-              {fmtDate(e.date)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm truncate">
-                <span
-                  className={`font-mono text-[9px] uppercase tracking-[0.15em] ${meta.cls} mr-2`}
-                >
-                  {meta.label}
-                </span>
-                <span className="font-medium">{e.title}</span>
-              </div>
-              <div className="font-mono text-[10px] text-muted-foreground truncate">
-                {e.detail}
-              </div>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function bump(bucket: CurrencyBucket, currency: string, amount: number) {
-  bucket[currency] = (bucket[currency] ?? 0) + amount;
-}
-
-function formatAmount(v: number): string {
-  return v.toLocaleString("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  });
 }

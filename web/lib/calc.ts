@@ -1,4 +1,4 @@
-import type { Invoice, ProjectMember } from "@/lib/schemas";
+import type { Invoice, ProjectMember, InvoiceTemplate } from "@/lib/schemas";
 
 export const HOURS_PER_MONTH = 160;
 
@@ -419,4 +419,75 @@ export function agingBuckets(invoices: Invoice[], now: Date): AgingBucketMap {
     aging[b][inv.currency] = (aging[b][inv.currency] ?? 0) + inv.amount;
   }
   return aging;
+}
+
+/* ═══ forecast: invoices we still have to ISSUE within a period ══════ */
+
+/** Concrete issue dates a recurring template lands on inside [from,to].
+ *  monthly → the (weekend-adjusted) issue day of each spanned month;
+ *  biweekly → +14-day steps from the anchor;
+ *  quarterly/once are treated as their next_issue_date if in range. */
+function scheduleOccurrencesInPeriod(
+  t: InvoiceTemplate,
+  period: DashboardPeriod,
+): string[] {
+  const out: string[] = [];
+  const freq = t.frequency ?? "monthly";
+  if (freq === "monthly" && t.issue_day) {
+    const [fy, fm] = period.from.split("-").map((s) => parseInt(s, 10));
+    const [ty, tm] = period.to.split("-").map((s) => parseInt(s, 10));
+    let y = fy;
+    let m = fm - 1;
+    while (y < ty || (y === ty && m <= tm - 1)) {
+      const iso = adjustedIssueDateISO(y, m, t.issue_day);
+      if (iso >= period.from && iso <= period.to) out.push(iso);
+      m += 1;
+      if (m > 11) { m = 0; y += 1; }
+    }
+  } else if (freq === "biweekly" && t.next_issue_date) {
+    const d = new Date(t.next_issue_date + "T00:00:00");
+    if (!isNaN(d.getTime())) {
+      let guard = 0;
+      while (localISO(d) < period.from && guard < 520) {
+        d.setDate(d.getDate() + 14);
+        guard++;
+      }
+      while (localISO(d) <= period.to && guard < 520) {
+        out.push(localISO(d));
+        d.setDate(d.getDate() + 14);
+        guard++;
+      }
+    }
+  } else if (t.next_issue_date) {
+    const iso = t.next_issue_date;
+    if (iso >= period.from && iso <= period.to) out.push(iso);
+  }
+  return out;
+}
+
+/**
+ * Forecast of invoices still to be ISSUED in the period (not yet
+ * created), per currency — distinct from receivables (already issued,
+ * unpaid). Sums each active template's per-cycle amount over its
+ * occurrences that fall on/after today within the period. Biweekly's
+ * per-cycle figure is half the stored monthly-ish amount.
+ */
+export function forecastIssuanceByCurrency(
+  templates: InvoiceTemplate[],
+  period: DashboardPeriod,
+  now: Date,
+): CurrencyBucket {
+  const todayISO = localISO(now);
+  const bucket: CurrencyBucket = {};
+  for (const t of templates) {
+    if (t.active === false) continue;
+    const perCycle = (t.frequency ?? "monthly") === "biweekly"
+      ? t.amount / 2
+      : t.amount;
+    for (const iso of scheduleOccurrencesInPeriod(t, period)) {
+      if (iso < todayISO) continue;
+      bucket[t.currency] = (bucket[t.currency] ?? 0) + perCycle;
+    }
+  }
+  return bucket;
 }

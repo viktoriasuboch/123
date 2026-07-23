@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fmtDate, monthlyReminderDue, dashboardPeriod } from "@/lib/calc";
+import { getUsdRates } from "@/lib/fx";
 import {
   InvoiceStatusBadge,
   effectiveStatus,
@@ -33,10 +34,9 @@ import {
   type ProjectScope,
 } from "@/components/invoices/projects-tab";
 import { MonthYearFilter } from "@/components/invoices/month-year-filter";
-import {
-  TodayWidget,
-  type TodayIssueItem,
-  type TodayDocumentItem,
+import type {
+  TodayIssueItem,
+  TodayDocumentItem,
 } from "@/components/invoices/today-widget";
 import { InvoicesDashboard } from "@/components/invoices/invoices-dashboard";
 import type { OverdueItem } from "@/components/invoices/overdue-list";
@@ -111,7 +111,7 @@ export default async function InvoicesPage({
     filterMonth = sp.issued_month!.slice(5, 7);
   }
 
-  const [templates, invoices, projects, reminders, plannedByProject, nextNumberByProject] =
+  const [templates, invoices, projects, reminders, plannedByProject, nextNumberByProject, rates] =
     await Promise.all([
       listInvoiceTemplates(),
       listInvoices(),
@@ -119,6 +119,7 @@ export default async function InvoicesPage({
       listDocumentReminders(),
       plannedMonthlyByProject(),
       nextInvoiceNumbersByProject(),
+      getUsdRates(),
     ]);
 
   const projectsById = new Map(projects.map((p) => [p.id, p]));
@@ -152,6 +153,9 @@ export default async function InvoicesPage({
   }
   // Missed ones first (most overdue at the top), then upcoming.
   toIssue.sort((a, b) => a.daysUntil - b.daysUntil);
+  // "К действию" shows only what's actually due now — today or missed
+  // (daysUntil <= 0). Upcoming reminders don't nag ahead of time.
+  const toIssueDue = toIssue.filter((it) => it.daysUntil <= 0);
 
   // Overdue is absolute ("as of today"), independent of the dashboard
   // period filter — it feeds the standalone overdue section + KPI.
@@ -178,6 +182,10 @@ export default async function InvoicesPage({
 
   return (
     <div className="space-y-6">
+      <div className="sticky top-0 z-20 -mx-1 px-1 py-1 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        <TabsNav tab={tab} allCount={invoices.length + reminders.length} />
+      </div>
+
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-display text-4xl tracking-widest text-primary leading-none">
@@ -219,27 +227,17 @@ export default async function InvoicesPage({
       </div>
 
       {tab === "dashboard" ? (
-        <div className="sticky top-0 z-20 -mx-1 px-1 pb-1 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <TodayWidget
-            toIssue={toIssue}
-            documents={documents}
-            projects={projectsById}
-            projectOptions={projectOptions}
-          />
-        </div>
-      ) : null}
-
-      <TabsNav tab={tab} allCount={invoices.length + reminders.length} />
-
-      {tab === "dashboard" ? (
         <InvoicesDashboard
           invoices={invoices}
           templates={templates}
-          reminders={reminders}
-          projects={projectsById}
+          projectList={projects}
           projectOptions={projectOptions}
+          projectsById={projectsById}
           period={period}
           overdue={overdue}
+          rates={rates}
+          toIssueDue={toIssueDue}
+          documentsDue={documents}
         />
       ) : tab === "projects" ? (
         <ProjectsTab
