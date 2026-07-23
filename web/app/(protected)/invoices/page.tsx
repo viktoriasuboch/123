@@ -291,8 +291,8 @@ function TabsNav({
   }[] = [
     { id: "dashboard", label: "Дашборд", count: null },
     { id: "calendar", label: "Календарь", count: null },
-    { id: "all", label: "Все инвойсы", count: allCount },
     { id: "projects", label: "Проекты", count: null },
+    { id: "all", label: "Все инвойсы", count: allCount },
   ];
   return (
     <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
