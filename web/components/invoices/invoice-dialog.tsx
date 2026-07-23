@@ -59,9 +59,13 @@ export function InvoiceDialog({
     if (isControlled) onOpenChange?.(v);
     else setOpenInternal(v);
   };
-  const initialProjectId =
-    invoice?.project_id ?? defaultProjectId ?? projects[0]?.id ?? "";
+  // No projects[0] fallback: the top-level quick-add starts empty so
+  // you search; the project page passes defaultProjectId to prefill.
+  const initialProjectId = invoice?.project_id ?? defaultProjectId ?? "";
   const [projectId, setProjectId] = useState<string>(initialProjectId);
+  const [search, setSearch] = useState<string>(
+    projects.find((p) => p.id === initialProjectId)?.name ?? "",
+  );
   const [invoiceNumber, setInvoiceNumber] = useState<string>(
     invoice?.invoice_number ??
       projects.find((p) => p.id === initialProjectId)?.next_invoice_number ??
@@ -107,10 +111,19 @@ export function InvoiceDialog({
           <form
             action={async (fd) => {
               try {
-                // A disabled <select> isn't submitted, so set project_id
-                // from state explicitly. client_name falls back to the
-                // existing invoice value so an edit never sends an empty
-                // required field (that was the "Не сохранилось" crash).
+                // Guard: create needs a resolved project (search may hold
+                // free text that matched nothing).
+                if (!isEdit && !projectId) {
+                  reportActionError(
+                    new Error("Выбери проект из списка"),
+                    "Не сохранилось",
+                  );
+                  return;
+                }
+                // A disabled/absent control isn't submitted, so set
+                // project_id from state explicitly. client_name falls
+                // back to the existing invoice value so an edit never
+                // sends an empty required field.
                 fd.set("project_id", projectId);
                 const projectName =
                   projects.find((p) => p.id === projectId)?.name ??
@@ -142,32 +155,42 @@ export function InvoiceDialog({
                     "—"}
                 </div>
               ) : (
-                <select
-                  name="project_id"
-                  required
-                  value={projectId}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setProjectId(v);
-                    const prev = projects.find(
-                      (p) => p.id === projectId,
-                    )?.next_invoice_number;
-                    const nextSuggestion =
-                      projects.find((p) => p.id === v)?.next_invoice_number ??
-                      "";
-                    if (invoiceNumber === "" || invoiceNumber === prev) {
-                      setInvoiceNumber(nextSuggestion);
-                    }
-                  }}
-                  className="w-full h-9 px-3 rounded-md border border-input bg-transparent text-sm dark:bg-input/30"
-                >
-                  <option value="">— выбери —</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <Input
+                    list="invoice-project-search"
+                    value={search}
+                    autoComplete="off"
+                    placeholder="Начни печатать проект…"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setSearch(v);
+                      const match = projects.find((p) => p.name === v);
+                      const prevId = projectId;
+                      const newId = match?.id ?? "";
+                      setProjectId(newId);
+                      const prev = projects.find(
+                        (p) => p.id === prevId,
+                      )?.next_invoice_number;
+                      const nextSuggestion = match?.next_invoice_number ?? "";
+                      if (
+                        match &&
+                        (invoiceNumber === "" || invoiceNumber === prev)
+                      ) {
+                        setInvoiceNumber(nextSuggestion);
+                      }
+                    }}
+                  />
+                  <datalist id="invoice-project-search">
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.name} />
+                    ))}
+                  </datalist>
+                  {search && !projectId ? (
+                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber-600 dark:text-amber-400">
+                      выбери проект из списка
+                    </p>
+                  ) : null}
+                </>
               )}
               {planned != null && planned > 0 && !isEdit ? (
                 <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">

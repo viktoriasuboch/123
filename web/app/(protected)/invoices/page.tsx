@@ -32,7 +32,7 @@ import {
   ProjectsTab,
   type ProjectScope,
 } from "@/components/invoices/projects-tab";
-import { IssuedMonthFilter } from "@/components/invoices/issued-month-filter";
+import { MonthYearFilter } from "@/components/invoices/month-year-filter";
 import {
   TodayWidget,
   type TodayIssueItem,
@@ -63,6 +63,8 @@ type SP = Promise<{
   day?: string;
   scope?: string;
   issued_month?: string;
+  year?: string;
+  month?: string;
   period?: string;
   from?: string;
   to?: string;
@@ -96,10 +98,18 @@ export default async function InvoicesPage({
   const projectScope: ProjectScope = sp.scope === "hays" ? "hays" : "all";
   const invoiceScope: InvoiceScope =
     sp.scope === "hays" || sp.tab === "documents" ? "hays" : "invoices";
-  const issuedMonthFilter =
-    /^\d{4}-\d{2}$/.test(sp.issued_month ?? "")
-      ? (sp.issued_month as string)
-      : "all";
+  // Year + month filter for "Все инвойсы". Defaults to the current
+  // year, all months. Legacy `issued_month=YYYY-MM` maps onto both.
+  let filterYear = /^\d{4}$/.test(sp.year ?? "")
+    ? Number(sp.year)
+    : new Date().getFullYear();
+  let filterMonth = /^(0[1-9]|1[0-2])$/.test(sp.month ?? "")
+    ? (sp.month as string)
+    : "all";
+  if (/^\d{4}-\d{2}$/.test(sp.issued_month ?? "")) {
+    filterYear = Number(sp.issued_month!.slice(0, 4));
+    filterMonth = sp.issued_month!.slice(5, 7);
+  }
 
   const [templates, invoices, projects, reminders, plannedByProject, nextNumberByProject] =
     await Promise.all([
@@ -257,7 +267,8 @@ export default async function InvoicesPage({
           projects={projects.map((p) => ({ id: p.id, name: p.name }))}
           projectOptions={projectOptions}
           scope={invoiceScope}
-          issuedMonth={issuedMonthFilter}
+          year={filterYear}
+          month={filterMonth}
         />
       )}
     </div>
@@ -317,7 +328,8 @@ function AllInvoicesTab({
   projects,
   projectOptions,
   scope,
-  issuedMonth,
+  year,
+  month,
 }: {
   invoices: Invoice[];
   reminders: DocumentReminder[];
@@ -325,7 +337,8 @@ function AllInvoicesTab({
   projects: { id: string; name: string }[];
   projectOptions: import("@/components/invoices/invoice-template-dialog").ProjectOption[];
   scope: InvoiceScope;
-  issuedMonth: string; // YYYY-MM or "all"
+  year: number;
+  month: string; // "all" | "01".."12"
 }) {
   // Non-HAYS invoices vs HAYS. HAYS = invoices for projects whose name
   // matches /hays/i. Credit-note reminders always live under the HAYS
@@ -338,52 +351,66 @@ function AllInvoicesTab({
   const haysInvoices = invoices.filter((i) =>
     projectsHaysMap.get(i.project_id),
   );
+  const inScope = scope === "hays" ? haysInvoices : nonHaysInvoices;
 
-  const filteredInvoices = (
-    scope === "hays" ? haysInvoices : nonHaysInvoices
-  ).filter((inv) => {
-    if (issuedMonth === "all") return true;
-    return yearMonth(inv.issue_date) === issuedMonth;
+  const filteredInvoices = inScope.filter((inv) => {
+    const ym = yearMonth(inv.issue_date);
+    if (!ym) return false;
+    if (Number(ym.slice(0, 4)) !== year) return false;
+    if (month !== "all" && ym.slice(5, 7) !== month) return false;
+    return true;
   });
 
-  // Options for the "issued month" dropdown: distinct issue_month
-  // values seen in the current scope's invoices, sorted newest first.
-  const monthOptions = Array.from(
+  // Years present in the scope's data (desc); months present in the
+  // selected year (asc) — drive the pill filter.
+  const years = Array.from(
     new Set(
-      (scope === "hays" ? haysInvoices : nonHaysInvoices)
+      inScope
         .map((i) => yearMonth(i.issue_date))
-        .filter((m): m is string => !!m),
+        .filter((m): m is string => !!m)
+        .map((ym) => Number(ym.slice(0, 4))),
     ),
-  ).sort((a, b) => b.localeCompare(a));
+  ).sort((a, b) => b - a);
+  if (!years.includes(year)) years.push(year);
+  years.sort((a, b) => b - a);
+  const months = Array.from(
+    new Set(
+      inScope
+        .map((i) => yearMonth(i.issue_date))
+        .filter((m): m is string => !!m && Number(m.slice(0, 4)) === year)
+        .map((ym) => ym.slice(5, 7)),
+    ),
+  ).sort();
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 justify-between">
+      <div className="flex flex-wrap items-start gap-3 justify-between">
         <InvoiceScopeSwitches
           scope={scope}
-          issuedMonth={issuedMonth}
+          year={year}
+          month={month}
           invoicesCount={nonHaysInvoices.length}
           haysInvoicesCount={haysInvoices.length + reminders.length}
         />
-        <IssuedMonthFilter
-          value={issuedMonth}
-          options={monthOptions}
+        <MonthYearFilter
           scope={scope}
+          year={year}
+          month={month}
+          years={years}
+          months={months}
         />
       </div>
 
+      <ForecastCards invoices={filteredInvoices} />
+
       {scope === "invoices" ? (
-        <>
-          <ForecastBar invoices={filteredInvoices} />
-          <InvoicesTable
-            invoices={filteredInvoices}
-            projectsById={projectsById}
-            projectOptions={projectOptions}
-          />
-        </>
+        <InvoicesTable
+          invoices={filteredInvoices}
+          projectsById={projectsById}
+          projectOptions={projectOptions}
+        />
       ) : (
         <>
-          <ForecastBar invoices={filteredInvoices} />
           {filteredInvoices.length > 0 ? (
             <InvoicesTable
               invoices={filteredInvoices}
@@ -404,12 +431,14 @@ function AllInvoicesTab({
 
 function InvoiceScopeSwitches({
   scope,
-  issuedMonth,
+  year,
+  month,
   invoicesCount,
   haysInvoicesCount,
 }: {
   scope: InvoiceScope;
-  issuedMonth: string;
+  year: number;
+  month: string;
   invoicesCount: number;
   haysInvoicesCount: number;
 }) {
@@ -417,8 +446,6 @@ function InvoiceScopeSwitches({
     { id: "invoices", label: "Инвойсы", count: invoicesCount },
     { id: "hays", label: "HAYS · Credit Notes", count: haysInvoicesCount },
   ];
-  const monthParam =
-    issuedMonth === "all" ? "" : `&issued_month=${issuedMonth}`;
   return (
     <div className="flex items-center gap-1">
       {items.map((it) => {
@@ -426,7 +453,7 @@ function InvoiceScopeSwitches({
         return (
           <Link
             key={it.id}
-            href={`/invoices?tab=all&scope=${it.id}${monthParam}`}
+            href={`/invoices?tab=all&scope=${it.id}&year=${year}&month=${month}`}
             className={`px-3 py-1 rounded-md border font-mono text-[10px] uppercase tracking-[0.15em] transition ${
               active
                 ? "border-primary bg-primary/10 text-primary"
@@ -462,9 +489,14 @@ function labelForMonth(ym: string): string {
   return `${RU_MONTHS[m - 1]} ${y}`;
 }
 
-function ForecastBar({ invoices }: { invoices: Invoice[] }) {
-  // Bucket outstanding amounts by due_date month per currency, so the
-  // user sees "выставлено X, получим в июле Y, в августе Z".
+/**
+ * Stat cards for the filtered set: "Выставлено" (everything issued in
+ * the filter) plus one "Получим · <месяц>" card per due-month of the
+ * still-unpaid invoices. Each card lists per-currency amounts with a
+ * thin bar whose width is scaled against the largest amount on screen,
+ * so the relative weight reads at a glance.
+ */
+function ForecastCards({ invoices }: { invoices: Invoice[] }) {
   const issued: Record<string, number> = {};
   const byMonth: Map<string, Record<string, number>> = new Map();
   for (const inv of invoices) {
@@ -478,39 +510,59 @@ function ForecastBar({ invoices }: { invoices: Invoice[] }) {
       byMonth.set(ym, bucket);
     }
   }
-  const monthKeys = [...byMonth.keys()].sort();
   if (Object.keys(issued).length === 0) return null;
 
+  const monthKeys = [...byMonth.keys()].sort();
+  const maxVal = Math.max(
+    ...Object.values(issued),
+    ...[...byMonth.values()].flatMap((b) => Object.values(b)),
+    1,
+  );
+
+  const cards: { title: string; accent: boolean; bucket: Record<string, number> }[] = [
+    { title: "Выставлено", accent: false, bucket: issued },
+    ...monthKeys.map((ym) => ({
+      title: `Получим · ${labelForMonth(ym)}`,
+      accent: true,
+      bucket: byMonth.get(ym)!,
+    })),
+  ];
+
   return (
-    <div className="rounded-md border bg-card p-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-      <div>
-        <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-          Выставлено
-        </div>
-        <div className="font-mono text-sm">{fmtBucket(issued)}</div>
-      </div>
-      {monthKeys.map((ym) => (
-        <div key={ym}>
-          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-            Получим · {labelForMonth(ym)}
+    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+      {cards.map((c) => (
+        <div key={c.title} className="rounded-md border bg-card p-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mb-2">
+            {c.title}
           </div>
-          <div className="font-mono text-sm text-primary">
-            {fmtBucket(byMonth.get(ym)!)}
+          <div className="space-y-2">
+            {Object.entries(c.bucket)
+              .sort((a, b) => b[1] - a[1])
+              .map(([currency, amount]) => (
+                <div key={currency} className="space-y-1">
+                  <div className="flex items-baseline justify-between font-mono">
+                    <span className="text-[10px] text-muted-foreground">
+                      {currency}
+                    </span>
+                    <span
+                      className={`text-lg ${c.accent ? "text-primary" : "text-foreground"}`}
+                    >
+                      {amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${c.accent ? "bg-primary" : "bg-foreground/50"}`}
+                      style={{ width: `${Math.max(4, (amount / maxVal) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
           </div>
         </div>
       ))}
     </div>
   );
-}
-
-function fmtBucket(b: Record<string, number>): string {
-  const parts = Object.entries(b)
-    .sort((a, b2) => b2[1] - a[1])
-    .map(
-      ([c, v]) =>
-        `${c} ${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`,
-    );
-  return parts.length ? parts.join(" · ") : "—";
 }
 
 /* ─── invoices table ──────────────────────────────────────────────── */

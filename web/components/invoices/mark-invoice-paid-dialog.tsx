@@ -16,11 +16,10 @@ import { reportActionError } from "@/lib/client-errors";
 import { markInvoicePaid } from "@/app/(protected)/invoices/_actions";
 import type { Invoice } from "@/lib/schemas";
 
-const today = () => new Date().toISOString().slice(0, 10);
-
 /**
- * Move an `issued` invoice into `paid`. Prefills paid_date=today,
- * paid_amount=invoice.amount.
+ * Move an `issued` invoice into `paid`. One field — the amount that
+ * arrived (prefilled with the invoice total, editable for partials).
+ * paid_date is set to today by the server action; no date picker.
  */
 export function MarkInvoicePaidDialog({ invoice }: { invoice: Invoice }) {
   const [open, setOpen] = useState(false);
@@ -54,36 +53,23 @@ export function MarkInvoicePaidDialog({ invoice }: { invoice: Invoice }) {
           }}
           className="space-y-4"
         >
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label
-                htmlFor="paid_amount"
-                className="text-xs uppercase tracking-widest text-muted-foreground"
-              >
-                Пришло
-              </Label>
-              <Input
-                id="paid_amount"
-                name="paid_amount"
-                type="number"
-                step="0.01"
-                defaultValue={invoice.amount.toString()}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label
-                htmlFor="paid_date"
-                className="text-xs uppercase tracking-widest text-muted-foreground"
-              >
-                Дата оплаты
-              </Label>
-              <Input
-                id="paid_date"
-                name="paid_date"
-                type="date"
-                defaultValue={today()}
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="paid_amount"
+              className="text-xs uppercase tracking-widest text-muted-foreground"
+            >
+              Пришло ({invoice.currency})
+            </Label>
+            <Input
+              id="paid_amount"
+              name="paid_amount"
+              type="number"
+              step="0.01"
+              defaultValue={invoice.amount.toString()}
+            />
+            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              Дата оплаты — сегодня
+            </p>
           </div>
 
           <DialogFooter>
