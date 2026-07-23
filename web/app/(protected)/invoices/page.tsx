@@ -401,6 +401,8 @@ function AllInvoicesTab({
         />
       </div>
 
+      <StatusPipeline invoices={filteredInvoices} />
+
       <ForecastCards invoices={filteredInvoices} />
 
       {scope === "invoices" ? (
@@ -487,6 +489,80 @@ const RU_MONTHS = [
 function labelForMonth(ym: string): string {
   const [y, m] = ym.split("-").map((s) => parseInt(s, 10));
   return `${RU_MONTHS[m - 1]} ${y}`;
+}
+
+/**
+ * Status pipeline — one segmented bar per currency splitting the
+ * filtered volume into Оплачено / Ждём / Просрочено. Reads the state
+ * of the money at a glance without mixing currencies.
+ */
+function StatusPipeline({ invoices }: { invoices: Invoice[] }) {
+  const byCur = new Map<
+    string,
+    { paid: number; pending: number; overdue: number }
+  >();
+  for (const inv of invoices) {
+    const s = effectiveStatus(inv);
+    if (s === "cancelled") continue;
+    const b = byCur.get(inv.currency) ?? { paid: 0, pending: 0, overdue: 0 };
+    if (s === "paid") b.paid += inv.paid_amount ?? inv.amount;
+    else if (s === "overdue") b.overdue += inv.amount;
+    else b.pending += inv.amount;
+    byCur.set(inv.currency, b);
+  }
+  const rows = [...byCur.entries()];
+  if (rows.length === 0) return null;
+
+  const fmt = (v: number) =>
+    v.toLocaleString("en-US", { maximumFractionDigits: 0 });
+
+  return (
+    <div className="rounded-md border bg-card p-4 space-y-3">
+      <div className="flex flex-wrap gap-4 text-[11px] font-mono text-muted-foreground">
+        <Legend color="bg-good" label="Оплачено" />
+        <Legend color="bg-sky-500" label="Ждём" />
+        <Legend color="bg-destructive" label="Просрочено" />
+      </div>
+      {rows.map(([currency, b]) => {
+        const total = b.paid + b.pending + b.overdue;
+        const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0);
+        return (
+          <div key={currency} className="space-y-1">
+            <div className="flex items-center justify-between font-mono text-xs">
+              <span className="text-muted-foreground">{currency}</span>
+              <span className="flex gap-3">
+                <span className="text-good">{fmt(b.paid)}</span>
+                <span className="text-sky-500">{fmt(b.pending)}</span>
+                {b.overdue > 0 ? (
+                  <span className="text-destructive">{fmt(b.overdue)}</span>
+                ) : null}
+              </span>
+            </div>
+            <div className="flex h-3.5 rounded-full overflow-hidden bg-muted">
+              {b.paid > 0 ? (
+                <div className="bg-good" style={{ width: `${pct(b.paid)}%` }} />
+              ) : null}
+              {b.pending > 0 ? (
+                <div className="bg-sky-500" style={{ width: `${pct(b.pending)}%` }} />
+              ) : null}
+              {b.overdue > 0 ? (
+                <div className="bg-destructive" style={{ width: `${pct(b.overdue)}%` }} />
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={`inline-block size-2.5 rounded-sm ${color}`} />
+      {label}
+    </span>
+  );
 }
 
 /**
