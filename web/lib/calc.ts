@@ -274,35 +274,21 @@ const ymdUTC = (d: Date) => d.toISOString().slice(0, 10);
 const dateKey = (iso: string) => iso.slice(0, 10);
 
 /**
- * Resolve the dashboard's period from URL params into an inclusive
- * YYYY-MM-DD range. Month presets are computed in UTC off `now`;
- * `custom` uses the from/to params and falls back to the current month
- * when either is missing/invalid or inverted. String comparison on the
- * YYYY-MM-DD keys is enough downstream, so no timezone math leaks out.
+ * Period from an explicit year + month selection (the dashboard's
+ * month-pill filter). `month` is "all" (the whole year) or a
+ * zero-padded MM. Always `custom` kind — the from/to are what matter
+ * downstream.
  */
-export function dashboardPeriod(
-  kind: string | undefined,
-  fromParam: string | undefined,
-  toParam: string | undefined,
-  now: Date,
-): DashboardPeriod {
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth();
-  const monthRange = (yy: number, mm: number) => ({
-    from: ymdUTC(new Date(Date.UTC(yy, mm, 1))),
-    to: ymdUTC(new Date(Date.UTC(yy, mm + 1, 0))),
-  });
-
-  if (kind === "prev") return { kind: "prev", ...monthRange(y, m - 1) };
-  if (kind === "prev2") return { kind: "prev2", ...monthRange(y, m - 2) };
-  if (kind === "custom") {
-    const isDate = (s?: string) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
-    if (isDate(fromParam) && isDate(toParam) && fromParam! <= toParam!) {
-      return { kind: "custom", from: fromParam!, to: toParam! };
-    }
-    return { kind: "custom", ...monthRange(y, m) };
+export function monthYearPeriod(year: number, month: string): DashboardPeriod {
+  if (month === "all") {
+    return { kind: "custom", from: `${year}-01-01`, to: `${year}-12-31` };
   }
-  return { kind: "this", ...monthRange(y, m) };
+  const m = parseInt(month, 10) - 1;
+  return {
+    kind: "custom",
+    from: ymdUTC(new Date(Date.UTC(year, m, 1))),
+    to: ymdUTC(new Date(Date.UTC(year, m + 1, 0))),
+  };
 }
 
 const notCancelled = (inv: Invoice) => (inv.status ?? "to_issue") !== "cancelled";

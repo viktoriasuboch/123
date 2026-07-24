@@ -1,20 +1,17 @@
 import Link from "next/link";
-import type {
-  Invoice,
-  InvoiceTemplate,
-  DocumentReminder,
-} from "@/lib/schemas";
+import type { Invoice, InvoiceTemplate } from "@/lib/schemas";
 import type { ProjectOption } from "./invoice-template-dialog";
 import {
   fmtDate,
   monthlyReminderDue,
   adjustedIssueDateISO,
   forecastIssuanceByCurrency,
+  monthYearPeriod,
   type DashboardPeriod,
 } from "@/lib/calc";
 import { bucketToUsd } from "@/lib/fx";
 import { effectiveStatus } from "./invoice-status-badge";
-import { DashboardPeriodFilter } from "./dashboard-period-filter";
+import { MonthYearFilter } from "./month-year-filter";
 import { DashboardOverviewChart, type OverviewBucket } from "./dashboard-overview-chart";
 import { OverdueList, type OverdueItem } from "./overdue-list";
 import {
@@ -47,7 +44,8 @@ export function InvoicesDashboard({
   projectList,
   projectOptions,
   projectsById,
-  period,
+  year,
+  month,
   overdue,
   rates,
   toIssueDue,
@@ -58,13 +56,32 @@ export function InvoicesDashboard({
   projectList: ProjectLite[];
   projectOptions: ProjectOption[];
   projectsById: Map<string, { id: string; name: string }>;
-  period: DashboardPeriod;
+  year: number;
+  month: string; // "all" | "01".."12"
   overdue: OverdueItem[];
   rates: Record<string, number>;
   toIssueDue: TodayIssueItem[];
   documentsDue: TodayDocumentItem[];
 }) {
   const today = new Date();
+  const period: DashboardPeriod = monthYearPeriod(year, month);
+
+  // Years present in the invoice data (desc) + months present in the
+  // selected year (asc) drive the month-pill filter. Same shape as the
+  // "Все инвойсы" tab so the two filters look and behave identically.
+  const dataYearMonths = invoices
+    .map((i) => dateKey(i.issue_date).slice(0, 7))
+    .filter((ym) => /^\d{4}-\d{2}$/.test(ym));
+  const years = Array.from(
+    new Set([year, ...dataYearMonths.map((ym) => Number(ym.slice(0, 4)))]),
+  ).sort((a, b) => b - a);
+  const months = Array.from(
+    new Set(
+      dataYearMonths
+        .filter((ym) => Number(ym.slice(0, 4)) === year)
+        .map((ym) => ym.slice(5, 7)),
+    ),
+  ).sort();
 
   // ── KPI buckets ───────────────────────────────────────────────────
   const issued: Bucket = {}; // issued within period
@@ -169,7 +186,13 @@ export function InvoicesDashboard({
 
   return (
     <div className="space-y-6">
-      <DashboardPeriodFilter kind={period.kind} from={period.from} to={period.to} />
+      <MonthYearFilter
+        tab="dashboard"
+        year={year}
+        month={month}
+        years={years}
+        months={months}
+      />
 
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
         <Kpi label="Выставлено" bucket={issued} rates={rates} tone="muted" />

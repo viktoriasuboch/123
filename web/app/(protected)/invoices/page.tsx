@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fmtDate, monthlyReminderDue, dashboardPeriod } from "@/lib/calc";
+import { fmtDate, monthlyReminderDue } from "@/lib/calc";
 import { getUsdRates } from "@/lib/fx";
 import {
   InvoiceStatusBadge,
@@ -170,7 +170,16 @@ export default async function InvoicesPage({
     })
     .sort((a, b) => b.daysLate - a.daysLate);
 
-  const period = dashboardPeriod(sp.period, sp.from, sp.to, today);
+  // Dashboard month-pill filter. Shares the year/month params with the
+  // "Все инвойсы" tab but defaults to the CURRENT month (not "all"), so
+  // the period-bound KPIs open on "this month" as before. "all" is a
+  // valid selection (whole-year aggregate).
+  const dashMonth =
+    sp.month === "all"
+      ? "all"
+      : /^(0[1-9]|1[0-2])$/.test(sp.month ?? "")
+        ? (sp.month as string)
+        : String(today.getMonth() + 1).padStart(2, "0");
 
   const documents: TodayDocumentItem[] = reminders
     .filter((r) => isReminderOutstanding(r, today))
@@ -233,7 +242,8 @@ export default async function InvoicesPage({
           projectList={projects}
           projectOptions={projectOptions}
           projectsById={projectsById}
-          period={period}
+          year={filterYear}
+          month={dashMonth}
           overdue={overdue}
           rates={rates}
           toIssueDue={toIssueDue}

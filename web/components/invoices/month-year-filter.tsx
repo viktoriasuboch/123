@@ -24,21 +24,26 @@ const RU_MONTHS = [
  * server component re-computes list + stats.
  */
 export function MonthYearFilter({
+  tab = "all",
   scope,
   year,
   month,
   years,
   months,
 }: {
-  scope: "invoices" | "hays";
+  /** Which tab the filter lives on — controls the URL it navigates to. */
+  tab?: "all" | "dashboard";
+  scope?: "invoices" | "hays";
   year: number;
   month: string; // "all" | "01".."12"
   years: number[];
   months: string[]; // MM present in the selected year, ascending
 }) {
   const router = useRouter();
-  const go = (y: number, m: string) =>
-    router.push(`/invoices?tab=all&scope=${scope}&year=${y}&month=${m}`);
+  const go = (y: number, m: string) => {
+    const scopeParam = scope ? `&scope=${scope}` : "";
+    router.push(`/invoices?tab=${tab}${scopeParam}&year=${y}&month=${m}`);
+  };
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
