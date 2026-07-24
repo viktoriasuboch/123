@@ -5,7 +5,6 @@ import {
   fmtDate,
   monthlyReminderDue,
   adjustedIssueDateISO,
-  forecastIssuanceByCurrency,
   monthYearPeriod,
   type DashboardPeriod,
 } from "@/lib/calc";
@@ -88,7 +87,6 @@ export function InvoicesDashboard({
   const paid: Bucket = {}; // paid within period
   const receivable: Bucket = {}; // issued, unpaid, not overdue (as of now)
   const overdueB: Bucket = {}; // overdue as of now
-  const overdueByMonthAgnostic: Bucket = {};
 
   for (const inv of invoices) {
     const s = effectiveStatus(inv);
@@ -103,8 +101,6 @@ export function InvoicesDashboard({
       bump(receivable, inv.currency, inv.amount);
     }
   }
-  void overdueByMonthAgnostic;
-  const forecast = forecastIssuanceByCurrency(templates, period, today);
 
   // ── overview chart buckets: Просрочено + receipts by due-month ────
   const byMonth = new Map<string, Bucket>();
@@ -147,11 +143,31 @@ export function InvoicesDashboard({
     if (!templateByProject.has(t.project_id)) templateByProject.set(t.project_id, t);
   }
   const lastIssuedByProject = new Map<string, string>();
+  const lastCurrencyByProject = new Map<string, string>();
   for (const inv of invoices) {
     if (!inv.issue_date || effectiveStatus(inv) === "cancelled") continue;
     const iso = dateKey(inv.issue_date);
-    const cur = lastIssuedByProject.get(inv.project_id);
-    if (!cur || iso > cur) lastIssuedByProject.set(inv.project_id, iso);
+    const prevISO = lastIssuedByProject.get(inv.project_id);
+    if (!prevISO || iso > prevISO) {
+      lastIssuedByProject.set(inv.project_id, iso);
+      lastCurrencyByProject.set(inv.project_id, inv.currency);
+    }
+  }
+
+  // Planned monthly revenue across active projects, bucketed by billing
+  // currency (active template → latest invoice → USD). As-of-now
+  // run-rate, not period-bound — there are no historical member
+  // snapshots to compute a past month from.
+  const plannedRevenue: Bucket = {};
+  for (const p of live) {
+    const planned =
+      projectOptions.find((o) => o.id === p.id)?.planned_monthly ?? 0;
+    if (planned <= 0) continue;
+    const currency =
+      templateByProject.get(p.id)?.currency ??
+      lastCurrencyByProject.get(p.id) ??
+      "USD";
+    bump(plannedRevenue, currency, planned);
   }
 
   const dueInfo = new Map<
@@ -198,11 +214,11 @@ export function InvoicesDashboard({
         <Kpi label="Выставлено" bucket={issued} rates={rates} tone="muted" />
         <Kpi label="Оплачено" bucket={paid} rates={rates} tone="good" />
         <Kpi label="Ожидается к оплате" bucket={receivable} rates={rates} tone="sky" />
-        <Kpi label="Прогноз выставления" bucket={forecast} rates={rates} tone="muted" />
+        <Kpi label="Планируемое ревеню" bucket={plannedRevenue} rates={rates} tone="primary" />
         <Kpi label="Просрочено" bucket={overdueB} rates={rates} tone="bad" />
       </div>
 
-      <DashboardOverviewChart buckets={chartBuckets} />
+      <DashboardOverviewChart buckets={chartBuckets} rates={rates} />
 
       {hasAction ? (
         <TodayWidget
@@ -248,7 +264,7 @@ function Kpi({
   label: string;
   bucket: Bucket;
   rates: Record<string, number>;
-  tone: "good" | "bad" | "sky" | "muted";
+  tone: "good" | "bad" | "sky" | "muted" | "primary";
 }) {
   const entries = Object.entries(bucket)
     .filter(([, v]) => v > 0)
@@ -260,7 +276,9 @@ function Kpi({
         ? "text-destructive"
         : tone === "sky"
           ? "text-sky-500"
-          : "text-foreground";
+          : tone === "primary"
+            ? "text-primary"
+            : "text-foreground";
   const usd = bucketToUsd(bucket, rates);
   const multi = entries.length > 1;
 
