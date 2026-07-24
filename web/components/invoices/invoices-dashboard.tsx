@@ -8,7 +8,7 @@ import type { ProjectOption } from "./invoice-template-dialog";
 import {
   fmtDate,
   monthlyReminderDue,
-  biweeklyNextISO,
+  adjustedIssueDateISO,
   forecastIssuanceByCurrency,
   type DashboardPeriod,
 } from "@/lib/calc";
@@ -112,17 +112,60 @@ export function InvoicesDashboard({
   const hasAction = toIssueDue.length > 0 || documentsDue.length > 0;
 
   // ── project billing sections (обычные / HAYS) ─────────────────────
+  // Only what needs issuing within a week (or already missed) shows
+  // here; once issued the next date jumps past the horizon and the row
+  // drops off. Missed rows (nextISO < today) keep hanging.
+  const todayISO = localISO(today);
+  const horizonISO = addDaysISO(todayISO, 7);
+  const y = today.getFullYear();
+  const m = today.getMonth();
+
   const live = projectList.filter((p) => {
     const st = p.status ?? "active";
     return st === "active" || st === "support";
   });
-  const normalProjects = live.filter((p) => !isHays(p.name));
-  const haysProjects = live.filter((p) => isHays(p.name));
   const templateByProject = new Map<string, InvoiceTemplate>();
   for (const t of templates) {
     if (t.active === false) continue;
     if (!templateByProject.has(t.project_id)) templateByProject.set(t.project_id, t);
   }
+  const lastIssuedByProject = new Map<string, string>();
+  for (const inv of invoices) {
+    if (!inv.issue_date || effectiveStatus(inv) === "cancelled") continue;
+    const iso = dateKey(inv.issue_date);
+    const cur = lastIssuedByProject.get(inv.project_id);
+    if (!cur || iso > cur) lastIssuedByProject.set(inv.project_id, iso);
+  }
+
+  const dueInfo = new Map<
+    string,
+    { nextISO: string; amount: number; currency: string; missed: boolean }
+  >();
+  for (const p of live) {
+    const t = templateByProject.get(p.id);
+    if (!t) continue;
+    const planned = projectOptions.find((o) => o.id === p.id)?.planned_monthly ?? 0;
+    const lastIssued = lastIssuedByProject.get(p.id) ?? null;
+    let nextISO: string | null = null;
+    let amount = 0;
+    const currency = t.currency ?? "USD";
+    if ((t.frequency ?? "monthly") === "biweekly") {
+      const base = lastIssued ? addDaysISO(lastIssued, 14) : t.next_issue_date ?? null;
+      nextISO = base ? weekendShiftISO(base) : null;
+      amount = planned / 2;
+    } else if (t.issue_day) {
+      const issuedThisMonth =
+        lastIssued && lastIssued.slice(0, 7) === todayISO.slice(0, 7);
+      nextISO = issuedThisMonth
+        ? adjustedIssueDateISO(y, m + 1, t.issue_day)
+        : monthlyReminderDue(t.issue_day, t.created_at, today).dueISO;
+      amount = planned;
+    }
+    if (!nextISO || nextISO > horizonISO) continue;
+    dueInfo.set(p.id, { nextISO, amount, currency, missed: nextISO < todayISO });
+  }
+  const normalProjects = live.filter((p) => !isHays(p.name) && dueInfo.has(p.id));
+  const haysProjects = live.filter((p) => isHays(p.name) && dueInfo.has(p.id));
 
   return (
     <div className="space-y-6">
@@ -149,18 +192,14 @@ export function InvoicesDashboard({
 
       <div className="grid gap-4 md:grid-cols-2">
         <ProjectBillingSection
-          title="Проекты"
+          title="Проекты · на неделю"
           projects={normalProjects}
-          templateByProject={templateByProject}
-          projectOptions={projectOptions}
-          today={today}
+          dueInfo={dueInfo}
         />
         <ProjectBillingSection
-          title="HAYS"
+          title="HAYS · на неделю"
           projects={haysProjects}
-          templateByProject={templateByProject}
-          projectOptions={projectOptions}
-          today={today}
+          dueInfo={dueInfo}
         />
       </div>
 
@@ -235,63 +274,61 @@ function Kpi({
 function ProjectBillingSection({
   title,
   projects,
-  templateByProject,
-  projectOptions,
-  today,
+  dueInfo,
 }: {
   title: string;
   projects: ProjectLite[];
-  templateByProject: Map<string, InvoiceTemplate>;
-  projectOptions: ProjectOption[];
-  today: Date;
+  dueInfo: Map<
+    string,
+    { nextISO: string; amount: number; currency: string; missed: boolean }
+  >;
 }) {
   return (
     <section className="rounded-md border bg-card">
       <header className="p-4 border-b">
         <h3 className="font-display text-lg tracking-wide leading-none">{title}</h3>
         <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-1">
-          {projects.length} · когда выставлять
+          {projects.length} · выставить в ближайшие 7 дней
         </p>
       </header>
       {projects.length === 0 ? (
         <p className="p-6 text-center font-mono text-xs text-muted-foreground">
-          Нет проектов.
+          На неделю ничего не нужно выставлять.
         </p>
       ) : (
         <ul className="divide-y divide-border/40">
           {projects.map((p) => {
-            const t = templateByProject.get(p.id);
-            const opt = projectOptions.find((o) => o.id === p.id);
-            const planned = opt?.planned_monthly ?? 0;
-            let nextISO: string | null = null;
-            let amount = 0;
-            let currency = t?.currency ?? "USD";
-            if (t) {
-              if ((t.frequency ?? "monthly") === "biweekly") {
-                nextISO = biweeklyNextISO(t.next_issue_date, today);
-                amount = planned / 2;
-              } else if (t.issue_day) {
-                nextISO = monthlyReminderDue(t.issue_day, t.created_at, today).dueISO;
-                amount = planned;
-              }
-              currency = t.currency ?? currency;
-            }
+            const d = dueInfo.get(p.id)!;
             return (
-              <li key={p.id} className="p-3 flex items-center justify-between gap-3">
+              <li
+                key={p.id}
+                className={`p-3 flex items-center justify-between gap-3 ${
+                  d.missed ? "bg-destructive/5" : ""
+                }`}
+              >
                 <Link
                   href={`/invoices/projects/${p.id}`}
                   className="min-w-0 flex-1 group"
                 >
-                  <div className="font-medium truncate group-hover:text-primary transition">
+                  <div className="font-medium truncate group-hover:text-primary transition flex items-center gap-1.5">
+                    {d.missed ? (
+                      <span className="text-destructive" aria-hidden>❗</span>
+                    ) : null}
                     {p.name}
                   </div>
-                  <div className="font-mono text-[10px] text-muted-foreground">
-                    {t ? `выставить ${fmtDate(nextISO)}` : "напоминание не настроено"}
+                  <div
+                    className={`font-mono text-[10px] ${
+                      d.missed ? "text-destructive" : "text-muted-foreground"
+                    }`}
+                  >
+                    {d.missed
+                      ? `просрочено · выставить ${fmtDate(d.nextISO)}`
+                      : `выставить ${fmtDate(d.nextISO)}`}
                   </div>
                 </Link>
-                {t && amount > 0 ? (
+                {d.amount > 0 ? (
                   <div className="font-mono text-sm text-muted-foreground shrink-0">
-                    ≈ {currency} {fmtAmt(amount)}
+                    ≈ {d.currency} {fmtAmt(d.amount)}
                   </div>
                 ) : null}
               </li>
@@ -301,4 +338,22 @@ function ProjectBillingSection({
       )}
     </section>
   );
+}
+
+/* ─── local date helpers ───────────────────────────────────────────── */
+
+function localISO(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+function addDaysISO(iso: string, n: number): string {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return localISO(d);
+}
+function weekendShiftISO(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  return localISO(d);
 }
