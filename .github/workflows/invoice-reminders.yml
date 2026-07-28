@@ -1,0 +1,24 @@
+name: Invoice reminders
+
+# Daily email digest of what needs attention (to-issue / overdue / awaited
+# documents). Hits the app's protected cron route; Render's Web Service
+# doesn't run cron itself. See web/app/api/cron/invoice-reminders/route.ts.
+
+on:
+  schedule:
+    # 06:00 UTC ≈ 09:00 Europe/Minsk (UTC+3). GitHub may delay scheduled
+    # runs by several minutes at peak — fine for a morning reminder.
+    - cron: "0 6 * * *"
+  workflow_dispatch: {} # lets you run it on demand from the Actions tab
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger reminder digest
+        run: |
+          curl -fsS --retry 5 --retry-all-errors --max-time 120 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "https://interexy.onrender.com/api/cron/invoice-reminders"
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
