@@ -50,7 +50,9 @@ export function reminderRecipients(): string[] {
   return z.array(z.string().email()).parse(list);
 }
 
-/** Sender address; defaults to the (to-be-verified) interexy.com domain. */
+/** Sender address; defaults to the noreply.interexy.com sending subdomain
+ *  being verified in Resend. Override with REMINDER_FROM (must be an
+ *  address on a Resend-verified domain, else Resend returns 403). */
 export function reminderFrom(): string {
-  return process.env.REMINDER_FROM || "Interexy Invoices <noreply@interexy.com>";
+  return process.env.REMINDER_FROM || "Interexy Invoices <invoices@noreply.interexy.com>";
 }
