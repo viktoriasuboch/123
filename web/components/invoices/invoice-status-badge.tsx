@@ -1,12 +1,23 @@
 import type { Invoice } from "@/lib/schemas";
 
-type Effective = "to_issue" | "issued" | "paid" | "overdue" | "cancelled";
+type Effective =
+  | "to_issue"
+  | "issued"
+  | "paid"
+  | "partial"
+  | "overdue"
+  | "cancelled";
 
 export function effectiveStatus(inv: Invoice, todayISO?: string): Effective {
   const s = inv.status ?? "to_issue";
   if (s === "issued" && inv.due_date) {
     const today = todayISO ?? new Date().toISOString().slice(0, 10);
     if (inv.due_date < today) return "overdue";
+  }
+  // Marked paid but the amount received is less than the invoice total →
+  // partially paid (a derived state, no DB status for it).
+  if (s === "paid" && inv.paid_amount != null && inv.paid_amount < inv.amount) {
+    return "partial";
   }
   return s as Effective;
 }
@@ -15,6 +26,7 @@ const LABELS: Record<Effective, string> = {
   to_issue: "К выставлению",
   issued: "Выставлен",
   paid: "Оплачен",
+  partial: "Оплачен частично",
   overdue: "Просрочен",
   cancelled: "Отменён",
 };
@@ -25,6 +37,8 @@ const COLORS: Record<Effective, string> = {
   issued:
     "bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30",
   paid: "bg-good/15 text-good border border-good/30",
+  partial:
+    "bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/30",
   overdue:
     "bg-destructive/15 text-destructive border border-destructive/40",
   cancelled:

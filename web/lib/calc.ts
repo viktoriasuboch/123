@@ -255,6 +255,29 @@ export function cyclesPerMonth(freq: string | null | undefined): number {
   return 1;
 }
 
+/**
+ * Money actually received on an invoice. A `paid` invoice counts its
+ * `paid_amount` (falling back to the full amount for older rows that were
+ * marked paid before amounts were tracked); anything else counts 0. This
+ * is the single source of truth for "collected" — partials included.
+ */
+export function amountCollected(inv: Invoice): number {
+  const s = inv.status ?? "to_issue";
+  if (s === "paid") return inv.paid_amount ?? inv.amount;
+  return 0;
+}
+
+/**
+ * Money still owed on an invoice: full amount minus what's collected,
+ * clamped at 0 (overpayment counts as settled). Cancelled invoices owe
+ * nothing. A partially-paid invoice returns its remainder.
+ */
+export function amountOutstanding(inv: Invoice): number {
+  const s = inv.status ?? "to_issue";
+  if (s === "cancelled") return 0;
+  return Math.max(0, inv.amount - amountCollected(inv));
+}
+
 /* ═══ invoices dashboard aggregators (pure, over listInvoices) ═══════ */
 
 export type DashboardPeriodKind = "this" | "prev" | "prev2" | "custom";

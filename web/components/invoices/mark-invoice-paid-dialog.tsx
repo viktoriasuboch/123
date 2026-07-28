@@ -23,6 +23,20 @@ import type { Invoice } from "@/lib/schemas";
  */
 export function MarkInvoicePaidDialog({ invoice }: { invoice: Invoice }) {
   const [open, setOpen] = useState(false);
+  // Prefill with what's already been received for a partial (so you can
+  // top it up), otherwise the full invoice amount.
+  const initial =
+    invoice.status === "paid" && invoice.paid_amount != null
+      ? invoice.paid_amount
+      : invoice.amount;
+  const [amt, setAmt] = useState<string>(String(initial));
+
+  const entered = Number(amt);
+  const valid = Number.isFinite(entered) && entered > 0;
+  const remaining = valid ? Math.max(0, invoice.amount - entered) : 0;
+  const full = valid && entered >= invoice.amount;
+  const fmt = (v: number) =>
+    v.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -65,11 +79,21 @@ export function MarkInvoicePaidDialog({ invoice }: { invoice: Invoice }) {
               name="paid_amount"
               type="number"
               step="0.01"
-              defaultValue={invoice.amount.toString()}
+              value={amt}
+              onChange={(e) => setAmt(e.target.value)}
             />
             <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-              Дата оплаты — сегодня
+              Из {invoice.currency} {fmt(invoice.amount)} · дата оплаты — сегодня
             </p>
+            {valid && !full ? (
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-teal-600 dark:text-teal-400">
+                Частичная оплата · останется {invoice.currency} {fmt(remaining)}
+              </p>
+            ) : full ? (
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-good">
+                Полная оплата
+              </p>
+            ) : null}
           </div>
 
           <DialogFooter>

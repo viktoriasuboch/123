@@ -5,6 +5,7 @@ import { reportActionError } from "@/lib/client-errors";
 import {
   cancelInvoice,
   deleteInvoice,
+  unmarkInvoicePaid,
 } from "@/app/(protected)/invoices/_actions";
 import { InvoiceDialog } from "./invoice-dialog";
 import { MarkInvoiceIssuedDialog } from "./mark-invoice-issued-dialog";
@@ -15,10 +16,11 @@ import { effectiveStatus } from "./invoice-status-badge";
 
 /**
  * Row-level buttons: what's shown depends on the effective status.
- * to_issue → [Выставить] [Edit] [Cancel] [Delete]
- * issued  → [Оплачен]   [Edit] [Cancel]
- * paid    → [Edit]
- * cancelled/overdue    → [Edit] [Delete]
+ * to_issue        → [Выставить] [Edit] [Cancel] [Delete]
+ * issued/overdue  → [Оплачен]   [Edit] [Cancel]
+ * partial         → [Оплачен]   [Отменить оплату] [Edit]
+ * paid            → [Отменить оплату] [Edit]
+ * cancelled       → [Edit] [Delete]
  */
 export function InvoiceRowActions({
   invoice,
@@ -29,7 +31,8 @@ export function InvoiceRowActions({
 }) {
   const status = effectiveStatus(invoice);
   const showIssued = status === "to_issue";
-  const showPaid = status === "issued" || status === "overdue";
+  const showPaid = status === "issued" || status === "overdue" || status === "partial";
+  const showRevertPaid = status === "paid" || status === "partial";
   const showCancel = status === "to_issue" || status === "issued" || status === "overdue";
   const showDelete = status === "to_issue" || status === "cancelled";
 
@@ -37,6 +40,25 @@ export function InvoiceRowActions({
     <div className="flex items-center justify-end gap-1.5">
       {showIssued && <MarkInvoiceIssuedDialog invoice={invoice} />}
       {showPaid && <MarkInvoicePaidDialog invoice={invoice} />}
+      {showRevertPaid && (
+        <form
+          action={async () => {
+            if (
+              !confirm(
+                "Точно отменить статус оплаты? Инвойс вернётся в «Выставлен», сумма и дата оплаты сбросятся.",
+              )
+            )
+              return;
+            try {
+              await unmarkInvoicePaid(invoice.id);
+            } catch (err) {
+              reportActionError(err, "Не отменилось");
+            }
+          }}
+        >
+          <GhostBtn type="submit">Отменить оплату</GhostBtn>
+        </form>
+      )}
       <InvoiceDialog
         projects={projects}
         invoice={invoice}

@@ -19,7 +19,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fmtDate, monthlyReminderDue } from "@/lib/calc";
+import {
+  fmtDate,
+  monthlyReminderDue,
+  amountCollected,
+  amountOutstanding,
+} from "@/lib/calc";
 import { getUsdRates } from "@/lib/fx";
 import {
   InvoiceStatusBadge,
@@ -160,13 +165,18 @@ export default async function InvoicesPage({
   // Overdue is absolute ("as of today"), independent of the dashboard
   // period filter — it feeds the standalone overdue section + KPI.
   const overdue: OverdueItem[] = invoices
-    .filter((inv) => effectiveStatus(inv, todayISO) === "overdue")
+    .filter((inv) => {
+      if ((inv.status ?? "to_issue") === "cancelled") return false;
+      if (!inv.due_date || inv.due_date.slice(0, 10) >= todayISO) return false;
+      return amountOutstanding(inv) > 0;
+    })
     .map((inv) => {
-      const due = inv.due_date ? new Date(inv.due_date) : null;
-      const daysLate = due
-        ? Math.max(0, Math.floor((today.getTime() - due.getTime()) / 86400_000))
-        : 0;
-      return { invoice: inv, daysLate };
+      const due = new Date(inv.due_date as string);
+      const daysLate = Math.max(
+        0,
+        Math.floor((today.getTime() - due.getTime()) / 86400_000),
+      );
+      return { invoice: inv, daysLate, outstanding: amountOutstanding(inv) };
     })
     .sort((a, b) => b.daysLate - a.daysLate);
 
@@ -509,13 +519,17 @@ function StatusPipeline({ invoices }: { invoices: Invoice[] }) {
     string,
     { paid: number; pending: number; overdue: number }
   >();
+  const todayISO = new Date().toISOString().slice(0, 10);
   for (const inv of invoices) {
-    const s = effectiveStatus(inv);
-    if (s === "cancelled") continue;
+    if ((inv.status ?? "to_issue") === "cancelled") continue;
     const b = byCur.get(inv.currency) ?? { paid: 0, pending: 0, overdue: 0 };
-    if (s === "paid") b.paid += inv.paid_amount ?? inv.amount;
-    else if (s === "overdue") b.overdue += inv.amount;
-    else b.pending += inv.amount;
+    b.paid += amountCollected(inv);
+    const outstanding = amountOutstanding(inv);
+    if (outstanding > 0) {
+      const isOverdue = !!inv.due_date && inv.due_date.slice(0, 10) < todayISO;
+      if (isOverdue) b.overdue += outstanding;
+      else b.pending += outstanding;
+    }
     byCur.set(inv.currency, b);
   }
   const rows = [...byCur.entries()];
@@ -584,13 +598,14 @@ function ForecastCards({ invoices }: { invoices: Invoice[] }) {
   const issued: Record<string, number> = {};
   const byMonth: Map<string, Record<string, number>> = new Map();
   for (const inv of invoices) {
-    if (inv.status === "cancelled") continue;
+    if ((inv.status ?? "to_issue") === "cancelled") continue;
     issued[inv.currency] = (issued[inv.currency] ?? 0) + inv.amount;
-    if (inv.status !== "paid" && inv.due_date) {
+    const outstanding = amountOutstanding(inv);
+    if (outstanding > 0 && inv.due_date) {
       const ym = yearMonth(inv.due_date);
       if (!ym) continue;
       const bucket = byMonth.get(ym) ?? {};
-      bucket[inv.currency] = (bucket[inv.currency] ?? 0) + inv.amount;
+      bucket[inv.currency] = (bucket[inv.currency] ?? 0) + outstanding;
       byMonth.set(ym, bucket);
     }
   }

@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
@@ -276,6 +275,22 @@ export async function cancelInvoice(id: string) {
   const { error } = await sb()
     .from("invoices")
     .update({ status: "cancelled" })
+    .eq("id", id);
+  if (error) throw error;
+  revalidatePath("/invoices");
+}
+
+/**
+ * Undo a payment: move a `paid` (or partially-paid) invoice back to
+ * `issued` and clear the payment fields. The UI gates this behind a
+ * confirm — reverting the recorded payment is easy to do by accident.
+ */
+export async function unmarkInvoicePaid(id: string) {
+  await requireUser();
+  Uuid.parse(id);
+  const { error } = await sb()
+    .from("invoices")
+    .update({ status: "issued", paid_date: null, paid_amount: null })
     .eq("id", id);
   if (error) throw error;
   revalidatePath("/invoices");

@@ -6,6 +6,9 @@ import { InvoiceRowActions } from "./invoice-row-actions";
 export type OverdueItem = {
   invoice: Invoice;
   daysLate: number;
+  /** Still-owed amount (full invoice for issued-overdue, remainder for a
+   *  partially-paid invoice that's past due). */
+  outstanding: number;
 };
 
 /**
@@ -34,8 +37,9 @@ export function OverdueList({
         </span>
       </header>
       <ul className="divide-y divide-destructive/15">
-        {items.map(({ invoice, daysLate }) => {
+        {items.map(({ invoice, daysLate, outstanding }) => {
           const project = projects.get(invoice.project_id);
+          const partial = outstanding < invoice.amount;
           return (
             <li
               key={invoice.id}
@@ -53,9 +57,12 @@ export function OverdueList({
                 </div>
                 <div className="font-mono text-[10px] text-muted-foreground">
                   {invoice.client_name} · {invoice.currency}{" "}
-                  {invoice.amount.toLocaleString("en-US", {
+                  {outstanding.toLocaleString("en-US", {
                     maximumFractionDigits: 2,
-                  })}{" "}
+                  })}
+                  {partial
+                    ? ` (остаток из ${invoice.amount.toLocaleString("en-US", { maximumFractionDigits: 2 })})`
+                    : ""}{" "}
                   · due {fmtDate(invoice.due_date)}
                 </div>
               </div>

@@ -8,6 +8,8 @@ import {
   monthYearPeriod,
   intervalStepDays,
   cyclesPerMonth,
+  amountCollected,
+  amountOutstanding,
   type DashboardPeriod,
 } from "@/lib/calc";
 import { bucketToUsd } from "@/lib/fx";
@@ -84,36 +86,42 @@ export function InvoicesDashboard({
     ),
   ).sort();
 
-  // ── KPI buckets ───────────────────────────────────────────────────
-  const issued: Bucket = {}; // issued within period
-  const paid: Bucket = {}; // paid within period
-  const receivable: Bucket = {}; // issued, unpaid, not overdue (as of now)
-  const overdueB: Bucket = {}; // overdue as of now
+  const todayISO = localISO(today);
+
+  // ── KPI buckets. "Оплачено" counts money actually collected (partials
+  // included); "Ожидается"/"Просрочено" split the still-outstanding
+  // remainder by due date. ──────────────────────────────────────────
+  const issued: Bucket = {}; // full issued volume within period
+  const paid: Bucket = {}; // collected within period (by paid_date)
+  const receivable: Bucket = {}; // outstanding, not past due (as of now)
+  const overdueB: Bucket = {}; // outstanding & past due (as of now)
 
   for (const inv of invoices) {
-    const s = effectiveStatus(inv);
-    if (s === "cancelled") continue;
+    if ((inv.status ?? "to_issue") === "cancelled") continue;
     if (inPeriod(inv.issue_date, period)) bump(issued, inv.currency, inv.amount);
-    if (s === "paid") {
-      if (inPeriod(inv.paid_date, period))
-        bump(paid, inv.currency, inv.paid_amount ?? inv.amount);
-    } else if (s === "overdue") {
-      bump(overdueB, inv.currency, inv.amount);
-    } else if (s === "issued" || s === "to_issue") {
-      bump(receivable, inv.currency, inv.amount);
+    const collected = amountCollected(inv);
+    if (collected > 0 && inPeriod(inv.paid_date, period))
+      bump(paid, inv.currency, collected);
+    const outstanding = amountOutstanding(inv);
+    if (outstanding > 0) {
+      const overdue = !!inv.due_date && dateKey(inv.due_date) < todayISO;
+      bump(overdue ? overdueB : receivable, inv.currency, outstanding);
     }
   }
 
-  // ── overview chart buckets: Просрочено + receipts by due-month ────
+  // ── overview chart buckets: Просрочено (past-due outstanding) +
+  // future receipts by due-month (outstanding, partials included) ────
   const byMonth = new Map<string, Bucket>();
   for (const inv of invoices) {
-    const s = effectiveStatus(inv);
-    if (s === "issued" && inv.due_date) {
-      const ym = dateKey(inv.due_date).slice(0, 7);
-      const b = byMonth.get(ym) ?? {};
-      bump(b, inv.currency, inv.amount);
-      byMonth.set(ym, b);
-    }
+    if ((inv.status ?? "to_issue") === "cancelled" || !inv.due_date) continue;
+    const outstanding = amountOutstanding(inv);
+    if (outstanding <= 0) continue;
+    const dk = dateKey(inv.due_date);
+    if (dk < todayISO) continue; // past due → already in overdueB / "Просрочено"
+    const ym = dk.slice(0, 7);
+    const b = byMonth.get(ym) ?? {};
+    bump(b, inv.currency, outstanding);
+    byMonth.set(ym, b);
   }
   const chartBuckets: OverviewBucket[] = [];
   if (Object.keys(overdueB).length > 0) {
@@ -130,7 +138,6 @@ export function InvoicesDashboard({
   // Only what needs issuing within a week (or already missed) shows
   // here; once issued the next date jumps past the horizon and the row
   // drops off. Missed rows (nextISO < today) keep hanging.
-  const todayISO = localISO(today);
   const horizonISO = addDaysISO(todayISO, 7);
   const y = today.getFullYear();
   const m = today.getMonth();

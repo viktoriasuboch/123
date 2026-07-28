@@ -5,7 +5,12 @@ import {
   isReminderOutstanding,
 } from "@/lib/data/document-reminders";
 import { listProjects } from "@/lib/data/projects";
-import { monthlyReminderDue, intervalStepDays, fmtDate } from "@/lib/calc";
+import {
+  monthlyReminderDue,
+  intervalStepDays,
+  amountOutstanding,
+  fmtDate,
+} from "@/lib/calc";
 import { effectiveStatus } from "@/components/invoices/invoice-status-badge";
 import type { InvoiceTemplate } from "@/lib/schemas";
 
@@ -107,16 +112,24 @@ export async function buildReminderDigest(now: Date): Promise<ReminderDigest> {
   toIssue.sort((a, b) => Number(b.late) - Number(a.late));
 
   const overdue: ReminderDigest["overdue"] = invoices
-    .filter((inv) => effectiveStatus(inv, todayISO) === "overdue")
+    .filter((inv) => {
+      if ((inv.status ?? "to_issue") === "cancelled") return false;
+      if (!inv.due_date || inv.due_date.slice(0, 10) >= todayISO) return false;
+      return amountOutstanding(inv) > 0;
+    })
     .map((inv) => {
-      const due = inv.due_date ? new Date(inv.due_date) : null;
-      const daysLate = due
-        ? Math.max(0, Math.floor((now.getTime() - due.getTime()) / 86400_000))
-        : 0;
+      const due = new Date(inv.due_date as string);
+      const daysLate = Math.max(
+        0,
+        Math.floor((now.getTime() - due.getTime()) / 86400_000),
+      );
+      const outstanding = amountOutstanding(inv);
+      const partial = outstanding < inv.amount;
+      const amt = outstanding.toLocaleString("en-US", { maximumFractionDigits: 0 });
       return {
         project: projName.get(inv.project_id) ?? "—",
         number: inv.invoice_number ?? "—",
-        amount: `${inv.currency} ${inv.amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}`,
+        amount: `${inv.currency} ${amt}${partial ? " (остаток)" : ""}`,
         dueLabel: fmtDate(inv.due_date),
         daysLate,
       };
