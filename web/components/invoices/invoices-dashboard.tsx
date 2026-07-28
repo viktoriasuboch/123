@@ -6,6 +6,8 @@ import {
   monthlyReminderDue,
   adjustedIssueDateISO,
   monthYearPeriod,
+  intervalStepDays,
+  cyclesPerMonth,
   type DashboardPeriod,
 } from "@/lib/calc";
 import { bucketToUsd } from "@/lib/fx";
@@ -182,10 +184,11 @@ export function InvoicesDashboard({
     let nextISO: string | null = null;
     let amount = 0;
     const currency = t.currency ?? "USD";
-    if ((t.frequency ?? "monthly") === "biweekly") {
-      const base = lastIssued ? addDaysISO(lastIssued, 14) : t.next_issue_date ?? null;
+    const step = intervalStepDays(t.frequency);
+    if (step) {
+      const base = lastIssued ? addDaysISO(lastIssued, step) : t.next_issue_date ?? null;
       nextISO = base ? weekendShiftISO(base) : null;
-      amount = planned / 2;
+      amount = planned / cyclesPerMonth(t.frequency);
     } else if (t.issue_day) {
       const issuedThisMonth =
         lastIssued && lastIssued.slice(0, 7) === todayISO.slice(0, 7);

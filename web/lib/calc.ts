@@ -234,25 +234,25 @@ export function monthlyReminderDue(
 }
 
 /**
- * Next occurrence of a biweekly schedule on or after today: step +14
- * days from the anchor ("apply from" date) until we reach today, then
- * shift a weekend result to Monday. Returns null when there's no anchor.
+ * Fixed-interval cadences (invoice issued every N days): weekly → 7,
+ * biweekly → 14. Everything else isn't day-stepped (monthly uses
+ * issue_day; quarterly/once are handled separately), so returns null.
  */
-export function biweeklyNextISO(
-  anchorISO: string | null | undefined,
-  today: Date,
-): string | null {
-  if (!anchorISO) return null;
-  const d = new Date(anchorISO + "T00:00:00");
-  if (isNaN(d.getTime())) return null;
-  const todayISO = localISO(today);
-  let guard = 0;
-  while (localISO(d) < todayISO && guard < 520) {
-    d.setDate(d.getDate() + 14);
-    guard++;
-  }
-  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
-  return localISO(d);
+export function intervalStepDays(freq: string | null | undefined): number | null {
+  if (freq === "weekly") return 7;
+  if (freq === "biweekly") return 14;
+  return null;
+}
+
+/**
+ * Rough issuances-per-month for a cadence, used only for the "≈ per
+ * cycle" amount (monthly planned ÷ this): weekly ≈ 4, biweekly ≈ 2,
+ * everything else 1. An estimate label, not billing truth.
+ */
+export function cyclesPerMonth(freq: string | null | undefined): number {
+  if (freq === "weekly") return 4;
+  if (freq === "biweekly") return 2;
+  return 1;
 }
 
 /* ═══ invoices dashboard aggregators (pure, over listInvoices) ═══════ */

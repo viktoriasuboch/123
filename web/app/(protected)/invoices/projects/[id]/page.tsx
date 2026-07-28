@@ -19,6 +19,8 @@ import {
   fmtDate,
   monthlyReminderDue,
   adjustedIssueDateISO,
+  intervalStepDays,
+  cyclesPerMonth,
 } from "@/lib/calc";
 import type { InvoiceTemplate } from "@/lib/schemas";
 
@@ -252,6 +254,7 @@ export default async function InvoiceProjectPage({
  *  settings, the block only states the cadence. */
 function describeFrequency(t: InvoiceTemplate): string {
   const freq = t.frequency ?? "monthly";
+  if (freq === "weekly") return "каждую неделю";
   if (freq === "biweekly") return "каждые 2 недели";
   if (freq === "quarterly") return "раз в квартал";
   if (freq === "once") return "разово";
@@ -309,12 +312,14 @@ function NextInvoiceBlock({
 
   if (schedule && schedule.active !== false) {
     const freq = schedule.frequency ?? "monthly";
-    if (freq === "biweekly") {
-      // Advance ONLY when an invoice was issued: exactly one 14-day step
-      // past the last issued date. Before the first issue — the anchor.
-      // No time-based rolling: it stays put until you issue the next one.
+    const step = intervalStepDays(freq);
+    if (step) {
+      // Advance ONLY when an invoice was issued: exactly one interval step
+      // (7d weekly / 14d biweekly) past the last issued date. Before the
+      // first issue — the anchor. No time-based rolling: it stays put
+      // until you issue the next one.
       const raw = lastIssuedDate
-        ? addDaysISO(lastIssuedDate, 14)
+        ? addDaysISO(lastIssuedDate, step)
         : schedule.next_issue_date;
       dueISO = raw ? weekendShiftISO(raw) : null;
     } else if (schedule.issue_day) {
@@ -334,13 +339,14 @@ function NextInvoiceBlock({
     }
   }
 
-  // Approx amount: Projects first (biweekly halves the monthly figure),
-  // else the last invoice's amount (already a real per-cycle number).
+  // Approx amount: Projects first (÷ issuances-per-month, so biweekly
+  // halves and weekly quarters the monthly figure), else the last
+  // invoice's amount (already a real per-cycle number).
   const freq = schedule?.frequency ?? "monthly";
   let amount = 0;
   let currency = schedule?.currency ?? lastCurrency ?? "USD";
   if (planned > 0) {
-    amount = freq === "biweekly" ? planned / 2 : planned;
+    amount = planned / cyclesPerMonth(freq);
   } else if (lastAmount != null) {
     amount = lastAmount;
     currency = lastCurrency ?? currency;

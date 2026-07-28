@@ -159,6 +159,9 @@ function describeFrequency(t: InvoiceTemplate): string {
       ? `раз в квартал, ${t.issue_day}-го числа`
       : "раз в квартал";
   }
+  if (freq === "weekly") {
+    return "каждую неделю";
+  }
   if (freq === "biweekly") {
     return "каждые 2 недели";
   }

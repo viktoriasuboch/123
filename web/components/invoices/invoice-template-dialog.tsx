@@ -27,7 +27,7 @@ export type ProjectOption = {
   next_invoice_number: string;
 };
 
-type Freq = "monthly" | "biweekly";
+type Freq = "monthly" | "weekly" | "biweekly";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -61,7 +61,11 @@ export function InvoiceTemplateDialog({
   const planned = project?.planned_monthly ?? 0;
 
   const [freq, setFreq] = useState<Freq>(
-    template?.frequency === "biweekly" ? "biweekly" : "monthly",
+    template?.frequency === "biweekly"
+      ? "biweekly"
+      : template?.frequency === "weekly"
+        ? "weekly"
+        : "monthly",
   );
   const [issueDay, setIssueDay] = useState<string>(
     template?.issue_day?.toString() ?? "1",
@@ -85,7 +89,7 @@ export function InvoiceTemplateDialog({
       // Explicitly write BOTH cadence fields so switching monthly↔biweekly
       // clears the one that no longer applies.
       fd.set("issue_day", freq === "monthly" ? issueDay : "");
-      fd.set("next_issue_date", freq === "biweekly" ? anchor : "");
+      fd.set("next_issue_date", freq === "monthly" ? "" : anchor);
       fd.set("notes", notes);
       fd.set("active", active ? "true" : "false");
 
@@ -157,6 +161,7 @@ export function InvoiceTemplateDialog({
                 {(
                   [
                     { id: "monthly", label: "Каждый месяц" },
+                    { id: "weekly", label: "Каждую неделю" },
                     { id: "biweekly", label: "Каждые 2 недели" },
                   ] as { id: Freq; label: string }[]
                 ).map((o) => (
@@ -210,7 +215,7 @@ export function InvoiceTemplateDialog({
                   required
                 />
                 <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                  Дальше — каждые 14 дней от этой даты.
+                  Дальше — каждые {freq === "weekly" ? 7 : 14} дней от этой даты.
                 </p>
               </div>
             )}
