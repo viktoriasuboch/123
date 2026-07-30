@@ -316,14 +316,9 @@ function NextInvoiceBlock({
     const step = intervalStepDays(freq);
     if (step) {
       // Fixed cadence anchored to the chosen start date (anchor + k·step),
-      // NOT drifting off the actual issue date. Issuing late doesn't move
-      // the reminders — they stay where you set them. See nextIntervalDue.
-      dueISO = nextIntervalDue(
-        schedule.next_issue_date,
-        step,
-        lastIssuedDate,
-        today,
-      );
+      // invoice-independent — entering/back-dating invoices never moves it.
+      // See nextIntervalDue.
+      dueISO = nextIntervalDue(schedule.next_issue_date, step, today);
     } else if (schedule.issue_day) {
       // Issued this calendar month → next month's issue day; otherwise
       // this month's (roll-forward / genuine-miss). Also advances only

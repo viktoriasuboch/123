@@ -194,7 +194,7 @@ export function InvoicesDashboard({
     const currency = t.currency ?? "USD";
     const step = intervalStepDays(t.frequency);
     if (step) {
-      nextISO = nextIntervalDue(t.next_issue_date, step, lastIssued, today);
+      nextISO = nextIntervalDue(t.next_issue_date, step, today);
       amount = planned / cyclesPerMonth(t.frequency);
     } else if (t.issue_day) {
       const issuedThisMonth =

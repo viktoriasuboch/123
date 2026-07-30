@@ -256,33 +256,26 @@ export function cyclesPerMonth(freq: string | null | undefined): number {
 }
 
 /**
- * Next issue date for a fixed-interval schedule, anchored to the user's
- * chosen start date — NOT drifting off when invoices actually went out.
- * The schedule is a fixed grid: anchor, anchor+step, anchor+2·step, …
+ * Next issue date for a fixed-interval schedule — a pure function of the
+ * chosen start date and the calendar, INVOICE-INDEPENDENT. The schedule
+ * is a fixed grid (anchor, anchor+step, anchor+2·step, …) and this
+ * returns the earliest slot that is on/after today:
  *
  * - Before the anchor → the anchor itself.
- * - On/after the anchor → the current grid slot (latest slot ≤ today);
- *   but if an invoice was already issued on/after that slot (it's done),
- *   roll to the next slot. So issuing late doesn't move the whole
- *   cadence — the reminders stay where you set them.
+ * - Otherwise → the next upcoming grid slot (≥ today).
  *
- * A weekend result is shifted to the following Monday. Null when there's
- * no anchor.
+ * Entering or back-dating invoices never moves it — the reminder rolls
+ * to the next slot only when the calendar reaches it. A weekend result
+ * is shifted to the following Monday. Null when there's no anchor.
  */
 export function nextIntervalDue(
   anchorISO: string | null | undefined,
   stepDays: number,
-  lastIssuedISO: string | null | undefined,
   today: Date,
 ): string | null {
   if (!anchorISO || stepDays <= 0) return null;
   const anchor = anchorISO.slice(0, 10);
   const mk = (iso: string) => new Date(iso + "T00:00:00");
-  const addDays = (iso: string, n: number) => {
-    const d = mk(iso);
-    d.setDate(d.getDate() + n);
-    return localISO(d);
-  };
   const todayISO = localISO(today);
 
   let dueISO: string;
@@ -292,11 +285,10 @@ export function nextIntervalDue(
     const diff = Math.floor(
       (mk(todayISO).getTime() - mk(anchor).getTime()) / 86400_000,
     );
-    const k = Math.floor(diff / stepDays);
-    const currentSlot = addDays(anchor, k * stepDays);
-    const nextSlot = addDays(anchor, (k + 1) * stepDays);
-    const li = lastIssuedISO ? lastIssuedISO.slice(0, 10) : null;
-    dueISO = li && li >= currentSlot ? nextSlot : currentSlot;
+    const k = Math.ceil(diff / stepDays); // first slot on/after today
+    const d = mk(anchor);
+    d.setDate(d.getDate() + k * stepDays);
+    dueISO = localISO(d);
   }
 
   const d = mk(dueISO);
