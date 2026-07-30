@@ -21,7 +21,13 @@ import type { Invoice } from "@/lib/schemas";
  * arrived (prefilled with the invoice total, editable for partials).
  * paid_date is set to today by the server action; no date picker.
  */
-export function MarkInvoicePaidDialog({ invoice }: { invoice: Invoice }) {
+export function MarkInvoicePaidDialog({
+  invoice,
+  triggerLabel = "Оплачен",
+}: {
+  invoice: Invoice;
+  triggerLabel?: string;
+}) {
   const [open, setOpen] = useState(false);
   // Prefill with what's already been received for a partial (so you can
   // top it up), otherwise the full invoice amount.
@@ -48,7 +54,7 @@ export function MarkInvoicePaidDialog({ invoice }: { invoice: Invoice }) {
           />
         }
       >
-        Оплачен
+        {triggerLabel}
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>

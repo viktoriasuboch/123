@@ -21,6 +21,7 @@ import {
   adjustedIssueDateISO,
   intervalStepDays,
   cyclesPerMonth,
+  nextIntervalDue,
 } from "@/lib/calc";
 import type { InvoiceTemplate } from "@/lib/schemas";
 
@@ -314,14 +315,15 @@ function NextInvoiceBlock({
     const freq = schedule.frequency ?? "monthly";
     const step = intervalStepDays(freq);
     if (step) {
-      // Advance ONLY when an invoice was issued: exactly one interval step
-      // (7d weekly / 14d biweekly) past the last issued date. Before the
-      // first issue — the anchor. No time-based rolling: it stays put
-      // until you issue the next one.
-      const raw = lastIssuedDate
-        ? addDaysISO(lastIssuedDate, step)
-        : schedule.next_issue_date;
-      dueISO = raw ? weekendShiftISO(raw) : null;
+      // Fixed cadence anchored to the chosen start date (anchor + k·step),
+      // NOT drifting off the actual issue date. Issuing late doesn't move
+      // the reminders — they stay where you set them. See nextIntervalDue.
+      dueISO = nextIntervalDue(
+        schedule.next_issue_date,
+        step,
+        lastIssuedDate,
+        today,
+      );
     } else if (schedule.issue_day) {
       // Issued this calendar month → next month's issue day; otherwise
       // this month's (roll-forward / genuine-miss). Also advances only
@@ -382,17 +384,4 @@ function fmtISO(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${mm}-${dd}`;
-}
-
-function addDaysISO(iso: string, n: number): string {
-  const d = new Date(iso + "T00:00:00");
-  d.setDate(d.getDate() + n);
-  return fmtISO(d);
-}
-
-/** Nudge a Sat/Sun ISO date to the following Monday. */
-function weekendShiftISO(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
-  return fmtISO(d);
 }

@@ -256,6 +256,55 @@ export function cyclesPerMonth(freq: string | null | undefined): number {
 }
 
 /**
+ * Next issue date for a fixed-interval schedule, anchored to the user's
+ * chosen start date — NOT drifting off when invoices actually went out.
+ * The schedule is a fixed grid: anchor, anchor+step, anchor+2·step, …
+ *
+ * - Before the anchor → the anchor itself.
+ * - On/after the anchor → the current grid slot (latest slot ≤ today);
+ *   but if an invoice was already issued on/after that slot (it's done),
+ *   roll to the next slot. So issuing late doesn't move the whole
+ *   cadence — the reminders stay where you set them.
+ *
+ * A weekend result is shifted to the following Monday. Null when there's
+ * no anchor.
+ */
+export function nextIntervalDue(
+  anchorISO: string | null | undefined,
+  stepDays: number,
+  lastIssuedISO: string | null | undefined,
+  today: Date,
+): string | null {
+  if (!anchorISO || stepDays <= 0) return null;
+  const anchor = anchorISO.slice(0, 10);
+  const mk = (iso: string) => new Date(iso + "T00:00:00");
+  const addDays = (iso: string, n: number) => {
+    const d = mk(iso);
+    d.setDate(d.getDate() + n);
+    return localISO(d);
+  };
+  const todayISO = localISO(today);
+
+  let dueISO: string;
+  if (todayISO <= anchor) {
+    dueISO = anchor;
+  } else {
+    const diff = Math.floor(
+      (mk(todayISO).getTime() - mk(anchor).getTime()) / 86400_000,
+    );
+    const k = Math.floor(diff / stepDays);
+    const currentSlot = addDays(anchor, k * stepDays);
+    const nextSlot = addDays(anchor, (k + 1) * stepDays);
+    const li = lastIssuedISO ? lastIssuedISO.slice(0, 10) : null;
+    dueISO = li && li >= currentSlot ? nextSlot : currentSlot;
+  }
+
+  const d = mk(dueISO);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  return localISO(d);
+}
+
+/**
  * Money actually received on an invoice. A `paid` invoice counts its
  * `paid_amount` (falling back to the full amount for older rows that were
  * marked paid before amounts were tracked); anything else counts 0. This

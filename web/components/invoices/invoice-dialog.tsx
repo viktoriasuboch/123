@@ -16,6 +16,7 @@ import { reportActionError } from "@/lib/client-errors";
 import {
   createInvoice,
   updateInvoice,
+  unmarkInvoicePaid,
 } from "@/app/(protected)/invoices/_actions";
 import type { Invoice } from "@/lib/schemas";
 import type { ProjectOption } from "./invoice-template-dialog";
@@ -329,7 +330,29 @@ export function InvoiceDialog({
               />
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="flex-wrap gap-2">
+              {isEdit && invoice && invoice.status === "paid" ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (
+                      !confirm(
+                        "Точно отменить статус оплаты? Инвойс вернётся в «Выставлен», сумма и дата оплаты сбросятся.",
+                      )
+                    )
+                      return;
+                    try {
+                      await unmarkInvoicePaid(invoice.id);
+                      setOpen(false);
+                    } catch (err) {
+                      reportActionError(err, "Не отменилось");
+                    }
+                  }}
+                  className="mr-auto rounded border border-destructive/40 bg-destructive/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-destructive hover:bg-destructive/20 transition"
+                >
+                  Отменить оплату
+                </button>
+              ) : null}
               <Button
                 type="button"
                 variant="ghost"

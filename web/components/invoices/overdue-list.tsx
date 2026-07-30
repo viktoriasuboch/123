@@ -2,6 +2,7 @@ import type { Invoice } from "@/lib/schemas";
 import type { ProjectOption } from "./invoice-template-dialog";
 import { fmtDate } from "@/lib/calc";
 import { InvoiceRowActions } from "./invoice-row-actions";
+import { InvoiceStatusBadge } from "./invoice-status-badge";
 
 export type OverdueItem = {
   invoice: Invoice;
@@ -46,14 +47,15 @@ export function OverdueList({
               className="p-3 flex items-center justify-between gap-3 flex-wrap"
             >
               <div className="min-w-0 flex-1">
-                <div className="text-sm">
+                <div className="text-sm flex items-center gap-2 flex-wrap">
                   <span className="font-mono text-muted-foreground">
                     {invoice.invoice_number ?? "—"}
-                  </span>{" "}
-                  <span className="font-medium">{project?.name ?? "—"}</span>{" "}
+                  </span>
+                  <span className="font-medium">{project?.name ?? "—"}</span>
                   <span className="text-destructive">
                     — просрочен на {daysLate} дн.
                   </span>
+                  {partial ? <InvoiceStatusBadge invoice={invoice} /> : null}
                 </div>
                 <div className="font-mono text-[10px] text-muted-foreground">
                   {invoice.client_name} · {invoice.currency}{" "}

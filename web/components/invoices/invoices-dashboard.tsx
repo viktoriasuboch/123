@@ -8,6 +8,7 @@ import {
   monthYearPeriod,
   intervalStepDays,
   cyclesPerMonth,
+  nextIntervalDue,
   amountCollected,
   amountOutstanding,
   type DashboardPeriod,
@@ -193,8 +194,7 @@ export function InvoicesDashboard({
     const currency = t.currency ?? "USD";
     const step = intervalStepDays(t.frequency);
     if (step) {
-      const base = lastIssued ? addDaysISO(lastIssued, step) : t.next_issue_date ?? null;
-      nextISO = base ? weekendShiftISO(base) : null;
+      nextISO = nextIntervalDue(t.next_issue_date, step, lastIssued, today);
       amount = planned / cyclesPerMonth(t.frequency);
     } else if (t.issue_day) {
       const issuedThisMonth =
@@ -401,10 +401,5 @@ function localISO(d: Date): string {
 function addDaysISO(iso: string, n: number): string {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + n);
-  return localISO(d);
-}
-function weekendShiftISO(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
   return localISO(d);
 }
