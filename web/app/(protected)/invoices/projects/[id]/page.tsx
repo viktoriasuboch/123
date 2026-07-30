@@ -75,6 +75,11 @@ export default async function InvoiceProjectPage({
       .filter((i) => i.issue_date && effectiveStatus(i) !== "cancelled")
       .sort((a, b) => (b.issue_date ?? "").localeCompare(a.issue_date ?? ""))[0] ??
     null;
+  // All issued dates — used by the interval schedule to tell whether the
+  // current cycle has been invoiced yet.
+  const issuedDates = invoices
+    .filter((i) => i.issue_date && effectiveStatus(i) !== "cancelled")
+    .map((i) => (i.issue_date as string).slice(0, 10));
 
   // Only the current project as the ProjectOption feed for dialogs.
   const projectOption = {
@@ -168,6 +173,7 @@ export default async function InvoiceProjectPage({
           schedule={schedule}
           planned={planned}
           lastIssuedDate={lastIssued?.issue_date ?? null}
+          issuedDates={issuedDates}
           lastAmount={lastIssued?.amount ?? null}
           lastCurrency={lastIssued?.currency ?? null}
         />
@@ -290,20 +296,23 @@ function InvoiceDateBlock({ schedule }: { schedule: InvoiceTemplate | null }) {
   );
 }
 
-/** ② Next Invoice date — forecast of the next issue + approx amount.
- *  The date advances off the LAST issued invoice (issue → next cycle),
- *  so once you invoice, the forecast jumps forward. The amount comes
- *  from Projects when available, else falls back to the last invoice. */
+/** ② Next Invoice date — the current cycle's date + approx amount. The
+ *  date sits on the schedule's fixed grid; it advances only once the
+ *  current cycle is actually issued, and a passed-but-unissued date shows
+ *  as "просрочено". The amount comes from Projects when available, else
+ *  falls back to the last invoice. */
 function NextInvoiceBlock({
   schedule,
   planned,
   lastIssuedDate,
+  issuedDates,
   lastAmount,
   lastCurrency,
 }: {
   schedule: InvoiceTemplate | null;
   planned: number;
   lastIssuedDate: string | null;
+  issuedDates: string[];
   lastAmount: number | null;
   lastCurrency: string | null;
 }) {
@@ -315,10 +324,9 @@ function NextInvoiceBlock({
     const freq = schedule.frequency ?? "monthly";
     const step = intervalStepDays(freq);
     if (step) {
-      // Fixed cadence anchored to the chosen start date (anchor + k·step),
-      // invoice-independent — entering/back-dating invoices never moves it.
-      // See nextIntervalDue.
-      dueISO = nextIntervalDue(schedule.next_issue_date, step, today);
+      // Fixed grid from the start date; advances only when the current
+      // cycle is issued, otherwise the (passed) slot stays as "missed".
+      dueISO = nextIntervalDue(schedule.next_issue_date, step, issuedDates, today);
     } else if (schedule.issue_day) {
       // Issued this calendar month → next month's issue day; otherwise
       // this month's (roll-forward / genuine-miss). Also advances only
@@ -349,16 +357,28 @@ function NextInvoiceBlock({
     currency = lastCurrency ?? currency;
   }
 
+  // Scheduled day has passed and this cycle wasn't issued yet → missed.
+  const missed = !!dueISO && dueISO < todayISO;
+
   return (
-    <section className="rounded-md border bg-card p-4">
+    <section
+      className={`rounded-md border p-4 ${missed ? "border-destructive/40 bg-destructive/5" : "bg-card"}`}
+    >
       <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
         ⏭ Next Invoice date
       </div>
       {dueISO ? (
         <>
-          <div className="mt-2 font-display text-2xl leading-tight text-primary">
+          <div
+            className={`mt-2 font-display text-2xl leading-tight ${missed ? "text-destructive" : "text-primary"}`}
+          >
             {fmtDate(dueISO)}
           </div>
+          {missed ? (
+            <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-destructive">
+              ❗ просрочено — не выставлен за этот период
+            </div>
+          ) : null}
           <div className="mt-1 font-mono text-sm text-muted-foreground">
             {amount > 0
               ? `≈ ${currency} ${amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}`

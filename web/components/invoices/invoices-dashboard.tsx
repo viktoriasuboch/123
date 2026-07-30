@@ -154,9 +154,13 @@ export function InvoicesDashboard({
   }
   const lastIssuedByProject = new Map<string, string>();
   const lastCurrencyByProject = new Map<string, string>();
+  const issuedDatesByProject = new Map<string, string[]>();
   for (const inv of invoices) {
     if (!inv.issue_date || effectiveStatus(inv) === "cancelled") continue;
     const iso = dateKey(inv.issue_date);
+    const arr = issuedDatesByProject.get(inv.project_id);
+    if (arr) arr.push(iso);
+    else issuedDatesByProject.set(inv.project_id, [iso]);
     const prevISO = lastIssuedByProject.get(inv.project_id);
     if (!prevISO || iso > prevISO) {
       lastIssuedByProject.set(inv.project_id, iso);
@@ -194,7 +198,12 @@ export function InvoicesDashboard({
     const currency = t.currency ?? "USD";
     const step = intervalStepDays(t.frequency);
     if (step) {
-      nextISO = nextIntervalDue(t.next_issue_date, step, today);
+      nextISO = nextIntervalDue(
+        t.next_issue_date,
+        step,
+        issuedDatesByProject.get(p.id) ?? [],
+        today,
+      );
       amount = planned / cyclesPerMonth(t.frequency);
     } else if (t.issue_day) {
       const issuedThisMonth =

@@ -256,42 +256,57 @@ export function cyclesPerMonth(freq: string | null | undefined): number {
 }
 
 /**
- * Next issue date for a fixed-interval schedule — a pure function of the
- * chosen start date and the calendar, INVOICE-INDEPENDENT. The schedule
- * is a fixed grid (anchor, anchor+step, anchor+2·step, …) and this
- * returns the earliest slot that is on/after today:
+ * Next issue date for a fixed-interval schedule, on the grid anchored to
+ * the chosen start date (anchor, anchor+step, anchor+2·step, …). Advances
+ * only when the current cycle is actually issued, and keeps showing a
+ * passed slot until then (so it reads as "missed"):
  *
- * - Before the anchor → the anchor itself.
- * - Otherwise → the next upcoming grid slot (≥ today).
+ * - Current cycle slot = the latest grid slot ≤ today (anchor before it
+ *   starts).
+ * - If an invoice was issued within THIS cycle's window [slot, slot+step)
+ *   → the cycle is done → return the next slot.
+ * - Otherwise → return this slot (caller flags "missed" when it's < today).
  *
- * Entering or back-dating invoices never moves it — the reminder rolls
- * to the next slot only when the calendar reaches it. A weekend result
- * is shifted to the following Monday. Null when there's no anchor.
+ * The grid never drifts off the actual issue date, and an invoice logged
+ * for a *different* cycle (e.g. back-dated to an old period) doesn't close
+ * the current one. A weekend result is shifted to Monday. Null without an
+ * anchor.
  */
 export function nextIntervalDue(
   anchorISO: string | null | undefined,
   stepDays: number,
+  issuedISOs: string[],
   today: Date,
 ): string | null {
   if (!anchorISO || stepDays <= 0) return null;
   const anchor = anchorISO.slice(0, 10);
   const mk = (iso: string) => new Date(iso + "T00:00:00");
+  const addDays = (iso: string, n: number) => {
+    const d = mk(iso);
+    d.setDate(d.getDate() + n);
+    return localISO(d);
+  };
   const todayISO = localISO(today);
 
-  let dueISO: string;
+  let slot: string;
   if (todayISO <= anchor) {
-    dueISO = anchor;
+    slot = anchor;
   } else {
     const diff = Math.floor(
       (mk(todayISO).getTime() - mk(anchor).getTime()) / 86400_000,
     );
-    const k = Math.ceil(diff / stepDays); // first slot on/after today
-    const d = mk(anchor);
-    d.setDate(d.getDate() + k * stepDays);
-    dueISO = localISO(d);
+    const k = Math.floor(diff / stepDays);
+    slot = addDays(anchor, k * stepDays);
   }
+  const nextSlot = addDays(slot, stepDays);
 
-  const d = mk(dueISO);
+  const issuedThisCycle = issuedISOs.some((d) => {
+    const x = d.slice(0, 10);
+    return x >= slot && x < nextSlot;
+  });
+  const due = issuedThisCycle ? nextSlot : slot;
+
+  const d = mk(due);
   while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
   return localISO(d);
 }
