@@ -726,6 +726,12 @@ function InvoicesTable({
                 </TableCell>
                 <TableCell className="font-mono">
                   {inv.currency} {formatAmount(inv.amount)}
+                  {s === "partial" ? (
+                    <div className="text-[10px] text-muted-foreground">
+                      получено {formatAmount(amountCollected(inv))} · осталось{" "}
+                      {formatAmount(amountOutstanding(inv))}
+                    </div>
+                  ) : null}
                 </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">
                   {fmtDate(inv.issue_date)}

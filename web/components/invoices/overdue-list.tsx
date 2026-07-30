@@ -4,6 +4,9 @@ import { fmtDate } from "@/lib/calc";
 import { InvoiceRowActions } from "./invoice-row-actions";
 import { InvoiceStatusBadge } from "./invoice-status-badge";
 
+const fmtNum = (v: number) =>
+  v.toLocaleString("en-US", { maximumFractionDigits: 2 });
+
 export type OverdueItem = {
   invoice: Invoice;
   daysLate: number;
@@ -59,12 +62,9 @@ export function OverdueList({
                 </div>
                 <div className="font-mono text-[10px] text-muted-foreground">
                   {invoice.client_name} · {invoice.currency}{" "}
-                  {outstanding.toLocaleString("en-US", {
-                    maximumFractionDigits: 2,
-                  })}
                   {partial
-                    ? ` (остаток из ${invoice.amount.toLocaleString("en-US", { maximumFractionDigits: 2 })})`
-                    : ""}{" "}
+                    ? `получено ${fmtNum(invoice.amount - outstanding)} · осталось ${fmtNum(outstanding)} (из ${fmtNum(invoice.amount)})`
+                    : fmtNum(outstanding)}{" "}
                   · due {fmtDate(invoice.due_date)}
                 </div>
               </div>
