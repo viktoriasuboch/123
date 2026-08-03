@@ -4,9 +4,13 @@ import {
   listProjects,
   listProjectMembers,
   listDevStatuses,
+  listEventsForProjects,
 } from "@/lib/data/projects";
 import { buyRate, marginPerHour, fmtRate } from "@/lib/calc";
 import { DevFireButton } from "@/components/projects/dev-fire-button";
+import { DevRegistryEditor } from "@/components/projects/dev-registry-editor";
+import { EditableRateCell } from "@/components/projects/editable-rate-cell";
+import { DevHistory } from "@/components/projects/dev-history";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +34,14 @@ export default async function DevProfilePage({ params }: { params: Params }) {
   if (rows.length === 0 && !registry) notFound();
 
   const projectsById = new Map(projects.map((p) => [p.id, p]));
+
+  // Change history across this dev's projects. Events aren't keyed to a
+  // developer in the DB — the dev name is embedded in the description
+  // text — so filter by name mention. Covers join / rate_change /
+  // salary / status_change (all of which carry the name).
+  const projectIds = [...new Set(rows.map((r) => r.project_id))];
+  const allEvents = await listEventsForProjects(projectIds);
+  const devEvents = allEvents.filter((e) => (e.description ?? "").includes(name));
   const empType =
     rows[0]?.employment_type ??
     (registry?.employment_type ?? "staff");
@@ -93,7 +105,17 @@ export default async function DevProfilePage({ params }: { params: Params }) {
           </div>
         </div>
 
-        <DevFireButton devName={name} fired={fired} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <DevRegistryEditor
+            devName={name}
+            role={registry?.role ?? null}
+            employmentType={registry?.employment_type ?? empType}
+            salary={registry?.salary ?? 0}
+            defaultHoursLoad={registry?.default_hours_load ?? 160}
+            notes={registry?.notes ?? null}
+          />
+          <DevFireButton devName={name} fired={fired} />
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 mb-8">
@@ -122,7 +144,7 @@ export default async function DevProfilePage({ params }: { params: Params }) {
               <th className="text-right p-3 font-normal">Buy</th>
               <th className="text-right p-3 font-normal">Sell</th>
               <th className="text-right p-3 font-normal">Маржа/h</th>
-              <th className="text-right p-3 font-normal">ч/день</th>
+              <th className="text-right p-3 font-normal">Часы/мес</th>
               <th className="text-right p-3 font-normal">Rev/мес</th>
               <th className="text-left p-3 font-normal">Статус</th>
             </tr>
@@ -143,8 +165,6 @@ export default async function DevProfilePage({ params }: { params: Params }) {
                 const revMonth = isTm
                   ? 0
                   : (m.sell_rate || 0) * (m.hours_load || 0);
-                const hpd =
-                  Math.round(((m.hours_load || 0) / 20) * 10) / 10;
                 const isStaff = m.employment_type === "staff";
                 const inactive = m.is_active === false;
                 const project = projectsById.get(m.project_id);
@@ -176,20 +196,53 @@ export default async function DevProfilePage({ params }: { params: Params }) {
                     </td>
                     <td className="p-3 text-muted-foreground">{m.role ?? "—"}</td>
                     <td className="p-3 text-right">
-                      {isStaff
-                        ? `$${(m.salary || 0).toLocaleString()}/мес`
-                        : "—"}
+                      {isStaff ? (
+                        <EditableRateCell
+                          projectId={m.project_id}
+                          memberId={m.id}
+                          field="salary"
+                          value={m.salary || 0}
+                          prefix="$"
+                          suffix="/мес"
+                        />
+                      ) : (
+                        "—"
+                      )}
                     </td>
-                    <td className="p-3 text-right">{fmtRate(buy)}/h</td>
+                    <td className="p-3 text-right">
+                      {isStaff ? (
+                        `${fmtRate(buy)}/h`
+                      ) : (
+                        <EditableRateCell
+                          projectId={m.project_id}
+                          memberId={m.id}
+                          field="buy_rate"
+                          value={m.buy_rate || 0}
+                          suffix="/h"
+                        />
+                      )}
+                    </td>
                     <td className="p-3 text-right text-good">
-                      {fmtRate(m.sell_rate || 0)}/h
+                      <EditableRateCell
+                        projectId={m.project_id}
+                        memberId={m.id}
+                        field="sell_rate"
+                        value={m.sell_rate || 0}
+                        suffix="/h"
+                      />
                     </td>
                     <td className={`p-3 text-right ${margClass}`}>
                       {margin >= 0 ? "+" : ""}
                       {fmtRate(margin)}/h
                     </td>
                     <td className="p-3 text-right text-muted-foreground">
-                      {isTm ? "—" : `${hpd} ч/д`}
+                      <EditableRateCell
+                        projectId={m.project_id}
+                        memberId={m.id}
+                        field="hours_load"
+                        value={m.hours_load || 0}
+                        suffix="ч/мес"
+                      />
                     </td>
                     <td className="p-3 text-right text-good">
                       {isTm ? "—" : `$${Math.round(revMonth).toLocaleString()}`}
@@ -210,6 +263,10 @@ export default async function DevProfilePage({ params }: { params: Params }) {
               })}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-8">
+        <DevHistory events={devEvents} projectsById={projectsById} />
       </div>
     </div>
   );

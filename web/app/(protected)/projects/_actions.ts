@@ -392,6 +392,8 @@ export async function patchMember(
   }
 
   revalidatePath(`/projects/${projectId}`);
+  // Edits can originate from the developer page too — keep it fresh.
+  if (devName) revalidatePath(`/projects/devs/${encodeURIComponent(devName)}`);
 }
 
 const CreateGroupInput = z.object({
@@ -817,6 +819,53 @@ export async function createDeveloper(input: unknown) {
   if (error) throw error;
 
   revalidatePath("/projects");
+}
+
+const UpdateDeveloperInput = z.object({
+  dev_name: z.string().trim().min(1).max(120),
+  role: z.string().trim().max(80).nullable().optional(),
+  employment_type: z.enum(["staff", "freelancer"]).default("staff"),
+  salary: z.coerce.number().min(0).default(0),
+  default_hours_load: z.coerce.number().min(0).default(160),
+  notes: z.string().max(1000).nullable().optional(),
+});
+
+/**
+ * Edit a developer's registry baseline (role / type / salary / default
+ * hours / notes) from the developer page. Unlike `createDeveloper`, this
+ * PRESERVES the existing active/inactive status (createDeveloper forces
+ * "active", which would silently un-fire someone on an edit).
+ */
+export async function updateDeveloper(input: unknown) {
+  await requireUser();
+  const parsed = UpdateDeveloperInput.parse(input);
+
+  const { data: existing } = await sb()
+    .from("developer_status")
+    .select("status")
+    .eq("dev_name", parsed.dev_name)
+    .maybeSingle();
+  const status = (existing as { status?: string } | null)?.status ?? "active";
+
+  const { error } = await sb()
+    .from("developer_status")
+    .upsert(
+      {
+        dev_name: parsed.dev_name,
+        status,
+        role: parsed.role ?? null,
+        employment_type: parsed.employment_type,
+        salary: parsed.salary,
+        default_hours_load: parsed.default_hours_load,
+        notes: parsed.notes ?? null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "dev_name" },
+    );
+  if (error) throw error;
+
+  revalidatePath("/projects");
+  revalidatePath(`/projects/devs/${encodeURIComponent(parsed.dev_name)}`);
 }
 
 /**
