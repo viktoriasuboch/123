@@ -11,6 +11,7 @@ import type {
 } from "@/lib/schemas";
 import type { ProjectOption } from "./invoice-template-dialog";
 import { InvoiceDialog } from "./invoice-dialog";
+import { intervalStepDays, cyclesPerMonth } from "@/lib/calc";
 
 type Project = { id: string; name: string };
 
@@ -107,6 +108,13 @@ function IssueRow({
 
   const opt = projectOptions.find((p) => p.id === item.template.project_id);
   const suggested = opt?.next_invoice_number ?? "";
+  // Interval schedules (weekly/biweekly) advance by issuing an invoice, so
+  // the "✓ Готово" marker doesn't apply; and their per-cycle amount is the
+  // monthly figure ÷ cycles-per-month.
+  const isInterval = intervalStepDays(item.template.frequency) != null;
+  const shownAmount = isInterval
+    ? item.template.amount / cyclesPerMonth(item.template.frequency)
+    : item.template.amount;
   const missed = item.daysUntil < 0;
   const when = missed
     ? `${-item.daysUntil} дн. назад`
@@ -142,7 +150,7 @@ function IssueRow({
         </div>
         <div className="font-mono text-[10px] text-muted-foreground">
           {item.template.client_name} · {item.template.currency}{" "}
-          {formatAmount(item.template.amount)}
+          {formatAmount(shownAmount)}
         </div>
       </div>
       <div className="flex items-center gap-1.5">
@@ -158,22 +166,24 @@ function IssueRow({
             </button>
           }
         />
-        <form
-          action={() =>
-            dismiss(
-              () => markInvoiceTemplateDone(item.template.id),
-              "Не сохранилось",
-            )
-          }
-        >
-          <button
-            type="submit"
-            className="rounded border border-good/40 bg-good/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-good hover:bg-good/20 transition"
-            title="Отметить как выполненную — исчезнет до следующего месяца"
+        {!isInterval ? (
+          <form
+            action={() =>
+              dismiss(
+                () => markInvoiceTemplateDone(item.template.id),
+                "Не сохранилось",
+              )
+            }
           >
-            ✓ Готово
-          </button>
-        </form>
+            <button
+              type="submit"
+              className="rounded border border-good/40 bg-good/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-good hover:bg-good/20 transition"
+              title="Отметить как выполненную — исчезнет до следующего месяца"
+            >
+              ✓ Готово
+            </button>
+          </form>
+        ) : null}
       </div>
     </li>
   );

@@ -24,6 +24,8 @@ import {
   monthlyReminderDue,
   amountCollected,
   amountOutstanding,
+  intervalStepDays,
+  nextIntervalDue,
 } from "@/lib/calc";
 import { getUsdRates } from "@/lib/fx";
 import {
@@ -148,27 +150,58 @@ export default async function InvoicesPage({
   // only "overdue" (❗, negative daysUntil) when the template actually
   // existed before this month's issue day; otherwise it rolls forward
   // to next month. See monthlyReminderDue.
-  // Projects that already have an invoice issued this calendar month —
-  // creating one via "+ Создать" should clear the reminder, not only the
-  // "✓ Готово" marker (last_issued_at). Otherwise the row keeps nagging
-  // and suggesting the next number after you've already issued.
+  // Issued dates per project (this month set for the monthly "done"
+  // check; full list for the interval schedules). Creating an invoice via
+  // "+ Создать" then clears the reminder, not only the "✓ Готово" marker.
   const thisYM = todayISO.slice(0, 7);
   const projectsIssuedThisMonth = new Set<string>();
+  const issuedDatesByProject = new Map<string, string[]>();
   for (const inv of invoices) {
     if (!inv.issue_date || effectiveStatus(inv, todayISO) === "cancelled") continue;
-    if (inv.issue_date.slice(0, 7) === thisYM) {
-      projectsIssuedThisMonth.add(inv.project_id);
-    }
+    const iso = inv.issue_date.slice(0, 10);
+    const arr = issuedDatesByProject.get(inv.project_id);
+    if (arr) arr.push(iso);
+    else issuedDatesByProject.set(inv.project_id, [iso]);
+    if (iso.slice(0, 7) === thisYM) projectsIssuedThisMonth.add(inv.project_id);
   }
+
+  const daysUntilISO = (iso: string) =>
+    Math.round(
+      (Date.parse(`${iso}T00:00:00`) - Date.parse(`${todayISO}T00:00:00`)) /
+        86400_000,
+    );
 
   const toIssue: TodayIssueItem[] = [];
   for (const t of templates) {
     if (t.active === false) continue;
-    if (!t.issue_day) continue;
-    if (isTemplateDoneThisMonth(t, today) || projectsIssuedThisMonth.has(t.project_id))
-      continue;
-    const { daysUntil } = monthlyReminderDue(t.issue_day, t.created_at, today);
-    toIssue.push({ kind: "template" as const, template: t, daysUntil });
+    const step = intervalStepDays(t.frequency);
+    if (step) {
+      // Weekly / biweekly — due when the current grid slot has arrived and
+      // no invoice was issued for it yet. nextIntervalDue returns the
+      // (passed) slot until issued, else the next slot; so a future date
+      // (already issued this cycle, or not started) falls out below.
+      const nextISO = nextIntervalDue(
+        t.next_issue_date,
+        step,
+        issuedDatesByProject.get(t.project_id) ?? [],
+        today,
+      );
+      if (nextISO) {
+        toIssue.push({
+          kind: "template" as const,
+          template: t,
+          daysUntil: daysUntilISO(nextISO),
+        });
+      }
+    } else if (t.issue_day) {
+      if (
+        isTemplateDoneThisMonth(t, today) ||
+        projectsIssuedThisMonth.has(t.project_id)
+      )
+        continue;
+      const { daysUntil } = monthlyReminderDue(t.issue_day, t.created_at, today);
+      toIssue.push({ kind: "template" as const, template: t, daysUntil });
+    }
   }
   // Missed ones first (most overdue at the top), then upcoming.
   toIssue.sort((a, b) => a.daysUntil - b.daysUntil);
