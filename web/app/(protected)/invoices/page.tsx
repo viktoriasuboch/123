@@ -148,11 +148,25 @@ export default async function InvoicesPage({
   // only "overdue" (❗, negative daysUntil) when the template actually
   // existed before this month's issue day; otherwise it rolls forward
   // to next month. See monthlyReminderDue.
+  // Projects that already have an invoice issued this calendar month —
+  // creating one via "+ Создать" should clear the reminder, not only the
+  // "✓ Готово" marker (last_issued_at). Otherwise the row keeps nagging
+  // and suggesting the next number after you've already issued.
+  const thisYM = todayISO.slice(0, 7);
+  const projectsIssuedThisMonth = new Set<string>();
+  for (const inv of invoices) {
+    if (!inv.issue_date || effectiveStatus(inv, todayISO) === "cancelled") continue;
+    if (inv.issue_date.slice(0, 7) === thisYM) {
+      projectsIssuedThisMonth.add(inv.project_id);
+    }
+  }
+
   const toIssue: TodayIssueItem[] = [];
   for (const t of templates) {
     if (t.active === false) continue;
     if (!t.issue_day) continue;
-    if (isTemplateDoneThisMonth(t, today)) continue;
+    if (isTemplateDoneThisMonth(t, today) || projectsIssuedThisMonth.has(t.project_id))
+      continue;
     const { daysUntil } = monthlyReminderDue(t.issue_day, t.created_at, today);
     toIssue.push({ kind: "template" as const, template: t, daysUntil });
   }
