@@ -5,101 +5,48 @@ import { z } from "zod";
 import { createAuthServerSupabase } from "@/lib/supabase/server";
 import { isEmailAllowed } from "@/lib/auth";
 
-const EmailSchema = z.object({
+const CredsSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(1, "Введите пароль"),
 });
 
-const OtpSchema = z.object({
-  email: z.string().trim().toLowerCase().email(),
-  token: z.string().trim().regex(/^\d{6}$/, "Код должен быть 6 цифр"),
-});
-
-export type EmailStepState = { email?: string; error?: string; sent?: boolean };
+export type LoginState = { email?: string; error?: string };
 
 /**
- * Step 1: user submits email. If it's allowed, ask Supabase to send a
- * 6-digit OTP to that address. We do not create new auth users
- * automatically — only whitelisted addresses may sign up.
+ * Single-step password login. Two gates before Supabase:
+ *   1. The email must be whitelisted in `allowed_users` (owner-only).
+ *   2. Supabase checks the password against the stored bcrypt hash.
+ * No email delivery is involved — users + passwords are provisioned by
+ * the owner in the Supabase dashboard (Authentication → Users → Add user,
+ * with "Auto Confirm User"). The role is still read by email in
+ * `lib/auth.ts`, so admin / projects_viewer keep working unchanged.
  */
-export async function sendOtpAction(
-  _prev: EmailStepState,
+export async function signInAction(
+  _prev: LoginState,
   formData: FormData,
-): Promise<EmailStepState> {
-  const parsed = EmailSchema.safeParse({ email: formData.get("email") });
-  if (!parsed.success) {
-    return { error: "Некорректный email" };
-  }
-  const { email } = parsed.data;
-
-  const allowed = await isEmailAllowed(email);
-  if (!allowed) {
-    return {
-      email,
-      error: "Этот адрес не в списке доступа",
-    };
-  }
-
-  const sb = await createAuthServerSupabase();
-  const { error } = await sb.auth.signInWithOtp({
-    email,
-    options: {
-      shouldCreateUser: true,
-      // No emailRedirectTo — we want the 6-digit code path, not magic
-      // links. When shouldCreateUser is true and the OTP is verified,
-      // Supabase creates the user automatically.
-    },
-  });
-  if (error) {
-    console.error("signInWithOtp failed", error);
-    return { email, error: "Не удалось отправить код. Попробуй ещё раз." };
-  }
-  return { email, sent: true };
-}
-
-export type OtpStepState = { email?: string; error?: string };
-
-/**
- * Step 2: user submits the code they got by email. On success Supabase
- * stores the session cookie and we can redirect to the landing.
- */
-export async function verifyOtpAction(
-  _prev: OtpStepState,
-  formData: FormData,
-): Promise<OtpStepState> {
-  const parsed = OtpSchema.safeParse({
+): Promise<LoginState> {
+  const parsed = CredsSchema.safeParse({
     email: formData.get("email"),
-    token: formData.get("token"),
+    password: formData.get("password"),
   });
   if (!parsed.success) {
     return {
       email: (formData.get("email") as string | null) ?? undefined,
-      error:
-        parsed.error.issues[0]?.message ??
-        "Проверь код (6 цифр) и попробуй ещё раз",
+      error: parsed.error.issues[0]?.message ?? "Проверь email и пароль",
     };
   }
-  const { email, token } = parsed.data;
+  const { email, password } = parsed.data;
 
-  // Re-check the whitelist here too: access may have been revoked
-  // between requesting the code and entering it, and only step 1 gated
-  // on it. A removed address must not be able to finish signing in with
-  // a code it received while still allowed.
   if (!(await isEmailAllowed(email))) {
     return { email, error: "Этот адрес не в списке доступа" };
   }
 
   const sb = await createAuthServerSupabase();
-  const { error } = await sb.auth.verifyOtp({
-    email,
-    token,
-    type: "email",
-  });
+  const { error } = await sb.auth.signInWithPassword({ email, password });
   if (error) {
-    console.error("verifyOtp failed", error);
-    return {
-      email,
-      error: "Код не подошёл. Проверь или запроси новый.",
-    };
+    // Deliberately vague — don't leak whether the email exists or the
+    // password was wrong.
+    return { email, error: "Неверный email или пароль" };
   }
   redirect("/");
 }
