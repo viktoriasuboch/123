@@ -79,24 +79,17 @@ export async function requireAdmin(): Promise<AuthUser> {
 }
 
 /**
- * Check whether an email is allowed to sign in. Rules:
- *   1. Suffix match against the ALLOWED_DOMAINS env var
- *      (comma-separated, e.g. "interexy.com,partner.com").
- *   2. Exact match in the `allowed_users` table.
- *
- * Empty/missing ALLOWED_DOMAINS = no domain wildcarding, only the
- * per-email table applies.
+ * Check whether an email is allowed to sign in. Access is granted
+ * *exclusively* by an exact row in the `allowed_users` table — being on
+ * the company domain is not enough. That table is only editable via
+ * service_role / the Supabase dashboard (there is no in-app UI to add
+ * users), so access can be granted only by the owner. No env-based
+ * domain wildcarding — that would let anyone on the domain in without
+ * being explicitly listed.
  */
 export async function isEmailAllowed(email: string): Promise<boolean> {
   const normalized = email.trim().toLowerCase();
   if (!normalized || !normalized.includes("@")) return false;
-
-  const domains = (process.env.ALLOWED_DOMAINS ?? "")
-    .split(",")
-    .map((d) => d.trim().toLowerCase())
-    .filter(Boolean);
-  const suffix = normalized.split("@")[1];
-  if (domains.some((d) => suffix === d)) return true;
 
   const admin = createServerSupabase();
   const { data } = await admin

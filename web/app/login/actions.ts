@@ -80,6 +80,14 @@ export async function verifyOtpAction(
   }
   const { email, token } = parsed.data;
 
+  // Re-check the whitelist here too: access may have been revoked
+  // between requesting the code and entering it, and only step 1 gated
+  // on it. A removed address must not be able to finish signing in with
+  // a code it received while still allowed.
+  if (!(await isEmailAllowed(email))) {
+    return { email, error: "Этот адрес не в списке доступа" };
+  }
+
   const sb = await createAuthServerSupabase();
   const { error } = await sb.auth.verifyOtp({
     email,
