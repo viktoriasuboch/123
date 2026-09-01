@@ -102,7 +102,10 @@ export default async function InvoicesPage({
   const selectedDay = /^\d{4}-\d{2}-\d{2}$/.test(sp.day ?? "")
     ? (sp.day as string)
     : undefined;
-  const projectScope: ProjectScope = sp.scope === "hays" ? "hays" : "all";
+  const projectScope: ProjectScope =
+    sp.scope === "support" || sp.scope === "hays" || sp.scope === "done"
+      ? (sp.scope as ProjectScope)
+      : "all";
   const invoiceScope: InvoiceScope =
     sp.scope === "hays" || sp.tab === "documents" ? "hays" : "invoices";
   // Year + month filter for "Все инвойсы". Defaults to the current

@@ -12,23 +12,37 @@ type Project = {
   status?: string | null;
 };
 
-export type ProjectScope = "all" | "hays";
+export type ProjectScope = "all" | "support" | "hays" | "done";
 
 const isHays = (name: string) => /hays/i.test(name);
+const statusOf = (p: Project) => p.status ?? "active";
+const isActive = (p: Project) => statusOf(p) === "active";
+const isSupport = (p: Project) => statusOf(p) === "support";
+// "Завершённые" = anything that's neither active nor support (completed,
+// paused, inactive…). We deliberately keep these reachable so the user can
+// open a closed project and check its invoices / overdue.
+const isDone = (p: Project) => !isActive(p) && !isSupport(p);
 
-// Projects tab lists only projects we're actively billing. Completed
-// and paused ones drop out — the tab is about live cashflow, and old
-// projects would just clutter it. Only active + support survive.
-const inScope = (p: Project) => {
-  const s = p.status ?? "active";
-  return s === "active" || s === "support";
-};
+function inScope(p: Project, scope: ProjectScope): boolean {
+  switch (scope) {
+    case "all":
+      return isActive(p);
+    case "support":
+      return isSupport(p);
+    case "hays":
+      // Client cut across every status — includes closed HAYS projects.
+      return isHays(p.name);
+    case "done":
+      return isDone(p);
+  }
+}
 
 /**
- * Read-only overview of every live project. Rows link into
- * /invoices/projects/[id], where the user manages that project's
- * invoices + recurring templates. This tab intentionally has NO
- * inline actions — configuration happens on the drill-down page.
+ * Read-only overview of projects, split into four scopes: активные /
+ * суппорт / HAYS / завершённые. Rows link into /invoices/projects/[id],
+ * where the user manages that project's invoices + recurring templates —
+ * including closed projects, so overdue / issued invoices on finished work
+ * stay auditable. This tab intentionally has NO inline actions.
  */
 export function ProjectsTab({
   projectOptions,
@@ -43,10 +57,14 @@ export function ProjectsTab({
 }) {
   const [query, setQuery] = useState("");
 
-  const live = projects.filter(inScope);
-  const liveHays = live.filter((p) => isHays(p.name));
-  const scoped = scope === "hays" ? liveHays : live;
+  const counts: Record<ProjectScope, number> = {
+    all: projects.filter(isActive).length,
+    support: projects.filter(isSupport).length,
+    hays: projects.filter((p) => isHays(p.name)).length,
+    done: projects.filter(isDone).length,
+  };
 
+  const scoped = projects.filter((p) => inScope(p, scope));
   const q = query.trim().toLowerCase();
   const filtered = q
     ? scoped.filter((p) => p.name.toLowerCase().includes(q))
@@ -55,11 +73,7 @@ export function ProjectsTab({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3 flex-wrap">
-        <ScopeSwitches
-          scope={scope}
-          allCount={live.length}
-          haysCount={liveHays.length}
-        />
+        <ScopeSwitches scope={scope} counts={counts} />
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -73,9 +87,7 @@ export function ProjectsTab({
           <p className="font-mono text-xs text-muted-foreground">
             {q
               ? `По запросу «${query}» ничего не нашлось.`
-              : scope === "hays"
-                ? "HAYS-проектов пока нет — добавь \"HAYS\" в название проекта чтобы отметить его."
-                : "Активных проектов пока нет — заведи хотя бы один на /projects."}
+              : emptyHint(scope)}
           </p>
         </div>
       ) : (
@@ -95,6 +107,7 @@ export function ProjectsTab({
                   (t) => t.active !== false,
                 );
                 const planned = opt?.planned_monthly ?? 0;
+                const status = statusOf(p);
                 return (
                   <tr
                     key={p.id}
@@ -109,9 +122,9 @@ export function ProjectsTab({
                           {p.name}
                         </span>
                         <div className="mt-1 space-y-0.5">
-                          {p.status === "support" ? (
+                          {status !== "active" ? (
                             <span className="block font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                              support
+                              {status}
                             </span>
                           ) : null}
                           {activeTemplates.length > 0 ? (
@@ -147,6 +160,19 @@ export function ProjectsTab({
   );
 }
 
+function emptyHint(scope: ProjectScope): string {
+  switch (scope) {
+    case "hays":
+      return 'HAYS-проектов нет — добавь "HAYS" в название проекта, чтобы отметить его.';
+    case "support":
+      return "Проектов в саппорте нет.";
+    case "done":
+      return "Завершённых проектов нет.";
+    case "all":
+      return "Активных проектов пока нет — заведи хотя бы один на /projects.";
+  }
+}
+
 function describeFrequency(t: InvoiceTemplate): string {
   const freq = t.frequency ?? "monthly";
   if (freq === "monthly") {
@@ -170,19 +196,19 @@ function describeFrequency(t: InvoiceTemplate): string {
 
 function ScopeSwitches({
   scope,
-  allCount,
-  haysCount,
+  counts,
 }: {
   scope: ProjectScope;
-  allCount: number;
-  haysCount: number;
+  counts: Record<ProjectScope, number>;
 }) {
   const items: { id: ProjectScope; label: string; count: number }[] = [
-    { id: "all", label: "Все", count: allCount },
-    { id: "hays", label: "HAYS", count: haysCount },
+    { id: "all", label: "Все", count: counts.all },
+    { id: "support", label: "Суппорт", count: counts.support },
+    { id: "hays", label: "HAYS", count: counts.hays },
+    { id: "done", label: "Завершённые", count: counts.done },
   ];
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 flex-wrap">
       {items.map((it) => {
         const active = it.id === scope;
         return (
