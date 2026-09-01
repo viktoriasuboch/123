@@ -17,9 +17,10 @@ import { markInvoicePaid } from "@/app/(protected)/invoices/_actions";
 import type { Invoice } from "@/lib/schemas";
 
 /**
- * Move an `issued` invoice into `paid`. One field — the amount that
- * arrived (prefilled with the invoice total, editable for partials).
- * paid_date is set to today by the server action; no date picker.
+ * Move an `issued` invoice into `paid`. The amount that arrived
+ * (prefilled with the invoice total, editable for partials) plus an
+ * optional payment date — prefilled with today, editable if the money
+ * actually landed on another day.
  */
 export function MarkInvoicePaidDialog({
   invoice,
@@ -43,6 +44,7 @@ export function MarkInvoicePaidDialog({
   const full = valid && entered >= invoice.amount;
   const fmt = (v: number) =>
     v.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -89,7 +91,7 @@ export function MarkInvoicePaidDialog({
               onChange={(e) => setAmt(e.target.value)}
             />
             <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-              Из {invoice.currency} {fmt(invoice.amount)} · дата оплаты — сегодня
+              Из {invoice.currency} {fmt(invoice.amount)}
             </p>
             {valid && !full ? (
               <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-teal-600 dark:text-teal-400">
@@ -100,6 +102,24 @@ export function MarkInvoicePaidDialog({
                 Полная оплата
               </p>
             ) : null}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="paid_date"
+              className="text-xs uppercase tracking-widest text-muted-foreground"
+            >
+              Дата оплаты
+            </Label>
+            <Input
+              id="paid_date"
+              name="paid_date"
+              type="date"
+              defaultValue={today}
+            />
+            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              По умолчанию сегодня — поменяй, если деньги пришли в другой день
+            </p>
           </div>
 
           <DialogFooter>
