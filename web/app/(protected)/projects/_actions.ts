@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireUser } from "@/lib/auth";
+import { requireUser, currentUser } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
   ProjectInsert,
@@ -16,6 +16,25 @@ import { MONTHS } from "@/lib/months";
 import { fmtRate } from "@/lib/calc";
 
 const sb = () => createServerSupabase();
+
+/**
+ * Insert a project_events row tagged with the acting user's email, so the
+ * History (and the admin recent-changes feed) shows WHO made the change.
+ */
+async function logEvent(
+  projectId: string,
+  eventType: "note" | "rate_change" | "join" | "leave" | "status_change",
+  description: string,
+) {
+  const actor = await currentUser();
+  await sb()
+    .from("project_events")
+    .insert({
+      project_id: projectId,
+      event_type: eventType,
+      description: actor?.email ? `${description} · ${actor.email}` : description,
+    });
+}
 
 /* ─── projects ──────────────────────────────────────────────────────── */
 
@@ -114,11 +133,7 @@ export async function updateProject(id: string, formData: FormData) {
     if (dealErr) console.error("Failed to rename deals", dealErr);
   }
 
-  await sb().from("project_events").insert({
-    project_id: id,
-    event_type: "note",
-    description: "Параметры проекта обновлены",
-  });
+  await logEvent(id, "note", "Параметры проекта обновлены");
 
   revalidatePath(`/projects/${id}`);
   revalidatePath("/projects");
@@ -195,11 +210,7 @@ export async function setProjectStatus(id: string, status: ProjectStatusValue) {
     .eq("id", id);
   if (error) throw error;
 
-  await sb().from("project_events").insert({
-    project_id: id,
-    event_type: "status_change",
-    description: STATUS_EVENT_DESCRIPTION[status],
-  });
+  await logEvent(id, "status_change", STATUS_EVENT_DESCRIPTION[status]);
 
   revalidatePath(`/projects/${id}`);
   revalidatePath("/projects");
@@ -248,11 +259,11 @@ export async function addMember(projectId: string, formData: FormData) {
     .insert({ ...parsed.data, sort_order: nextSort });
   if (error) throw error;
 
-  await sb().from("project_events").insert({
-    project_id: projectId,
-    event_type: "join",
-    description: `Добавлен ${parsed.data.dev_name} (${parsed.data.role || "—"})`,
-  });
+  await logEvent(
+    projectId,
+    "join",
+    `Добавлен ${parsed.data.dev_name} (${parsed.data.role || "—"})`,
+  );
 
   revalidatePath(`/projects/${projectId}`);
 }
@@ -384,11 +395,11 @@ export async function patchMember(
     const label = MEMBER_FIELD_LABELS[parsed.field] ?? parsed.field;
     const eventType: "status_change" | "rate_change" =
       parsed.field === "is_active" ? "status_change" : "rate_change";
-    await sb().from("project_events").insert({
-      project_id: projectId,
-      event_type: eventType,
-      description: `${devName ?? "—"} · ${label}: ${fmtMemberFieldValue(parsed.field, oldValue)} → ${fmtMemberFieldValue(parsed.field, parsed.value)}`,
-    });
+    await logEvent(
+      projectId,
+      eventType,
+      `${devName ?? "—"} · ${label}: ${fmtMemberFieldValue(parsed.field, oldValue)} → ${fmtMemberFieldValue(parsed.field, parsed.value)}`,
+    );
   }
 
   revalidatePath(`/projects/${projectId}`);
@@ -499,11 +510,11 @@ export async function createMemberGroup(input: {
     }
   }
 
-  await sb().from("project_events").insert({
-    project_id: parsed.projectId,
-    event_type: "rate_change",
-    description: `Создана группа «${label}» (${parsed.followerIds.length + 1} чел, sell ${parsed.sellRate}$/h)`,
-  });
+  await logEvent(
+    parsed.projectId,
+    "rate_change",
+    `Создана группа «${label}» (${parsed.followerIds.length + 1} чел, sell ${parsed.sellRate}$/h)`,
+  );
 
   revalidatePath(`/projects/${parsed.projectId}`);
 }
@@ -620,11 +631,11 @@ export async function createProxy(input: unknown) {
     .update({ sort_order: face.sort_order + 1 })
     .eq("id", parsed.workerId);
 
-  await sb().from("project_events").insert({
-    project_id: parsed.projectId,
-    event_type: "rate_change",
-    description: `Проксирование: ${face.dev_name} (лицо, бонус ${parsed.bonus}$/мес) ← ${worker.dev_name} (исполнитель, sell ${parsed.sellRate}$/h × ${parsed.hoursLoad} ч/мес)`,
-  });
+  await logEvent(
+    parsed.projectId,
+    "rate_change",
+    `Проксирование: ${face.dev_name} (лицо, бонус ${parsed.bonus}$/мес) ← ${worker.dev_name} (исполнитель, sell ${parsed.sellRate}$/h × ${parsed.hoursLoad} ч/мес)`,
+  );
 
   revalidatePath(`/projects/${parsed.projectId}`);
 }
@@ -693,11 +704,7 @@ export async function removeMember(projectId: string, memberId: string, devName?
     .eq("id", memberId);
   if (error) throw error;
 
-  await sb().from("project_events").insert({
-    project_id: projectId,
-    event_type: "leave",
-    description: `Удалён ${devName ?? "участник"}`,
-  });
+  await logEvent(projectId, "leave", `Удалён ${devName ?? "участник"}`);
 
   revalidatePath(`/projects/${projectId}`);
 }
@@ -708,10 +715,11 @@ export async function addProjectNote(projectId: string, description: string) {
   await requireUser();
   Uuid.parse(projectId);
 
+  const actor = await currentUser();
   const parsed = ProjectEventInsert.parse({
     project_id: projectId,
     event_type: "note",
-    description,
+    description: actor?.email ? `${description} · ${actor.email}` : description,
   });
 
   const { error } = await sb().from("project_events").insert(parsed);

@@ -2,7 +2,9 @@ import {
   listProjects,
   listProjectMembers,
   listDevStatuses,
+  listRecentEvents,
 } from "@/lib/data/projects";
+import { RecentChanges } from "@/components/projects/recent-changes";
 import { ProjectCard } from "@/components/projects/project-card";
 import { DevCard, type DevCardEntry } from "@/components/projects/dev-card";
 import {
@@ -59,6 +61,11 @@ export default async function ProjectsPage({
     listProjectMembers(),
     listDevStatuses(),
   ]);
+
+  const projectsById = new Map(projects.map((p) => [p.id, p]));
+  // Admin-only recent-changes feed on the dashboard tab (who/what/when).
+  const recentEvents =
+    tab === "dashboard" && showTotals ? await listRecentEvents(25) : [];
 
   const membersByProject = groupBy(members, (m) => m.project_id);
   const activeProjects = projects.filter(
@@ -131,13 +138,16 @@ export default async function ProjectsPage({
       />
 
       {tab === "dashboard" ? (
-        <ProjectsDashboard
-          activeProjects={activeProjects}
-          supportProjects={supportProjects}
-          members={members}
-          devStatuses={devStatuses}
-          showTotals={showTotals}
-        />
+        <>
+          <RecentChanges events={recentEvents} projectsById={projectsById} />
+          <ProjectsDashboard
+            activeProjects={activeProjects}
+            supportProjects={supportProjects}
+            members={members}
+            devStatuses={devStatuses}
+            showTotals={showTotals}
+          />
+        </>
       ) : tab === "devs" ? (
         <>
           <div className="flex items-center justify-end mb-3">

@@ -80,6 +80,18 @@ export async function getProjectEvents(projectId: string): Promise<ProjectEvent[
   return z.array(ProjectEvent).parse(data ?? []);
 }
 
+/** The most recent change events across all projects — for the admin
+ *  recent-changes feed. Newest first. */
+export async function listRecentEvents(limit = 25): Promise<ProjectEvent[]> {
+  const { data, error } = await sb()
+    .from("project_events")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return z.array(ProjectEvent).parse(data ?? []);
+}
+
 /** Events across several projects at once — for the developer page's
  *  cross-project change history. Newest first. */
 export async function listEventsForProjects(
