@@ -6,10 +6,14 @@ export function ProjectsSummaryBar({
   projects,
   membersByProject,
   label,
+  showTotals = true,
 }: {
   projects: Project[];
   membersByProject: Map<string, ProjectMember[]>;
   label: string;
+  /** When false (projects_viewer), the company-wide Rev/Profit totals are
+   *  not rendered at all — not the cosmetic MoneyValue toggle. */
+  showTotals?: boolean;
 }) {
   const ids = new Set(projects.map((p) => p.id));
   const all = Array.from(membersByProject.values()).flat();
@@ -42,16 +46,20 @@ export function ProjectsSummaryBar({
         value={`${avgMarginPct.toFixed(1)}%`}
         tone={avgMarginPct >= 40 ? "good" : avgMarginPct > 20 ? "warn" : "bad"}
       />
-      <Cell
-        label="Rev/мес"
-        value={<MoneyValue value={`$${Math.round(totRev).toLocaleString()}`} />}
-      />
-      <Cell
-        label="Маржа/мес"
-        value={<MoneyValue value={`$${Math.round(totMargin).toLocaleString()}`} />}
-        tone="info"
-      />
-      <MoneyToggle />
+      {showTotals ? (
+        <>
+          <Cell
+            label="Rev/мес"
+            value={<MoneyValue value={`$${Math.round(totRev).toLocaleString()}`} />}
+          />
+          <Cell
+            label="Маржа/мес"
+            value={<MoneyValue value={`$${Math.round(totMargin).toLocaleString()}`} />}
+            tone="info"
+          />
+          <MoneyToggle />
+        </>
+      ) : null}
       <div className="ml-auto pl-4 border-l border-border font-mono text-[10px] text-muted-foreground uppercase tracking-[0.15em]">
         {label} · {projects.length} пр. · {n} позиций
       </div>

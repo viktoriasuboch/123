@@ -1,25 +1,60 @@
 import "server-only";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createAuthServerSupabase, createServerSupabase } from "./supabase/server";
 
+/** Access roles. `admin` = full access (default). `projects_viewer` =
+ *  Projects section only, with sensitive aggregates hidden. */
+export type AppRole = "admin" | "projects_viewer";
+
 /**
  * The user we accept as authenticated. We only surface the subset of
- * `auth.users` fields we actually use on the app side.
+ * `auth.users` fields we actually use on the app side, plus the app role.
  */
 export type AuthUser = {
   id: string;
   email: string;
+  role: AppRole;
 };
 
 /**
- * Read the current user from the Supabase auth cookie. Returns null
- * if not signed in.
+ * Look up a user's role from `allowed_users.role`. Any error — including
+ * the column not existing yet (before the migration) — resolves to
+ * `admin`, so the role system is inert until it's rolled out and nothing
+ * breaks in the meantime.
  */
-export async function currentUser(): Promise<AuthUser | null> {
+async function lookupRole(email: string): Promise<AppRole> {
+  try {
+    const admin = createServerSupabase();
+    const { data, error } = await admin
+      .from("allowed_users")
+      .select("role")
+      .eq("email", email.trim().toLowerCase())
+      .maybeSingle();
+    if (error) return "admin";
+    const role = (data as { role?: string | null } | null)?.role;
+    return role === "projects_viewer" ? "projects_viewer" : "admin";
+  } catch {
+    return "admin";
+  }
+}
+
+/**
+ * Read the current user (+ role) from the Supabase auth cookie. Returns
+ * null if not signed in. `cache`d so the auth check + role lookup run at
+ * most once per request even though requireUser is called in many layers.
+ */
+export const currentUser = cache(async (): Promise<AuthUser | null> => {
   const sb = await createAuthServerSupabase();
   const { data, error } = await sb.auth.getUser();
   if (error || !data.user || !data.user.email) return null;
-  return { id: data.user.id, email: data.user.email };
+  const role = await lookupRole(data.user.email);
+  return { id: data.user.id, email: data.user.email, role };
+});
+
+/** True for the full-access role. */
+export function isAdmin(user: { role: AppRole } | null | undefined): boolean {
+  return user?.role === "admin";
 }
 
 /**
@@ -29,6 +64,17 @@ export async function currentUser(): Promise<AuthUser | null> {
 export async function requireUser(): Promise<AuthUser> {
   const u = await currentUser();
   if (!u) redirect("/login");
+  return u;
+}
+
+/**
+ * Require an admin. A signed-in non-admin (e.g. projects_viewer) is sent
+ * back to /projects; a signed-out user goes to /login. Use to gate
+ * admin-only sections such as Invoices.
+ */
+export async function requireAdmin(): Promise<AuthUser> {
+  const u = await requireUser();
+  if (u.role !== "admin") redirect("/projects");
   return u;
 }
 

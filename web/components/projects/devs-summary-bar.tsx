@@ -15,11 +15,13 @@ export function DevsSummaryBar({
   members,
   devEntries,
   filter,
+  showTotals = true,
 }: {
   projects: Project[];
   members: ProjectMember[];
   devEntries: DevCardEntry[];
   filter: DevFilterId;
+  showTotals?: boolean;
 }) {
   // Find the set of dev names that match the current filter
   const includedNames = new Set(
@@ -82,12 +84,16 @@ export function DevsSummaryBar({
       />
       <Cell label="Ср. buy" value={`$${avgBuy.toFixed(1)}/h`} accent />
       <Cell label="Ср. sell" value={`$${avgSell.toFixed(1)}/h`} tone="good" />
-      <Cell label="Rev/мес" value={`$${Math.round(totRev).toLocaleString()}`} />
-      <Cell
-        label="Маржа/мес"
-        value={`$${Math.round(totMargin).toLocaleString()}`}
-        tone="info"
-      />
+      {showTotals ? (
+        <>
+          <Cell label="Rev/мес" value={`$${Math.round(totRev).toLocaleString()}`} />
+          <Cell
+            label="Маржа/мес"
+            value={`$${Math.round(totMargin).toLocaleString()}`}
+            tone="info"
+          />
+        </>
+      ) : null}
       <div className="ml-auto pl-4 border-l border-border font-mono text-[10px] text-muted-foreground uppercase tracking-[0.15em]">
         {FILTER_LABEL[filter]} · {n} позиций
       </div>

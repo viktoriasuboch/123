@@ -18,6 +18,8 @@ type DashboardProps = {
   supportProjects: Project[];
   members: ProjectMember[];
   devStatuses: Record<string, DevStatus>;
+  /** projects_viewer: hide the aggregate money totals (Rev/Cost/Profit). */
+  showTotals?: boolean;
 };
 
 export function ProjectsDashboard({
@@ -25,12 +27,13 @@ export function ProjectsDashboard({
   supportProjects,
   members,
   devStatuses,
+  showTotals = true,
 }: DashboardProps) {
   const stats = computeStats(activeProjects, members, devStatuses);
 
   return (
     <div className="space-y-6">
-      <FinancialKpis stats={stats} />
+      <FinancialKpis stats={stats} showTotals={showTotals} />
       <div className="grid gap-4 lg:grid-cols-3">
         <TopByRevenue list={stats.topByRev} />
         <TopByMargin list={stats.topByMargin} />
@@ -127,7 +130,13 @@ function SupportSection({
 
 /* ─── financial KPIs ────────────────────────────────────────────────── */
 
-function FinancialKpis({ stats }: { stats: Stats }) {
+function FinancialKpis({
+  stats,
+  showTotals,
+}: {
+  stats: Stats;
+  showTotals: boolean;
+}) {
   const marginPctCls =
     stats.avgMarginPct >= 40
       ? "text-good"
@@ -143,19 +152,23 @@ function FinancialKpis({ stats }: { stats: Stats }) {
 
   return (
     <section className="rounded-md border bg-card p-4 flex flex-wrap items-center gap-4">
-      <Kpi
-        label="Rev/мес"
-        value={<MoneyValue value={`$${fmtMoney(stats.totalRev)}`} />}
-      />
-      <Kpi
-        label="Cost/мес"
-        value={<MoneyValue value={`$${fmtMoney(stats.totalCost)}`} />}
-      />
-      <Kpi
-        label="Маржа/мес"
-        value={<MoneyValue value={`$${fmtMoney(stats.totalMargin)}`} />}
-        tone="info"
-      />
+      {showTotals ? (
+        <>
+          <Kpi
+            label="Rev/мес"
+            value={<MoneyValue value={`$${fmtMoney(stats.totalRev)}`} />}
+          />
+          <Kpi
+            label="Cost/мес"
+            value={<MoneyValue value={`$${fmtMoney(stats.totalCost)}`} />}
+          />
+          <Kpi
+            label="Маржа/мес"
+            value={<MoneyValue value={`$${fmtMoney(stats.totalMargin)}`} />}
+            tone="info"
+          />
+        </>
+      ) : null}
       <Kpi
         label="Маржа %"
         value={`${stats.avgMarginPct.toFixed(1)}%`}
@@ -167,7 +180,7 @@ function FinancialKpis({ stats }: { stats: Stats }) {
         cls={utilCls}
         hint={`${stats.staffHeadcount} штатных`}
       />
-      <MoneyToggle />
+      {showTotals ? <MoneyToggle /> : null}
       <div className="ml-auto pl-4 border-l border-border font-mono text-[10px] text-muted-foreground uppercase tracking-[0.15em]">
         {activeProjectsCount(stats)} активных · {stats.activeMemberCount} позиций
       </div>

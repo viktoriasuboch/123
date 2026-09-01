@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
   InvoiceTemplateInsert,
@@ -17,7 +17,7 @@ import { nextInvoiceNumberForProject } from "@/lib/data/invoices";
 export async function suggestNextInvoiceNumber(
   projectId: string,
 ): Promise<string> {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(projectId);
   return nextInvoiceNumberForProject(projectId);
 }
@@ -39,7 +39,7 @@ const optNum = (v: FormDataEntryValue | null) => {
 /* ─── templates ─────────────────────────────────────────────────────── */
 
 export async function createInvoiceTemplate(formData: FormData) {
-  await requireUser();
+  await requireAdmin();
   const parsed = InvoiceTemplateInsert.safeParse({
     project_id: formData.get("project_id"),
     client_name: formData.get("client_name"),
@@ -61,7 +61,7 @@ export async function createInvoiceTemplate(formData: FormData) {
 }
 
 export async function updateInvoiceTemplate(id: string, formData: FormData) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const parsed = InvoiceTemplateUpdate.safeParse({
     client_name: formData.get("client_name") ?? undefined,
@@ -93,7 +93,7 @@ export async function updateInvoiceTemplate(id: string, formData: FormData) {
 }
 
 export async function toggleInvoiceTemplateActive(id: string, active: boolean) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const { error } = await sb()
     .from("invoice_templates")
@@ -104,7 +104,7 @@ export async function toggleInvoiceTemplateActive(id: string, active: boolean) {
 }
 
 export async function deleteInvoiceTemplate(id: string) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const { error } = await sb().from("invoice_templates").delete().eq("id", id);
   if (error) throw error;
@@ -114,7 +114,7 @@ export async function deleteInvoiceTemplate(id: string) {
 /* ─── invoices ──────────────────────────────────────────────────────── */
 
 export async function createInvoice(formData: FormData) {
-  await requireUser();
+  await requireAdmin();
   const amount = formData.get("amount");
   const parsed = InvoiceInsert.safeParse({
     template_id: optStr(formData.get("template_id")),
@@ -151,7 +151,7 @@ export async function createInvoice(formData: FormData) {
 }
 
 export async function markInvoiceTemplateDone(id: string) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const { error } = await sb()
     .from("invoice_templates")
@@ -163,7 +163,7 @@ export async function markInvoiceTemplateDone(id: string) {
 
 /** Clear "done" flag so the reminder resurfaces on the dashboard. */
 export async function undoInvoiceTemplateDone(id: string) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const { error } = await sb()
     .from("invoice_templates")
@@ -174,7 +174,7 @@ export async function undoInvoiceTemplateDone(id: string) {
 }
 
 export async function updateInvoice(id: string, formData: FormData) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const parsed = InvoiceUpdate.safeParse({
     client_name: formData.get("client_name") ?? undefined,
@@ -219,7 +219,7 @@ export async function updateInvoice(id: string, formData: FormData) {
  * lets the user override the amount at this point.
  */
 export async function markInvoiceIssued(id: string, formData: FormData) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const today = new Date().toISOString().slice(0, 10);
   const issueDate = optStr(formData.get("issue_date")) ?? today;
@@ -249,7 +249,7 @@ export async function markInvoiceIssued(id: string, formData: FormData) {
  * paid_amount defaults to the invoice amount.
  */
 export async function markInvoicePaid(id: string, formData: FormData) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const today = new Date().toISOString().slice(0, 10);
   const paidDate = optStr(formData.get("paid_date")) ?? today;
@@ -270,7 +270,7 @@ export async function markInvoicePaid(id: string, formData: FormData) {
 }
 
 export async function cancelInvoice(id: string) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const { error } = await sb()
     .from("invoices")
@@ -286,7 +286,7 @@ export async function cancelInvoice(id: string) {
  * confirm — reverting the recorded payment is easy to do by accident.
  */
 export async function unmarkInvoicePaid(id: string) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const { error } = await sb()
     .from("invoices")
@@ -297,7 +297,7 @@ export async function unmarkInvoicePaid(id: string) {
 }
 
 export async function deleteInvoice(id: string) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const { error } = await sb().from("invoices").delete().eq("id", id);
   if (error) throw error;
@@ -307,7 +307,7 @@ export async function deleteInvoice(id: string) {
 /* ─── document reminders ────────────────────────────────────────────── */
 
 export async function createDocumentReminder(formData: FormData) {
-  await requireUser();
+  await requireAdmin();
   const parsed = DocumentReminderInsert.safeParse({
     project_id: formData.get("project_id"),
     name: formData.get("name"),
@@ -326,7 +326,7 @@ export async function createDocumentReminder(formData: FormData) {
 }
 
 export async function updateDocumentReminder(id: string, formData: FormData) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const parsed = DocumentReminderUpdate.safeParse({
     name: formData.get("name") ?? undefined,
@@ -356,7 +356,7 @@ export async function updateDocumentReminder(id: string, formData: FormData) {
  * For one-shot reminders the same field acts as a permanent "done".
  */
 export async function markDocumentReminderReceived(id: string) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const { error } = await sb()
     .from("document_reminders")
@@ -367,7 +367,7 @@ export async function markDocumentReminderReceived(id: string) {
 }
 
 export async function deleteDocumentReminder(id: string) {
-  await requireUser();
+  await requireAdmin();
   Uuid.parse(id);
   const { error } = await sb()
     .from("document_reminders")

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth";
+import { requireUser, isAdmin } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export const dynamic = "force-dynamic";
@@ -44,13 +44,15 @@ export default async function LandingPage() {
               href="/projects"
               available
             />
-            <SectionTile
-              icon="🧾"
-              title="INVOICES"
-              description={["Рекуррентные · К выставлению", "Оплаты · Просроченные"]}
-              href="/invoices"
-              available
-            />
+            {isAdmin(user) ? (
+              <SectionTile
+                icon="🧾"
+                title="INVOICES"
+                description={["Рекуррентные · К выставлению", "Оплаты · Просроченные"]}
+                href="/invoices"
+                available
+              />
+            ) : null}
           </div>
         </div>
       </div>

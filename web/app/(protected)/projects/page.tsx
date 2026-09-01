@@ -15,6 +15,7 @@ import { ProjectsSummaryBar } from "@/components/projects/projects-summary-bar";
 import { NewProjectButton } from "@/components/projects/new-project-button";
 import { ProjectsDashboard } from "@/components/projects/projects-dashboard";
 import { NewDeveloperButton } from "@/components/projects/new-developer-button";
+import { requireUser, isAdmin } from "@/lib/auth";
 import type { Project, ProjectMember } from "@/lib/schemas";
 
 type SP = Promise<{
@@ -33,6 +34,9 @@ export default async function ProjectsPage({
   searchParams: SP;
 }) {
   const sp = await searchParams;
+  // projects_viewer sees the section but not the company-wide money totals
+  // (Total Revenue / Total Profit). Admin sees everything.
+  const showTotals = isAdmin(await requireUser());
   const tab = (sp.tab ?? "active") as
     | "active"
     | "support"
@@ -132,6 +136,7 @@ export default async function ProjectsPage({
           supportProjects={supportProjects}
           members={members}
           devStatuses={devStatuses}
+          showTotals={showTotals}
         />
       ) : tab === "devs" ? (
         <>
@@ -143,6 +148,7 @@ export default async function ProjectsPage({
             members={members}
             devEntries={devEntries}
             filter={devFilter}
+            showTotals={showTotals}
           />
           <DevsList
             entries={devEntries.filter(devMatch)}
@@ -171,6 +177,7 @@ export default async function ProjectsPage({
                 projects={visible}
                 membersByProject={membersByProject}
                 label={label}
+                showTotals={showTotals}
               />
               {tab === "support" ? (
                 <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground -mt-2 mb-3">

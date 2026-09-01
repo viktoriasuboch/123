@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth";
+import { requireUser, isAdmin } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function ProtectedLayout({
@@ -26,12 +26,14 @@ export default async function ProtectedLayout({
             >
               Projects
             </Link>
-            <Link
-              href="/invoices"
-              className="px-3 py-1.5 rounded border border-border hover:border-primary/60 hover:text-primary transition"
-            >
-              Invoices
-            </Link>
+            {isAdmin(user) ? (
+              <Link
+                href="/invoices"
+                className="px-3 py-1.5 rounded border border-border hover:border-primary/60 hover:text-primary transition"
+              >
+                Invoices
+              </Link>
+            ) : null}
             <span className="hidden sm:inline text-muted-foreground normal-case tracking-[0.05em] pl-3 border-l border-border ml-1">
               {user.email}
             </span>
