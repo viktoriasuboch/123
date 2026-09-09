@@ -20,7 +20,9 @@ export async function getUsdRates(): Promise<Record<string, number>> {
   try {
     const res = await fetch(
       "https://api.exchangerate.host/latest?base=USD&symbols=EUR,GBP,RUB",
-      { next: { revalidate: 86400 } },
+      // Cache for a day; hard 2.5s timeout so a slow/hung FX endpoint can
+      // never stall the page it's fetched on (it runs inside Promise.all).
+      { next: { revalidate: 86400 }, signal: AbortSignal.timeout(2500) },
     );
     if (!res.ok) throw new Error(`fx http ${res.status}`);
     const data = (await res.json()) as { rates?: Record<string, number> };
