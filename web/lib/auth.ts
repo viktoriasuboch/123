@@ -17,6 +17,14 @@ export type AuthUser = {
   role: AppRole;
 };
 
+// In-memory role cache (per server instance). Roles change only when the
+// owner edits `allowed_users`, so a short TTL lets repeat navigations skip
+// this DB round-trip while still picking up a change within a minute. This
+// caches only the role tier, never access itself — `isEmailAllowed` stays
+// uncached, so revoking access is immediate.
+const roleCache = new Map<string, { role: AppRole; exp: number }>();
+const ROLE_TTL_MS = 60_000;
+
 /**
  * Look up a user's role from `allowed_users.role`. Any error — including
  * the column not existing yet (before the migration) — resolves to
@@ -24,16 +32,21 @@ export type AuthUser = {
  * breaks in the meantime.
  */
 async function lookupRole(email: string): Promise<AppRole> {
+  const key = email.trim().toLowerCase();
+  const hit = roleCache.get(key);
+  if (hit && hit.exp > Date.now()) return hit.role;
   try {
     const admin = createServerSupabase();
     const { data, error } = await admin
       .from("allowed_users")
       .select("role")
-      .eq("email", email.trim().toLowerCase())
+      .eq("email", key)
       .maybeSingle();
-    if (error) return "admin";
-    const role = (data as { role?: string | null } | null)?.role;
-    return role === "projects_viewer" ? "projects_viewer" : "admin";
+    if (error) return "admin"; // transient failure — don't cache it
+    const raw = (data as { role?: string | null } | null)?.role;
+    const role: AppRole = raw === "projects_viewer" ? "projects_viewer" : "admin";
+    roleCache.set(key, { role, exp: Date.now() + ROLE_TTL_MS });
+    return role;
   } catch {
     return "admin";
   }
