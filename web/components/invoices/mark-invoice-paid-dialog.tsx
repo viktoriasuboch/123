@@ -17,10 +17,16 @@ import { markInvoicePaid } from "@/app/(protected)/invoices/_actions";
 import type { Invoice } from "@/lib/schemas";
 
 /**
- * Move an `issued` invoice into `paid`. The amount that arrived
- * (prefilled with the invoice total, editable for partials) plus an
- * optional payment date — prefilled with today, editable if the money
- * actually landed on another day.
+ * Record a payment. Two modes, decided by the invoice's own state:
+ *
+ *  - First payment (issued): the field is the amount that arrived, and it
+ *    is stored as `paid_amount` directly.
+ *  - Top-up (already partially paid): the field is the *additional* money
+ *    that just arrived (a delta). We add it to what was already received
+ *    and store the cumulative total, so "Дооплатить 600" on a 400/1000
+ *    invoice closes it, instead of overwriting 400 with 600.
+ *
+ * `paid_amount` in the DB always means "total collected to date".
  */
 export function MarkInvoicePaidDialog({
   invoice,
@@ -30,18 +36,28 @@ export function MarkInvoicePaidDialog({
   triggerLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
-  // Prefill with what's already been received for a partial (so you can
-  // top it up), otherwise the full invoice amount.
-  const initial =
+
+  const alreadyPaid =
     invoice.status === "paid" && invoice.paid_amount != null
       ? invoice.paid_amount
-      : invoice.amount;
-  const [amt, setAmt] = useState<string>(String(initial));
+      : 0;
+  const isTopUp = alreadyPaid > 0 && alreadyPaid < invoice.amount;
+  const remainingBefore = Math.max(0, invoice.amount - alreadyPaid);
+
+  // Top-up field prefills with the outstanding balance (the common case:
+  // the rest arrived). First-payment field prefills with the full total.
+  const [amt, setAmt] = useState<string>(
+    String(isTopUp ? remainingBefore : invoice.amount),
+  );
 
   const entered = Number(amt);
   const valid = Number.isFinite(entered) && entered > 0;
-  const remaining = valid ? Math.max(0, invoice.amount - entered) : 0;
-  const full = valid && entered >= invoice.amount;
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  // Cumulative total that will be written to paid_amount (delta + already
+  // collected for a top-up; the entered amount itself for a first payment).
+  const cumulative = valid ? (isTopUp ? round2(alreadyPaid + entered) : entered) : 0;
+  const remainingAfter = valid ? Math.max(0, invoice.amount - cumulative) : 0;
+  const full = valid && cumulative >= invoice.amount;
   const fmt = (v: number) =>
     v.toLocaleString("en-US", { maximumFractionDigits: 2 });
   const today = new Date().toISOString().slice(0, 10);
@@ -61,7 +77,7 @@ export function MarkInvoicePaidDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl tracking-wide">
-            Отметить оплату
+            {isTopUp ? "Дооплата" : "Отметить оплату"}
           </DialogTitle>
         </DialogHeader>
         <form
@@ -75,33 +91,61 @@ export function MarkInvoicePaidDialog({
           }}
           className="space-y-4"
         >
+          {isTopUp ? (
+            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              Уже получено {invoice.currency} {fmt(alreadyPaid)} из{" "}
+              {invoice.currency} {fmt(invoice.amount)}
+            </p>
+          ) : null}
+
           <div className="space-y-1.5">
             <Label
-              htmlFor="paid_amount"
+              htmlFor="pay_field"
               className="text-xs uppercase tracking-widest text-muted-foreground"
             >
-              Пришло ({invoice.currency})
+              {isTopUp
+                ? `Доплата пришла (${invoice.currency})`
+                : `Пришло (${invoice.currency})`}
             </Label>
             <Input
-              id="paid_amount"
-              name="paid_amount"
+              id="pay_field"
+              // In top-up mode this is a delta, so it must NOT be submitted
+              // as paid_amount — the hidden field below carries the total.
+              name={isTopUp ? undefined : "paid_amount"}
               type="number"
               step="0.01"
               value={amt}
               onChange={(e) => setAmt(e.target.value)}
             />
-            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-              Из {invoice.currency} {fmt(invoice.amount)}
-            </p>
-            {valid && !full ? (
+            {isTopUp ? (
+              <input type="hidden" name="paid_amount" value={String(cumulative)} />
+            ) : null}
+
+            {isTopUp ? (
+              valid && !full ? (
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-teal-600 dark:text-teal-400">
+                  Станет получено {invoice.currency} {fmt(cumulative)} · останется{" "}
+                  {invoice.currency} {fmt(remainingAfter)}
+                </p>
+              ) : full ? (
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-good">
+                  Инвойс будет оплачен полностью
+                </p>
+              ) : null
+            ) : valid && !full ? (
               <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-teal-600 dark:text-teal-400">
-                Частичная оплата · останется {invoice.currency} {fmt(remaining)}
+                Частичная оплата · останется {invoice.currency}{" "}
+                {fmt(remainingAfter)}
               </p>
             ) : full ? (
               <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-good">
                 Полная оплата
               </p>
-            ) : null}
+            ) : (
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                Из {invoice.currency} {fmt(invoice.amount)}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -123,14 +167,12 @@ export function MarkInvoicePaidDialog({
           </div>
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setOpen(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Отмена
             </Button>
-            <Button type="submit">Отметить</Button>
+            <Button type="submit" disabled={!valid}>
+              {isTopUp ? "Дооплатить" : "Отметить"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
