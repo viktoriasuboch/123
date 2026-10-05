@@ -37,7 +37,16 @@ export async function signInAction(
   }
   const { email, password } = parsed.data;
 
-  if (!(await isEmailAllowed(email))) {
+  let allowed: boolean;
+  try {
+    allowed = await isEmailAllowed(email);
+  } catch {
+    return {
+      email,
+      error: "Сервис временно недоступен — попробуй через минуту",
+    };
+  }
+  if (!allowed) {
     return { email, error: "Этот адрес не в списке доступа" };
   }
 

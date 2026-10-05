@@ -105,10 +105,13 @@ export async function isEmailAllowed(email: string): Promise<boolean> {
   if (!normalized || !normalized.includes("@")) return false;
 
   const admin = createServerSupabase();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("allowed_users")
     .select("email")
     .eq("email", normalized)
     .maybeSingle();
+  // A failed lookup is not "not whitelisted" — surface it so the login
+  // form can report the service as unavailable instead of denying access.
+  if (error) throw new Error(`allowed_users lookup failed: ${error.message}`);
   return !!data;
 }
