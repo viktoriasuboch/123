@@ -35,6 +35,9 @@ export function NewProxyButton({
     () => members.filter((m) => m.is_active !== false),
     [members],
   );
+  // A proxy pair links two people who are already on the project, so the
+  // dialog can't do anything until both have been added as members.
+  const canProxy = candidates.length >= 2;
 
   const reset = () => {
     setFaceId("");
@@ -97,13 +100,29 @@ export function NewProxyButton({
           </DialogTitle>
         </DialogHeader>
 
-        <p className="text-xs text-muted-foreground -mt-2">
+        {!canProxy ? (
+          <div className="space-y-3">
+            <p className="text-sm">
+              Проксирование связывает <strong>двух уже добавленных</strong> в
+              проект участников: лицо (его знает клиент) и исполнителя (реально
+              работает).
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {candidates.length === 0
+                ? "Сейчас в проекте нет активных участников."
+                : "Сейчас в проекте только один активный участник."}{" "}
+              Сначала добавь обоих через «+ Добавить», потом вернись сюда.
+            </p>
+          </div>
+        ) : null}
+
+        <p className={`text-xs text-muted-foreground -mt-2${canProxy ? "" : " hidden"}`}>
           Лицо известно клиенту, но не работает. Исполнитель реально
           выполняет работу. Бонус лица распределяется на час пропорционально
           часам исполнителя (бонус/160).
         </p>
 
-        <div className="space-y-4">
+        <div className={`space-y-4${canProxy ? "" : " hidden"}`}>
           <div className="space-y-1.5">
             <Label className="text-xs uppercase tracking-widest text-muted-foreground">
               Лицо для клиента *
@@ -199,20 +218,22 @@ export function NewProxyButton({
           >
             Отмена
           </Button>
-          <Button
-            type="button"
-            onClick={submit}
-            disabled={
-              pending ||
-              !faceId ||
-              !workerId ||
-              faceId === workerId ||
-              sellRate === "" ||
-              bonus === ""
-            }
-          >
-            {pending ? "Создаю…" : "Создать проксирование"}
-          </Button>
+          {canProxy ? (
+            <Button
+              type="button"
+              onClick={submit}
+              disabled={
+                pending ||
+                !faceId ||
+                !workerId ||
+                faceId === workerId ||
+                sellRate === "" ||
+                bonus === ""
+              }
+            >
+              {pending ? "Создаю…" : "Создать проксирование"}
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>
