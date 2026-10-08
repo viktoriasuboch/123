@@ -340,7 +340,7 @@ function LowMarginProjects({ list }: { list: ProjectStat[] }) {
                   {p.marginPct.toFixed(1)}%
                 </span>
                 <span className="ml-2 text-muted-foreground">
-                  ${fmtMoney(p.margin)}/мес
+                  ${p.margH.toFixed(1)}/h
                 </span>
               </span>
             </li>
@@ -491,6 +491,8 @@ type ProjectStat = {
   margin: number;
   cost: number;
   marginPct: number;
+  /** margin per billed hour, $/h */
+  margH: number;
   headcount: number;
 };
 
@@ -627,7 +629,7 @@ function computeStats(
   // Per-project aggregates.
   const projAgg = new Map<
     string,
-    { rev: number; margin: number; cost: number; n: number }
+    { rev: number; margin: number; cost: number; n: number; hours: number }
   >();
   for (const m of active) {
     const cur = projAgg.get(m.project_id) ?? {
@@ -635,9 +637,13 @@ function computeStats(
       margin: 0,
       cost: 0,
       n: 0,
+      hours: 0,
     };
     cur.rev += monthlyRevenue(m);
     cur.margin += monthlyMargin(m);
+    // Billed hours only — group followers (sell 0) and proxy faces
+    // (hours 0) must not dilute margin-per-hour.
+    cur.hours += (m.sell_rate || 0) > 0 ? m.hours_load || 0 : 0;
     if (m.employment_type === "staff") {
       // Approximate: cost = revenue - margin (i.e. what the company
       // effectively "uses" from this row). Avoids double-counting
@@ -670,13 +676,20 @@ function computeStats(
   }
 
   const projectStats: ProjectStat[] = activeProjects.map((p) => {
-    const a = projAgg.get(p.id) ?? { rev: 0, margin: 0, cost: 0, n: 0 };
+    const a = projAgg.get(p.id) ?? {
+      rev: 0,
+      margin: 0,
+      cost: 0,
+      n: 0,
+      hours: 0,
+    };
     return {
       project: p,
       rev: a.rev,
       margin: a.margin,
       cost: a.cost,
       marginPct: a.rev > 0 ? (a.margin / a.rev) * 100 : 0,
+      margH: a.hours > 0 ? a.margin / a.hours : 0,
       headcount: a.n,
     };
   });
