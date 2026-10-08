@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "@/components/nav/back-link";
 import { notFound } from "next/navigation";
 import {
   listProjects,
@@ -73,12 +74,11 @@ export default async function DevProfilePage({ params }: { params: Params }) {
 
   return (
     <div>
-      <Link
-        href="/projects?tab=devs"
-        className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground inline-block mb-4"
-      >
-        ← все разработчики
-      </Link>
+      <BackLink
+        scope="projects"
+        fallback="/projects?tab=devs"
+        label="← к разработчикам"
+      />
 
       <div className="flex items-center justify-between gap-6 mb-7 flex-wrap">
         <div className="flex items-center gap-4">

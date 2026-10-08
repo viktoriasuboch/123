@@ -7,6 +7,7 @@ import {
   monthlyRevenue,
   monthlyMargin,
   fmtRate,
+  aggregateProject,
 } from "@/lib/calc";
 import { MoneyValue, MoneyToggle } from "./money-value";
 import { BENCH_THRESHOLD } from "./load-list";
@@ -34,6 +35,21 @@ export function ProjectsDashboard({
 }: DashboardProps) {
   const stats = computeStats(activeProjects, members, devStatuses);
 
+  // What each completed project used to bring in per month — full team as
+  // it was, since nobody on a completed project is active any more.
+  const membersOfCompleted = new Map<string, ProjectMember[]>();
+  for (const m of members) {
+    const list = membersOfCompleted.get(m.project_id);
+    if (list) list.push(m);
+    else membersOfCompleted.set(m.project_id, [m]);
+  }
+  const revByProject: Record<string, number> = {};
+  for (const p of completedProjects) {
+    revByProject[p.id] = aggregateProject(membersOfCompleted.get(p.id) ?? [], {
+      includeInactive: true,
+    }).totalRev;
+  }
+
   return (
     <div className="space-y-6">
       <FinancialKpis stats={stats} showTotals={showTotals} />
@@ -42,7 +58,11 @@ export function ProjectsDashboard({
         <TopByMargin list={stats.topByMargin} />
         <LowMarginProjects list={stats.lowMarginProjects} />
       </div>
-      <CompletionStats projects={completedProjects} />
+      <CompletionStats
+        projects={completedProjects}
+        revByProject={revByProject}
+        showTotals={showTotals}
+      />
       <SupportSection supportProjects={supportProjects} members={members} />
       <AlertsSection stats={stats} />
     </div>
@@ -315,8 +335,13 @@ function LowMarginProjects({ list }: { list: ProjectStat[] }) {
               >
                 {p.project.name}
               </Link>
-              <span className="shrink-0 text-bad font-semibold">
-                {p.marginPct.toFixed(1)}%
+              <span className="shrink-0 text-right whitespace-nowrap">
+                <span className="text-bad font-semibold">
+                  {p.marginPct.toFixed(1)}%
+                </span>
+                <span className="ml-2 text-muted-foreground">
+                  ${fmtMoney(p.margin)}/мес
+                </span>
               </span>
             </li>
           ))}

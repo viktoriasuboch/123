@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { BackLink } from "@/components/nav/back-link";
 import { notFound } from "next/navigation";
 import { getProject } from "@/lib/data/projects";
 import {
@@ -91,12 +91,12 @@ export default async function InvoiceProjectPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/invoices?tab=projects"
+      <BackLink
+        scope="invoices"
+        fallback="/invoices?tab=projects"
+        label="← к проектам"
         className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground inline-block"
-      >
-        ← все проекты
-      </Link>
+      />
 
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>

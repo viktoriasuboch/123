@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RememberListUrl } from "@/components/nav/remember-list-url";
 import {
   listInvoiceTemplates,
   listInvoices,
@@ -251,6 +252,7 @@ export default async function InvoicesPage({
 
   return (
     <div className="space-y-6">
+      <RememberListUrl scope="invoices" />
       <div className="sticky top-0 z-20 -mx-1 px-1 py-1 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <TabsNav tab={tab} allCount={invoices.length + reminders.length} />
       </div>

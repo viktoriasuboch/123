@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BackLink } from "@/components/nav/back-link";
 import {
   getProject,
   getProjectMembers,
@@ -94,12 +94,7 @@ export default async function ProjectDetailPage({ params }: { params: Params }) 
 
   return (
     <div>
-      <Link
-        href="/projects"
-        className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground inline-block mb-4"
-      >
-        ← все проекты
-      </Link>
+      <BackLink scope="projects" fallback="/projects" label="← к проектам" />
 
       <ProjectHeader project={project} />
       <KpiRow members={members} projectStatus={project.status ?? "active"} />

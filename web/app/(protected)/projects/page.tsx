@@ -5,6 +5,8 @@ import {
   listRecentEvents,
 } from "@/lib/data/projects";
 import { RecentChanges } from "@/components/projects/recent-changes";
+import { ChangesButton } from "@/components/projects/changes-button";
+import { RememberListUrl } from "@/components/nav/remember-list-url";
 import { ProjectCard } from "@/components/projects/project-card";
 import { DevCard, type DevCardEntry } from "@/components/projects/dev-card";
 import {
@@ -63,9 +65,8 @@ export default async function ProjectsPage({
   ]);
 
   const projectsById = new Map(projects.map((p) => [p.id, p]));
-  // Admin-only recent-changes feed on the dashboard tab (who/what/when).
-  const recentEvents =
-    tab === "dashboard" && showTotals ? await listRecentEvents(25) : [];
+  // Admin-only recent-changes feed, opened from the 🔔 button in the header.
+  const recentEvents = showTotals ? await listRecentEvents(25) : [];
 
   const membersByProject = groupBy(members, (m) => m.project_id);
   const activeProjects = projects.filter(
@@ -119,6 +120,7 @@ export default async function ProjectsPage({
 
   return (
     <div>
+      <RememberListUrl scope="projects" />
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
         <div>
           <h1 className="font-display text-4xl tracking-widest text-primary leading-none">
@@ -128,7 +130,18 @@ export default async function ProjectsPage({
             Команда · Рейты · Маржа
           </p>
         </div>
-        <NewProjectButton />
+        <div className="flex items-center gap-2 flex-wrap">
+          {showTotals ? (
+            <ChangesButton count={recentEvents.length}>
+              <RecentChanges
+                events={recentEvents}
+                projectsById={projectsById}
+                bare
+              />
+            </ChangesButton>
+          ) : null}
+          <NewProjectButton />
+        </div>
       </div>
 
       <ProjectsFilters
@@ -141,17 +154,14 @@ export default async function ProjectsPage({
       />
 
       {tab === "dashboard" ? (
-        <>
-          <RecentChanges events={recentEvents} projectsById={projectsById} />
-          <ProjectsDashboard
-            activeProjects={activeProjects}
-            supportProjects={supportProjects}
-            completedProjects={completedProjects}
-            members={members}
-            devStatuses={devStatuses}
-            showTotals={showTotals}
-          />
-        </>
+        <ProjectsDashboard
+          activeProjects={activeProjects}
+          supportProjects={supportProjects}
+          completedProjects={completedProjects}
+          members={members}
+          devStatuses={devStatuses}
+          showTotals={showTotals}
+        />
       ) : tab === "devs" ? (
         <>
           <div className="flex items-center justify-end mb-3">
