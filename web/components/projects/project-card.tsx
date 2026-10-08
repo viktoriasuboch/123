@@ -15,8 +15,12 @@ export function ProjectCard({
   members: ProjectMember[];
   compact?: boolean;
 }) {
-  const a = aggregateProject(members);
   const status = project.status ?? "active";
+  // Completed projects have no active members — show the full team's
+  // economics as they were instead of a meaningless $0.
+  const a = aggregateProject(members, {
+    includeInactive: status === "completed",
+  });
   const lowMargin = a.activeCount > 0 && a.avgMargH < 20;
 
   // Compact (grid) view: stack cells in 2 cols, fewer KPIs

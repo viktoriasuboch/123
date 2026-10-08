@@ -102,7 +102,7 @@ export default async function ProjectDetailPage({ params }: { params: Params }) 
       </Link>
 
       <ProjectHeader project={project} />
-      <KpiRow members={members} />
+      <KpiRow members={members} projectStatus={project.status ?? "active"} />
 
       <div className="space-y-6">
         {(project.status ?? "active") === "completed" ? (

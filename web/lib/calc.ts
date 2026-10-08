@@ -51,8 +51,16 @@ export function monthlyMargin(m: ProjectMember) {
  *
  * Singletons (no label) keep the original per-member math.
  */
-export function aggregateProject(members: ProjectMember[]) {
-  const active = members.filter((m) => m.is_active !== false);
+export function aggregateProject(
+  members: ProjectMember[],
+  opts: { includeInactive?: boolean } = {},
+) {
+  // Default = live run-rate over active members. `includeInactive` is for
+  // completed projects, where nobody is active and the question is what
+  // the economics of the full team *were*.
+  const active = opts.includeInactive
+    ? members
+    : members.filter((m) => m.is_active !== false);
 
   // Bucket by group_label; null/empty go into per-member singleton buckets.
   const buckets: Record<string, ProjectMember[]> = {};
