@@ -11,6 +11,7 @@ import { ProjectHeader } from "@/components/projects/project-header";
 import { KpiRow } from "@/components/projects/kpi-row";
 import { MembersTable, type DevDefaults } from "@/components/projects/members-table";
 import { EventHistory } from "@/components/projects/event-history";
+import { CompletionCard } from "@/components/projects/completion-card";
 
 function ProjectInfoCard({
   title,
@@ -104,6 +105,9 @@ export default async function ProjectDetailPage({ params }: { params: Params }) 
       <KpiRow members={members} />
 
       <div className="space-y-6">
+        {(project.status ?? "active") === "completed" ? (
+          <CompletionCard project={project} />
+        ) : null}
         <div className="grid gap-4 md:grid-cols-3">
           <ProjectInfoCard
             title="📝 Notes"

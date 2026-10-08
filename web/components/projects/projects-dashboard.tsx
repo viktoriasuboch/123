@@ -10,12 +10,14 @@ import {
 } from "@/lib/calc";
 import { MoneyValue, MoneyToggle } from "./money-value";
 import { BENCH_THRESHOLD } from "./load-list";
+import { CompletionStats } from "./completion-stats";
 
 const ENDING_SOON_DAYS = 30;
 
 type DashboardProps = {
   activeProjects: Project[];
   supportProjects: Project[];
+  completedProjects?: Project[];
   members: ProjectMember[];
   devStatuses: Record<string, DevStatus>;
   /** projects_viewer: hide the aggregate money totals (Rev/Cost/Profit). */
@@ -25,6 +27,7 @@ type DashboardProps = {
 export function ProjectsDashboard({
   activeProjects,
   supportProjects,
+  completedProjects = [],
   members,
   devStatuses,
   showTotals = true,
@@ -39,6 +42,7 @@ export function ProjectsDashboard({
         <TopByMargin list={stats.topByMargin} />
         <LowMarginProjects list={stats.lowMarginProjects} />
       </div>
+      <CompletionStats projects={completedProjects} />
       <SupportSection supportProjects={supportProjects} members={members} />
       <AlertsSection stats={stats} />
     </div>

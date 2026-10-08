@@ -11,6 +11,7 @@ import {
 import { fmtDate } from "@/lib/calc";
 import { Button } from "@/components/ui/button";
 import { EditProjectButton } from "./edit-project-button";
+import { CompleteProjectDialog } from "./complete-project-dialog";
 import { toast } from "sonner";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -130,25 +131,12 @@ export function ProjectHeader({ project }: { project: Project }) {
         ) : null}
 
         {status === "active" || status === "support" ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              if (!confirm(`Завершить проект "${project.name}"?`)) return;
-              start(async () => {
-                try {
-                  await setProjectStatus(project.id, "completed");
-                  toast.success("Проект перенесён в Завершённые");
-                } catch (err) {
-                  reportActionError(err, "Не получилось");
-                }
-              });
-            }}
-            className="font-mono text-[10px] uppercase tracking-[0.15em] border-good/50 text-good hover:bg-good/10 hover:border-good"
-            disabled={pending}
-          >
-            ✓ Завершить
-          </Button>
+          <CompleteProjectDialog
+            project={project}
+            mode="complete"
+            triggerLabel="✓ Завершить"
+            triggerClassName="font-mono text-[10px] uppercase tracking-[0.15em] border-good/50 text-good hover:bg-good/10 hover:border-good"
+          />
         ) : (
           <Button
             variant="outline"

@@ -86,6 +86,33 @@ export const ProjectStatus = z
 
 export const BillingMode = z.enum(["fixed", "tm"]).catch("fixed");
 
+/** Why a project ended. Stored as a code; labels live next to it so the
+ *  dialog, badges and dashboard stats share one list. */
+export const CompletionReason = z.enum([
+  "delivered",
+  "budget_ended",
+  "in_house",
+  "competitor",
+  "dissatisfied",
+  "client_closed",
+  "pause_no_return",
+  "unpaid_debt",
+  "other",
+]);
+export type CompletionReasonValue = z.infer<typeof CompletionReason>;
+
+export const COMPLETION_REASON_LABEL: Record<CompletionReasonValue, string> = {
+  delivered: "Проект успешно сдан",
+  budget_ended: "У клиента закончился бюджет",
+  in_house: "Клиент забрал разработку к себе",
+  competitor: "Клиент ушёл к другому подрядчику",
+  dissatisfied: "Клиент недоволен качеством / сроками",
+  client_closed: "Бизнес или продукт клиента закрылся",
+  pause_no_return: "Пауза без возобновления",
+  unpaid_debt: "Долг: не платит, закрыто до оплаты",
+  other: "Другое",
+};
+
 export const Project = z.object({
   id: Uuid,
   name: z.string().min(1).max(200),
@@ -95,6 +122,9 @@ export const Project = z.object({
   notes: z.string().max(2000).nullable().optional(),
   payment_terms: z.string().max(2000).nullable().optional(),
   manager_emails: z.string().max(2000).nullable().optional(),
+  completion_reason: CompletionReason.nullable().optional(),
+  completion_note: z.string().max(2000).nullable().optional(),
+  completed_at: ISODate,
   created_at: z.string().optional(),
 });
 export type Project = z.infer<typeof Project>;

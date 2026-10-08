@@ -10,6 +10,8 @@ import {
   ProjectUpdate,
   ProjectMemberInsert,
   ProjectEventInsert,
+  CompletionReason,
+  COMPLETION_REASON_LABEL,
   Uuid,
 } from "@/lib/schemas";
 import { MONTHS } from "@/lib/months";
@@ -203,6 +205,9 @@ export async function setProjectStatus(id: string, status: ProjectStatusValue) {
   await requireUser();
   Uuid.parse(id);
   const parsed = StatusPatch.parse({ status });
+  if (parsed.status === "completed") {
+    throw new Error("Завершать проект нужно с причиной — через completeProject");
+  }
 
   const { error } = await sb()
     .from("projects")
@@ -211,6 +216,81 @@ export async function setProjectStatus(id: string, status: ProjectStatusValue) {
   if (error) throw error;
 
   await logEvent(id, "status_change", STATUS_EVENT_DESCRIPTION[status]);
+
+  revalidatePath(`/projects/${id}`);
+  revalidatePath("/projects");
+}
+
+/* ─── completion: status → completed, always with a reason ─────────── */
+
+const CompletionInput = z.object({
+  reason: CompletionReason,
+  note: z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : null)),
+  completedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD"),
+});
+
+/**
+ * Complete a project: the status flips to `completed` together with why,
+ * when and an optional note, so no project ends without a reason. The
+ * status_change event carries the reason for the history feed.
+ */
+export async function completeProject(id: string, input: unknown) {
+  await requireUser();
+  Uuid.parse(id);
+  const parsed = CompletionInput.parse(input);
+
+  const { error } = await sb()
+    .from("projects")
+    .update({
+      status: "completed",
+      completion_reason: parsed.reason,
+      completion_note: parsed.note,
+      completed_at: parsed.completedAt,
+    })
+    .eq("id", id);
+  if (error) throw error;
+
+  await logEvent(
+    id,
+    "status_change",
+    `Проект завершён · причина: ${COMPLETION_REASON_LABEL[parsed.reason]}`,
+  );
+
+  revalidatePath(`/projects/${id}`);
+  revalidatePath("/projects");
+}
+
+/**
+ * Edit the reason / note / date of an already-completed project — how
+ * older projects get their reason filled in after the fact. Leaves the
+ * status alone.
+ */
+export async function updateCompletion(id: string, input: unknown) {
+  await requireUser();
+  Uuid.parse(id);
+  const parsed = CompletionInput.parse(input);
+
+  const { error } = await sb()
+    .from("projects")
+    .update({
+      completion_reason: parsed.reason,
+      completion_note: parsed.note,
+      completed_at: parsed.completedAt,
+    })
+    .eq("id", id)
+    .eq("status", "completed");
+  if (error) throw error;
+
+  await logEvent(
+    id,
+    "status_change",
+    `Причина завершения: ${COMPLETION_REASON_LABEL[parsed.reason]}`,
+  );
 
   revalidatePath(`/projects/${id}`);
   revalidatePath("/projects");

@@ -1,5 +1,9 @@
 import Link from "next/link";
-import type { Project, ProjectMember } from "@/lib/schemas";
+import {
+  COMPLETION_REASON_LABEL,
+  type Project,
+  type ProjectMember,
+} from "@/lib/schemas";
 import { aggregateProject, fmtMoney, fmtDate } from "@/lib/calc";
 
 export function ProjectCard({
@@ -35,6 +39,20 @@ export function ProjectCard({
             <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-bad inline-flex items-center gap-1">
               △ низкая маржа
             </span>
+          ) : null}
+          {status === "completed" ? (
+            project.completion_reason ? (
+              <span
+                className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground border border-border rounded px-2 py-0.5 truncate max-w-[240px]"
+                title={COMPLETION_REASON_LABEL[project.completion_reason]}
+              >
+                {COMPLETION_REASON_LABEL[project.completion_reason]}
+              </span>
+            ) : (
+              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-warn">
+                причина?
+              </span>
+            )
           ) : null}
           <StatusPill status={status} />
         </div>

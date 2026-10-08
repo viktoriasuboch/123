@@ -78,6 +78,9 @@ export default async function ProjectsPage({
     const s = p.status ?? "active";
     return s !== "active" && s !== "support";
   });
+  const completedProjects = projects.filter(
+    (p) => (p.status ?? "active") === "completed",
+  );
 
   // HAYS detection — user marks them in the project name as "(HAYS)".
   // Match case-insensitive on the whole substring so "Hays", "hays",
@@ -143,6 +146,7 @@ export default async function ProjectsPage({
           <ProjectsDashboard
             activeProjects={activeProjects}
             supportProjects={supportProjects}
+            completedProjects={completedProjects}
             members={members}
             devStatuses={devStatuses}
             showTotals={showTotals}
