@@ -244,6 +244,6 @@ function bonusPreviewPerHour(raw: string): string {
   const n = Number(raw.replace(",", "."));
   if (!Number.isFinite(n) || n <= 0) return "$0";
   const perH = n / 160;
-  const rounded = Math.round(perH * 100) / 100;
-  return `$${Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(2).replace(/\.?0+$/, "")}`;
+  const rounded = Math.round(perH * 1000) / 1000;
+  return `$${Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(3).replace(/\.?0+$/, "")}`;
 }

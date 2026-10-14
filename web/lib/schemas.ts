@@ -134,16 +134,22 @@ export const ProjectUpdate = ProjectInsert.partial();
 
 export const EmploymentType = z.enum(["staff", "freelancer"]).catch("freelancer");
 
+/** Number from a form field — tolerates a decimal comma ("40,5"). */
+const Decimal = z.preprocess(
+  (v) => (typeof v === "string" ? v.replace(",", ".").trim() : v),
+  z.coerce.number(),
+);
+
 export const ProjectMember = z.object({
   id: Uuid,
   project_id: Uuid,
   dev_name: z.string().max(120),
   role: z.string().max(80).nullable().optional(),
   employment_type: EmploymentType.optional(),
-  buy_rate: z.coerce.number().default(0),
-  sell_rate: z.coerce.number().default(0),
-  salary: z.coerce.number().default(0),
-  hours_load: z.coerce.number().default(0),
+  buy_rate: Decimal.default(0),
+  sell_rate: Decimal.default(0),
+  salary: Decimal.default(0),
+  hours_load: Decimal.default(0),
   dev_start_date: ISODate,
   dev_end_date: ISODate,
   is_active: z.boolean().optional(),

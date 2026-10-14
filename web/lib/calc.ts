@@ -144,10 +144,10 @@ export function fmtMoney(v: number, opts?: { sign?: boolean }) {
 export function fmtRate(v: number) {
   const sign = v < 0 ? "-" : "";
   const n = Math.abs(v);
-  const rounded = Math.round(n * 100) / 100;
+  const rounded = Math.round(n * 1000) / 1000;
   const text = Number.isInteger(rounded)
     ? rounded.toString()
-    : rounded.toFixed(2).replace(/\.?0+$/, "");
+    : rounded.toFixed(3).replace(/\.?0+$/, "");
   return `${sign}$${text}`;
 }
 

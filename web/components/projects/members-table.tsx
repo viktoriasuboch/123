@@ -1001,8 +1001,8 @@ function AddMemberRow({
           </span>
           <Input
             name="salary"
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             required
             className="h-9"
             value={salary}
@@ -1016,8 +1016,8 @@ function AddMemberRow({
           </span>
           <Input
             name="buy_rate"
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             required
             className="h-9"
             value={buyRate}
@@ -1031,8 +1031,8 @@ function AddMemberRow({
         </span>
         <Input
           name="sell_rate"
-          type="number"
-          step="0.01"
+          type="text"
+          inputMode="decimal"
           required
           className="h-9"
           value={sellRate}
@@ -1045,8 +1045,8 @@ function AddMemberRow({
         </span>
         <Input
           name="hours_load"
-          type="number"
-          step="0.01"
+          type="text"
+          inputMode="decimal"
           className="h-9"
           value={hours}
           onChange={(e) => setHours(e.target.value)}

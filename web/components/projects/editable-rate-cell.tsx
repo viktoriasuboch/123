@@ -28,7 +28,7 @@ export function EditableRateCell({
   const [pending, start] = useTransition();
 
   const save = () => {
-    const num = Number(val);
+    const num = Number(val.replace(",", ".").trim());
     if (!Number.isFinite(num) || num === (value ?? 0)) {
       setVal(String(value ?? 0));
       return;
@@ -49,8 +49,8 @@ export function EditableRateCell({
     >
       {prefix ? <span className="text-muted-foreground">{prefix}</span> : null}
       <input
-        type="number"
-        step="any"
+        type="text"
+        inputMode="decimal"
         value={val}
         disabled={pending}
         onChange={(e) => setVal(e.target.value)}
