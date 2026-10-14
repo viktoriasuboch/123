@@ -16,7 +16,7 @@ function parseDecimal(s: string): number {
 function fmtNumInput(v: number): string {
   if (!Number.isFinite(v)) return "0";
   if (Number.isInteger(v)) return v.toString();
-  return (Math.round(v * 100) / 100).toString();
+  return (Math.round(v * 1000) / 1000).toString();
 }
 
 import { reportActionError } from "@/lib/client-errors";
@@ -622,27 +622,45 @@ function MemberRow({
   const [empType, setEmpType] = useState<string>(
     m.employment_type ?? "freelancer",
   );
-  const [salary, setSalary] = useState<number>(m.salary ?? 0);
-  const [buyRateLocal, setBuyRateLocal] = useState<number>(m.buy_rate ?? 0);
-  const [sellRate, setSellRate] = useState<number>(m.sell_rate ?? 0);
+  // The inputs keep the raw text while editing — otherwise "45." or "45,"
+  // gets parsed back to 45 on the very keystroke and the separator can
+  // never be typed. The numbers below are derived from the text for the
+  // live margin / revenue math.
+  const [salaryText, setSalaryText] = useState<string>(
+    fmtNumInput(m.salary ?? 0),
+  );
+  const [buyRateText, setBuyRateText] = useState<string>(
+    fmtNumInput(m.buy_rate ?? 0),
+  );
+  const [sellRateText, setSellRateText] = useState<string>(
+    fmtNumInput(m.sell_rate ?? 0),
+  );
   // On support projects we input hours/month directly (40, 80, 160…).
   // On regular active projects we keep the ч/день UX (hours_load / 20).
-  const [hoursInput, setHoursInput] = useState<number>(
-    showBilling
-      ? m.hours_load ?? 0
-      : Math.round(((m.hours_load ?? 0) / 20) * 10) / 10,
-  );
-
-  // Re-sync state when fresh data arrives from the server (revalidate / realtime).
-  useEffect(() => setEmpType(m.employment_type ?? "freelancer"), [m.employment_type]);
-  useEffect(() => setSalary(m.salary ?? 0), [m.salary]);
-  useEffect(() => setBuyRateLocal(m.buy_rate ?? 0), [m.buy_rate]);
-  useEffect(() => setSellRate(m.sell_rate ?? 0), [m.sell_rate]);
-  useEffect(() => {
-    setHoursInput(
+  const [hoursText, setHoursText] = useState<string>(
+    fmtNumInput(
       showBilling
         ? m.hours_load ?? 0
         : Math.round(((m.hours_load ?? 0) / 20) * 10) / 10,
+    ),
+  );
+  const salary = parseDecimal(salaryText);
+  const buyRateLocal = parseDecimal(buyRateText);
+  const sellRate = parseDecimal(sellRateText);
+  const hoursInput = parseDecimal(hoursText);
+
+  // Re-sync state when fresh data arrives from the server (revalidate / realtime).
+  useEffect(() => setEmpType(m.employment_type ?? "freelancer"), [m.employment_type]);
+  useEffect(() => setSalaryText(fmtNumInput(m.salary ?? 0)), [m.salary]);
+  useEffect(() => setBuyRateText(fmtNumInput(m.buy_rate ?? 0)), [m.buy_rate]);
+  useEffect(() => setSellRateText(fmtNumInput(m.sell_rate ?? 0)), [m.sell_rate]);
+  useEffect(() => {
+    setHoursText(
+      fmtNumInput(
+        showBilling
+          ? m.hours_load ?? 0
+          : Math.round(((m.hours_load ?? 0) / 20) * 10) / 10,
+      ),
     );
   }, [m.hours_load, showBilling]);
 
@@ -771,8 +789,8 @@ function MemberRow({
           <input
             type="text"
             inputMode="decimal"
-            value={fmtNumInput(salary)}
-            onChange={(e) => setSalary(parseDecimal(e.target.value))}
+            value={salaryText}
+            onChange={(e) => setSalaryText(e.target.value)}
             onBlur={(e) => save("salary", parseDecimal(e.target.value))}
             className={numCls}
           />
@@ -787,8 +805,8 @@ function MemberRow({
           <input
             type="text"
             inputMode="decimal"
-            value={fmtNumInput(buyRateLocal)}
-            onChange={(e) => setBuyRateLocal(parseDecimal(e.target.value))}
+            value={buyRateText}
+            onChange={(e) => setBuyRateText(e.target.value)}
             onBlur={(e) => save("buy_rate", parseDecimal(e.target.value))}
             className={numCls}
           />
@@ -799,8 +817,8 @@ function MemberRow({
           <input
             type="text"
             inputMode="decimal"
-            value={fmtNumInput(sellRate)}
-            onChange={(e) => setSellRate(parseDecimal(e.target.value))}
+            value={sellRateText}
+            onChange={(e) => setSellRateText(e.target.value)}
             onBlur={(e) => save("sell_rate", parseDecimal(e.target.value))}
             className={numCls}
           />
@@ -822,8 +840,8 @@ function MemberRow({
           <input
             type="text"
             inputMode="decimal"
-            value={fmtNumInput(hoursInput)}
-            onChange={(e) => setHoursInput(parseDecimal(e.target.value))}
+            value={hoursText}
+            onChange={(e) => setHoursText(e.target.value)}
             onBlur={(e) => {
               const n = parseDecimal(e.target.value);
               save("hours_load", showBilling ? n : n * 20);
