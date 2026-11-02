@@ -310,10 +310,12 @@ export async function addMember(projectId: string, formData: FormData) {
     dev_name: formData.get("dev_name"),
     role: formData.get("role") || null,
     employment_type: (formData.get("employment_type") as string) || "freelancer",
-    buy_rate: Number(formData.get("buy_rate") ?? 0),
-    sell_rate: Number(formData.get("sell_rate") ?? 0),
-    salary: Number(formData.get("salary") ?? 0),
-    hours_load: Number(formData.get("hours_load") ?? 0),
+    // Raw strings on purpose: the schema's Decimal preprocess accepts a
+    // decimal comma; Number("45,5") here would turn it into NaN first.
+    buy_rate: formData.get("buy_rate") ?? 0,
+    sell_rate: formData.get("sell_rate") ?? 0,
+    salary: formData.get("salary") ?? 0,
+    hours_load: formData.get("hours_load") ?? 0,
     dev_start_date: formData.get("dev_start_date") || null,
     dev_end_date: formData.get("dev_end_date") || null,
     is_active: true,
