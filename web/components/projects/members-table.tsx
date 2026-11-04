@@ -50,6 +50,13 @@ export function MembersTable({
 }) {
   const showBilling = projectStatus === "support";
   const [showAdd, setShowAdd] = useState(false);
+  // On a live project the people who left sit in their own dimmed block
+  // under the team, so the table reads as "who works here now". A
+  // completed project has nobody active and keeps the full roster as one.
+  const splitDeparted = projectStatus !== "completed";
+  const current = splitDeparted ? members.filter((m) => m.is_active !== false) : members;
+  const departed = splitDeparted ? members.filter((m) => m.is_active === false) : [];
+  const cols = showBilling ? 16 : 15;
 
   return (
     <section className="rounded-md border bg-card overflow-x-auto">
@@ -123,18 +130,34 @@ export function MembersTable({
           </tr>
         </thead>
         <tbody>
-          {renderRows(members, projectId, showBilling)}
+          {renderRows(current, projectId, showBilling)}
           {members.length === 0 ? (
             <tr>
-              <td
-                colSpan={showBilling ? 16 : 15}
-                className="p-6 text-center text-muted-foreground text-xs"
-              >
+              <td colSpan={cols} className="p-6 text-center text-muted-foreground text-xs">
                 Команда пуста
+              </td>
+            </tr>
+          ) : current.length === 0 ? (
+            <tr>
+              <td colSpan={cols} className="p-6 text-center text-muted-foreground text-xs">
+                Активных участников нет — все ушли из проекта
               </td>
             </tr>
           ) : null}
         </tbody>
+        {departed.length > 0 ? (
+          <tbody className="opacity-60 hover:opacity-100 transition-opacity">
+            <tr className="border-y border-border/50 bg-muted/20">
+              <td
+                colSpan={cols}
+                className="px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground"
+              >
+                Ушли из проекта · {departed.length}
+              </td>
+            </tr>
+            {renderRows(departed, projectId, showBilling)}
+          </tbody>
+        ) : null}
       </table>
     </section>
   );
@@ -178,7 +201,11 @@ function renderRows(
     }
   }
 
-  const total = members.length;
+  const ids = members.map((m) => m.id);
+  const around = (i: number) => ({
+    prevId: ids[i - 1] ?? null,
+    nextId: ids[i + 1] ?? null,
+  });
   return slots.flatMap((slot) => {
     if (slot.kind === "single") {
       return [
@@ -186,8 +213,7 @@ function renderRows(
           key={slot.member.id}
           m={slot.member}
           projectId={projectId}
-          isFirst={slot.idx === 0}
-          isLast={slot.idx === total - 1}
+          {...around(slot.idx)}
           inGroup={false}
           showBilling={showBilling}
         />,
@@ -211,16 +237,14 @@ function renderRows(
           key={face.id}
           m={face}
           projectId={projectId}
-          isFirst={faceIdx === 0}
-          isLast={faceIdx === total - 1}
+          {...around(faceIdx)}
           showBilling={showBilling}
         />,
         <MemberRow
           key={worker.id}
           m={worker}
           projectId={projectId}
-          isFirst={workerIdx === 0}
-          isLast={workerIdx === total - 1}
+          {...around(workerIdx)}
           inGroup={false}
           letter="✋"
           extraBuyPerHour={bonusPerHour}
@@ -241,8 +265,7 @@ function renderRows(
           key={m.id}
           m={m}
           projectId={projectId}
-          isFirst={slot.firstIdx + j === 0}
-          isLast={slot.firstIdx + j === total - 1}
+          {...around(slot.firstIdx + j)}
           inGroup
           isLead={j === 0}
           letter={String.fromCharCode(65 + j)}
@@ -435,14 +458,14 @@ function ProxySummaryRow({
 function ProxyFaceRow({
   m,
   projectId,
-  isFirst,
-  isLast,
+  prevId,
+  nextId,
   showBilling,
 }: {
   m: ProjectMember;
   projectId: string;
-  isFirst: boolean;
-  isLast: boolean;
+  prevId: string | null;
+  nextId: string | null;
   showBilling: boolean;
 }) {
   const isStaff = m.employment_type === "staff";
@@ -456,10 +479,11 @@ function ProxyFaceRow({
       }
     });
   };
-  const move = (direction: "up" | "down") => {
+  const move = (otherId: string | null) => {
+    if (!otherId) return;
     start(async () => {
       try {
-        await moveMember(projectId, m.id, direction);
+        await moveMember(projectId, m.id, otherId);
       } catch (e) {
         reportActionError(e, "Не получилось");
       }
@@ -478,8 +502,8 @@ function ProxyFaceRow({
         <div className="flex flex-col items-center gap-0 leading-none">
           <button
             type="button"
-            onClick={() => move("up")}
-            disabled={isFirst || pending}
+            onClick={() => move(prevId)}
+            disabled={!prevId || pending}
             className="text-muted-foreground hover:text-primary disabled:opacity-25 text-[10px] leading-none px-1"
             title="Выше"
           >
@@ -487,8 +511,8 @@ function ProxyFaceRow({
           </button>
           <button
             type="button"
-            onClick={() => move("down")}
-            disabled={isLast || pending}
+            onClick={() => move(nextId)}
+            disabled={!nextId || pending}
             className="text-muted-foreground hover:text-primary disabled:opacity-25 text-[10px] leading-none px-1"
             title="Ниже"
           >
@@ -593,8 +617,8 @@ function ProxyFaceRow({
 function MemberRow({
   m,
   projectId,
-  isFirst,
-  isLast,
+  prevId,
+  nextId,
   inGroup,
   isLead,
   letter,
@@ -603,8 +627,8 @@ function MemberRow({
 }: {
   m: ProjectMember;
   projectId: string;
-  isFirst: boolean;
-  isLast: boolean;
+  prevId: string | null;
+  nextId: string | null;
   inGroup: boolean;
   isLead?: boolean;
   letter?: string;
@@ -690,10 +714,11 @@ function MemberRow({
   const numCls = `${inputCls} text-center`;
   const marginCls = low ? "text-bad" : "text-good";
 
-  const move = (direction: "up" | "down") => {
+  const move = (otherId: string | null) => {
+    if (!otherId) return;
     start(async () => {
       try {
-        await moveMember(projectId, m.id, direction);
+        await moveMember(projectId, m.id, otherId);
       } catch (e) {
         reportActionError(e, "Не получилось");
       }
@@ -716,8 +741,8 @@ function MemberRow({
         <div className="flex flex-col items-center gap-0 leading-none">
           <button
             type="button"
-            onClick={() => move("up")}
-            disabled={isFirst || pending}
+            onClick={() => move(prevId)}
+            disabled={!prevId || pending}
             className="text-muted-foreground hover:text-primary disabled:opacity-25 disabled:cursor-not-allowed text-[10px] leading-none px-1"
             title="Выше"
             aria-label="Переместить выше"
@@ -726,8 +751,8 @@ function MemberRow({
           </button>
           <button
             type="button"
-            onClick={() => move("down")}
-            disabled={isLast || pending}
+            onClick={() => move(nextId)}
+            disabled={!nextId || pending}
             className="text-muted-foreground hover:text-primary disabled:opacity-25 disabled:cursor-not-allowed text-[10px] leading-none px-1"
             title="Ниже"
             aria-label="Переместить ниже"

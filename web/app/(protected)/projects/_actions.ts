@@ -13,9 +13,10 @@ import {
   CompletionReason,
   COMPLETION_REASON_LABEL,
   Uuid,
+  type ProjectMember,
 } from "@/lib/schemas";
 import { MONTHS } from "@/lib/months";
-import { fmtRate } from "@/lib/calc";
+import { buyRate, fmtDate, fmtMoney, fmtRate } from "@/lib/calc";
 
 const sb = () => createServerSupabase();
 
@@ -36,6 +37,70 @@ async function logEvent(
       event_type: eventType,
       description: actor?.email ? `${description} · ${actor.email}` : description,
     });
+}
+
+type MemberSnapshot = Pick<
+  ProjectMember,
+  | "dev_name"
+  | "role"
+  | "employment_type"
+  | "salary"
+  | "buy_rate"
+  | "sell_rate"
+  | "hours_load"
+  | "dev_start_date"
+  | "dev_end_date"
+  | "billing_mode"
+  | "proxy_role"
+  | "proxy_bonus"
+>;
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+function memberTitle(m: MemberSnapshot) {
+  const type = m.employment_type === "staff" ? "штатный" : "фрилансер";
+  return `${m.dev_name} (${m.role || "—"}, ${type})`;
+}
+
+function memberPeriod(m: MemberSnapshot) {
+  if (m.dev_start_date && m.dev_end_date) {
+    return `${fmtDate(m.dev_start_date)} → ${fmtDate(m.dev_end_date)}`;
+  }
+  if (m.dev_start_date) return `с ${fmtDate(m.dev_start_date)}`;
+  if (m.dev_end_date) return `до ${fmtDate(m.dev_end_date)}`;
+  return "";
+}
+
+/**
+ * Rates and margin as they stand right now. Every join / leave event
+ * carries this line, so the history keeps a member's economics even after
+ * the row is edited or deleted.
+ */
+function memberEconomics(m: MemberSnapshot) {
+  if (m.proxy_role === "face") {
+    return `лицо проксирования · бонус ${fmtMoney(m.proxy_bonus ?? 0)}/мес`;
+  }
+  const buy = buyRate(m);
+  const sell = m.sell_rate || 0;
+  const margin = sell - buy;
+  const pct = sell > 0 ? (margin / sell) * 100 : 0;
+  const hours = m.hours_load || 0;
+  const cost =
+    m.employment_type === "staff"
+      ? `зарплата ${fmtMoney(m.salary || 0)}/мес (buy ${fmtRate(buy)}/h)`
+      : `buy ${fmtRate(buy)}/h`;
+  const load =
+    (m.billing_mode ?? "fixed") === "tm"
+      ? "режим TM"
+      : `${hours} ч/мес → ${fmtMoney(sell * hours)}/мес`;
+  return `${cost} · sell ${fmtRate(sell)}/h · маржа ${fmtRate(margin)}/h (${pct.toFixed(1)}%) · ${load}`;
+}
+
+function memberEventLine(prefix: string, m: MemberSnapshot) {
+  const head = [`${prefix}: ${memberTitle(m)}`, memberPeriod(m)]
+    .filter(Boolean)
+    .join(" · ");
+  return `${head}\n${memberEconomics(m)}`;
 }
 
 /* ─── projects ──────────────────────────────────────────────────────── */
@@ -341,11 +406,7 @@ export async function addMember(projectId: string, formData: FormData) {
     .insert({ ...parsed.data, sort_order: nextSort });
   if (error) throw error;
 
-  await logEvent(
-    projectId,
-    "join",
-    `Добавлен ${parsed.data.dev_name} (${parsed.data.role || "—"})`,
-  );
+  await logEvent(projectId, "join", memberEventLine("Новый участник", parsed.data));
 
   revalidatePath(`/projects/${projectId}`);
 }
@@ -390,7 +451,7 @@ const MEMBER_FIELD_LABELS: Record<string, string> = {
 const fmtMemberFieldValue = (field: string, v: unknown): string => {
   if (v === null || v === undefined || v === "") return "—";
   if (field === "employment_type") return v === "staff" ? "Штатный" : "Фрилансер";
-  if (field === "is_active") return v ? "активен" : "завершён";
+  if (field.endsWith("_date")) return fmtDate(String(v));
   if (field === "buy_rate" || field === "sell_rate") return fmtRate(Number(v));
   if (field === "hours_load") return `${(Number(v) / 20).toFixed(1)} ч/день`;
   return String(v);
@@ -432,20 +493,33 @@ export async function patchMember(
 
   const parsed = MemberFieldPatch.parse({ field, value });
 
-  // Read previous value (and dev_name for the history label) BEFORE update.
-  const { data: prev } = await sb()
+  // Read the row BEFORE the update: the old value for the history diff and
+  // the full snapshot for a leave / return event.
+  const { data: prevData } = await sb()
     .from("project_members")
-    .select(`${parsed.field}, dev_name`)
+    .select("*")
     .eq("id", memberId)
     .single();
-  const oldValue = prev ? (prev as Record<string, unknown>)[parsed.field] : null;
-  const devName = (prev as { dev_name?: string } | null)?.dev_name;
+  const prev = (prevData ?? null) as unknown as ProjectMember | null;
+  const oldValue: unknown = prev ? prev[parsed.field] : null;
+  const devName = prev?.dev_name;
 
-  // Update ONLY the touched column. Going through a partial Zod schema
+  // Leaving stamps the end date when there is none yet, so "when did they
+  // go" is always answerable from the row and the history alike.
+  const leaving = parsed.field === "is_active" && parsed.value === false;
+  const endDate = leaving
+    ? prev?.dev_end_date || todayISO()
+    : (prev?.dev_end_date ?? null);
+
+  // Update ONLY the touched column(s). Going through a partial Zod schema
   // with `.default(0)` was silently zeroing other numeric columns.
   const { error } = await sb()
     .from("project_members")
-    .update({ [parsed.field]: parsed.value })
+    .update(
+      leaving
+        ? { is_active: false, dev_end_date: endDate }
+        : { [parsed.field]: parsed.value },
+    )
     .eq("id", memberId);
   if (error) throw error;
 
@@ -472,14 +546,24 @@ export async function patchMember(
     }
   }
 
-  // Log change to history (skip dev_name renames and no-op writes).
-  if (parsed.field !== "dev_name" && oldValue !== parsed.value) {
+  // Log to history (skip dev_name renames and no-op writes). A status flip
+  // becomes a leave / return event carrying the member's full economics.
+  if (parsed.field === "is_active") {
+    const wasActive = oldValue !== false;
+    const nowActive = parsed.value === true;
+    if (prev && wasActive !== nowActive) {
+      const snap = { ...prev, dev_end_date: endDate };
+      await logEvent(
+        projectId,
+        leaving ? "leave" : "join",
+        memberEventLine(leaving ? "Выход из проекта" : "Возврат в проект", snap),
+      );
+    }
+  } else if (parsed.field !== "dev_name" && oldValue !== parsed.value) {
     const label = MEMBER_FIELD_LABELS[parsed.field] ?? parsed.field;
-    const eventType: "status_change" | "rate_change" =
-      parsed.field === "is_active" ? "status_change" : "rate_change";
     await logEvent(
       projectId,
-      eventType,
+      "rate_change",
       `${devName ?? "—"} · ${label}: ${fmtMemberFieldValue(parsed.field, oldValue)} → ${fmtMemberFieldValue(parsed.field, parsed.value)}`,
     );
   }
@@ -723,39 +807,36 @@ export async function createProxy(input: unknown) {
 }
 
 /**
- * Swap a member with its neighbour in the project's order. Direction:
- * "up" moves towards a smaller sort_order, "down" towards a larger.
- * No-op if already at the edge.
+ * Swap a member with the row shown next to it. The table passes the
+ * neighbour explicitly: a live project renders active and departed members
+ * as separate blocks, so "the next row" is not "the next sort_order".
  */
 export async function moveMember(
   projectId: string,
   memberId: string,
-  direction: "up" | "down",
+  otherId: string,
 ) {
   await requireUser();
   Uuid.parse(projectId);
   Uuid.parse(memberId);
+  Uuid.parse(otherId);
+  if (memberId === otherId) return;
 
   const { data: rows, error: fetchErr } = await sb()
     .from("project_members")
     .select("id, sort_order")
     .eq("project_id", projectId)
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: true });
+    .in("id", [memberId, otherId]);
   if (fetchErr) throw fetchErr;
 
   const list = (rows ?? []) as Array<{ id: string; sort_order: number }>;
-  const idx = list.findIndex((r) => r.id === memberId);
-  if (idx < 0) return;
+  const a = list.find((r) => r.id === memberId);
+  const b = list.find((r) => r.id === otherId);
+  if (!a || !b) return;
 
-  const otherIdx = direction === "up" ? idx - 1 : idx + 1;
-  if (otherIdx < 0 || otherIdx >= list.length) return;
-
-  const a = list[idx];
-  const b = list[otherIdx];
   // Swap via two updates. Use a temp negative value to dodge any unique
   // constraint that might be added later — currently there isn't one.
-  const tmp = -1 - idx;
+  const tmp = -1;
   const u1 = await sb()
     .from("project_members")
     .update({ sort_order: tmp })
@@ -780,13 +861,26 @@ export async function removeMember(projectId: string, memberId: string, devName?
   Uuid.parse(projectId);
   Uuid.parse(memberId);
 
+  const { data: rowData } = await sb()
+    .from("project_members")
+    .select("*")
+    .eq("id", memberId)
+    .maybeSingle();
+  const snap = (rowData ?? null) as unknown as ProjectMember | null;
+
   const { error } = await sb()
     .from("project_members")
     .delete()
     .eq("id", memberId);
   if (error) throw error;
 
-  await logEvent(projectId, "leave", `Удалён ${devName ?? "участник"}`);
+  await logEvent(
+    projectId,
+    "leave",
+    snap
+      ? memberEventLine("Удаление из проекта", snap)
+      : `Удалён ${devName ?? "участник"}`,
+  );
 
   revalidatePath(`/projects/${projectId}`);
 }
